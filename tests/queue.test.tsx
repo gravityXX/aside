@@ -1,0 +1,440 @@
+import { describe, expect, mock, test } from 'claude-code/testing'
+import type { Engine } from 'claude-code/testing'
+import type { On } from 'claude-code'
+
+import type { Idea } from '../types'
+import { capture, headingLine, ideasOf, locate, looksLikeDiff, plan, snippet, stepPrompt, tags } from '../hooks/queue'
+
+const SCREEN = { isFullscreen: true, columns: 120 }
+const COMPOSER = { kind: 'composer' } as const
+
+const REPORT = [
+  '# Report', //                                      1
+  '', //                                              2
+  '## Results', //                                    3
+  '', //                                              4
+  'Revenue **grew by 12%** in the third quarter, mostly', // 5
+  'thanks to [the new pricing](https://example.com/p).', //  6
+  '', //                                              7
+  '1. Costs stayed flat across all regions.', //      8
+  '<!-- ? is this the same for Poland -->', //        9
+  '', //                                              10
+  '## Źródła danych', //                              11
+  '```', //                                           12
+  '## not a heading', //                              13
+  '```', //                                           14
+].join('\n')
+
+type World = {
+  files: Record<string, string>
+  clip: string
+  grep: string
+  branch: string
+  // Which clipboard tool and grep the machine has: WSL with GNU grep unless said otherwise.
+  system?: 'wsl' | 'mac'
+  // The next prompt the mod submits is dropped beneath it, as a settings hook or a limit would.
+  isDropping?: boolean
+}
+
+// The world beneath the plugin: a project at /proj, a store and a clock in memory, files,
+// a clipboard, rg and git answered from `w`, and a record of what reaches the bottom.
+const world = (on: On, w: World = { files: {}, clip: '', grep: '', branch: 'main' }) => {
+  const sent: string[] = []
+  const toasts: string[] = []
+  const filled: string[] = []
+  mock.store(on)
+  const clock = mock.clock(on, { now: 1000 })
+  on('session.root', () => ({ value: '/proj' }))
+  on('session.id', () => ({ value: 'session-1' }))
+  mock.env(on, w.system === 'mac' ? { HOME: '/Users/me' } : { WSL_DISTRO_NAME: 'Ubuntu' })
+  on('fs.list', ($, e) => {
+    const dir = e.path.replace(/\/$/, '')
+    const names = new Map<string, 'file' | 'dir'>()
+    for (const path of Object.keys(w.files)) {
+      if (!path.startsWith(`${dir}/`)) continue
+      const [head, ...rest] = path.slice(dir.length + 1).split('/')
+      names.set(head!, rest.length > 0 ? 'dir' : 'file')
+    }
+
+    return { value: [...names].map(([name, kind]) => ({ name, kind, size: 100, mtimeMs: 0, isLink: false })) } as never
+  })
+  on('command.register', ($, e) => ({ value: { command: e.name } }))
+  on('tool.register', ($, e) => ({ value: { tool: `mcp__queue__${e.name}` } }))
+  on('ui.toast', ($, e) => {
+    toasts.push(e.text)
+
+    return { value: undefined }
+  })
+  on('prompt.submit', ($, e) => {
+    if (w.isDropping && e.origin.kind === 'plugin') {
+      w.isDropping = false
+
+      return { drop: 'blocked by a hook' }
+    }
+    sent.push(e.text)
+
+    return { text: e.text }
+  })
+  on('prompt.fill', ($, e) => {
+    filled.push(e.text)
+
+    return { isFilled: true } as never
+  })
+  on('fs.read', ($, e) => (e.path in w.files ? { value: w.files[e.path]! } : { deny: 'ENOENT' }))
+  on('fs.exists', ($, e) => ({ value: e.path in w.files }))
+  on('process.run', ($, e) => {
+    const out = (stdout: string) => ({
+      value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false },
+    })
+    const missing = { value: { exitCode: 127, stdout: '', stderr: 'not found', isStdoutTruncated: false, isStderrTruncated: false } }
+    if (e.argv[0] === 'powershell.exe') return w.system === 'mac' ? missing : out(`${w.clip}\r\n`)
+    if (e.argv[0] === 'pbpaste') return w.system === 'mac' ? out(w.clip) : missing
+    if (e.argv[0] === 'git') return out(`${w.branch}\n`)
+    // BSD grep has no -P: it fails with 2, and the walk takes over.
+    if (e.argv[0] === 'grep') return w.system === 'mac' ? { value: { ...missing.value, exitCode: 2 } } : out(w.grep)
+
+    return { deny: 'unknown command' }
+  })
+  on('tool.call', { tool: 'Write' }, () => ({ result: { type: 'create' } as never }))
+  on('turn.start', ($, e) => ({ turnId: e.turnId }))
+  on('turn.complete', () => ({ text: '' }))
+
+  return { sent, toasts, filled, clock, w }
+}
+
+const queue = ($: Engine, args = '') =>
+  $.command.run({ command: 'queue', args, origin: COMPOSER, presentation: SCREEN })
+
+const type = ($: Engine, text: string, turnId?: string) =>
+  $.prompt.submit({ text, origin: COMPOSER, wait: false, ...(turnId ? { turnId } : {}) })
+
+const write = ($: Engine, path: string) =>
+  $.tool.call({ tool: 'Write', file_path: path, content: 'x' } as never)
+
+const ends = async ($: Engine, turnId: string, reason: 'answer' | 'aborted' = 'answer') =>
+  $.turn.complete({ turnId, reason, answer: '', durationMs: 1, isAborted: reason === 'aborted' } as never)
+
+describe('capture', () => {
+  test('a message starting with + is one idea, a plain one is not', () => {
+    expect(capture('+ add tests for the parser')).toEqual([{ kind: 'idea', text: 'add tests for the parser', anchor: {}, raw: '+ add tests for the parser' }])
+    expect(capture('fix the build')).toBeNull()
+    expect(capture('a + b')).toBeNull()
+    expect(capture('+   ')).toBeNull()
+  })
+
+  test('every line with + is its own entry, otherwise the message stays whole', () => {
+    expect(capture('+ one\n\n+ two\n+three')?.map(one => one.text)).toEqual(['one', 'two', 'three'])
+    expect(capture('+ an idea\nwith a second line')?.map(one => one.text)).toEqual(['an idea\nwith a second line'])
+  })
+
+  test('the mark after + names the kind, and only comments carry an anchor', () => {
+    const kinds = capture('+? why\n+! as a table\n+- drop it\n++ dig into X\n+ @x.md plain')
+    expect(kinds?.map(one => one.kind)).toEqual(['question', 'change', 'drop', 'deeper', 'idea'])
+    expect(kinds?.[4]).toMatchObject({ text: '@x.md plain', anchor: {} })
+    expect(capture('+? @docs/r.md:42 why')?.[0]).toMatchObject({ text: 'why', anchor: { file: 'docs/r.md', line: 42 } })
+    expect(capture('+! @r.md#results shorter')?.[0]).toMatchObject({ anchor: { file: 'r.md', heading: 'results' } })
+    expect(capture('+- #zrodla')?.[0]).toMatchObject({ kind: 'drop', text: '', anchor: { heading: 'zrodla' } })
+    expect(capture('+?')).toBeNull()
+  })
+
+  test('a pasted diff is a prompt, not an idea', () => {
+    expect(looksLikeDiff('+ added line\n-removed line\n context')).toBe(true)
+    expect(capture('+++ b/file.ts\n+ x')).toBeNull()
+    expect(capture('+ added line\n-removed line\n context')).toBeNull()
+    expect(capture('+ an idea\nmore about it\n-ish')).not.toBeNull()
+    expect(capture('+ refactor the parser\n- split the lexer\n- add tests')?.[0]?.text).toBe('refactor the parser\n- split the lexer\n- add tests')
+    expect(capture('+? does this diff look right\n```diff\n--- a/x\n+++ b/x\n```')).not.toBeNull()
+  })
+})
+
+describe('finding a fragment', () => {
+  test('a fragment copied from the preview finds its line through markup, wraps and numbers', () => {
+    expect(locate('Revenue grew by 12% in the third quarter, mostly thanks to the new pricing.', REPORT)).toBe(5)
+    expect(locate('thanks to the new pricing', REPORT)).toBe(6)
+    expect(locate('Costs stayed flat across all regions.', REPORT)).toBe(8)
+    expect(locate('Something written somewhere else entirely, not here at all', REPORT)).toBeUndefined()
+    expect(locate('Revenue', REPORT)).toBeUndefined()
+    expect(locate('Install uv first.\nRun the tests.\nPush the branch.', '1. Install uv first.\n2. Run the tests.\n3. Push the branch.')).toBe(1)
+    expect(locate('Write the report draft today', 'Notes\n\n- [x] Write the report draft today')).toBe(3)
+  })
+
+  test('too little evidence pins nothing', () => {
+    expect(locate('npm run build', 'Run `npm run build` first.')).toBeUndefined()
+    const source = 'Intro.\n\nTo start, run the following command in the root of the repository and wait.'
+    expect(locate('Elsewhere on the web: run the following command in the root of the repository, then open the browser and log in with your account', source)).toBeUndefined()
+    expect(locate('To start, run the following command in the root of the repository and wait for it', source)).toBe(3)
+  })
+
+  test('a heading is found by its slug, Polish letters folded, code blocks skipped', () => {
+    expect(headingLine(REPORT, 'results')).toEqual({ line: 3, title: 'Results' })
+    expect(headingLine(REPORT, 'zrodla')).toEqual({ line: 11, title: 'Źródła danych' })
+    expect(headingLine(REPORT, 'danych')?.line).toBe(11)
+    expect(headingLine(REPORT, 'not-a')).toBeUndefined()
+    expect(headingLine('````\n```\n# fake\n```\n````\n# Real', 'fake')).toBeUndefined()
+  })
+
+  test('tags in a file are comments with their line and the text above them', () => {
+    expect(tags('```md\n<!-- ? shown as an example -->\n```\nText\n<!-- - real -->')).toEqual([{ kind: 'drop', text: 'real', line: 5, quote: 'Text' }])
+    expect(tags(REPORT)).toEqual([{ kind: 'question', text: 'is this the same for Poland', line: 9, quote: 'Costs stayed flat across all regions.' }])
+    expect(tags('Write `<!-- ? question -->` above a line.')).toEqual([])
+    expect(tags('````md\n```\n<!-- ? inside -->\n```\n````\n<!-- ! outside -->')).toEqual([{ kind: 'change', text: 'outside', line: 6 }])
+  })
+
+  test('counts and snippets read well', () => {
+    expect([1, 2].map(ideasOf)).toEqual(['1 idea', '2 ideas'])
+    expect(snippet('a'.repeat(50), 10)).toBe(`${'a'.repeat(9)}…`)
+  })
+})
+
+describe('prompts', () => {
+  test('the plan prompt groups ideas and comments per file and asks for the plan tool', () => {
+    const entries: Idea[] = [
+      { text: 'dark mode', at: 0, kind: 'idea', task: 'build the parser', branch: 'feat' },
+      { text: 'where from', at: 0, kind: 'question', file: '/proj/docs/r.md', line: 5, quote: 'Revenue grew' },
+      { text: 'same for Poland', at: 0, kind: 'question', file: '/proj/docs/r.md', line: 9, isTag: true },
+      { text: 'shorter', at: 0, kind: 'change' },
+    ]
+    const text = plan(entries, '/proj')
+
+    expect(text).toContain('Ideas:\n1. dark mode (while you worked on "build the parser", branch feat)')
+    expect(text).toContain('docs/r.md:\n  2. [question] line 5, on "Revenue grew": where from')
+    expect(text).toContain('3. [question] line 9 [a <!-- --> tag in the file]: same for Poland')
+    expect(text).toContain('Not tied to a file:\n  4. [change]: shorter')
+    expect(text).toContain('mcp__idea-queue__plan')
+    expect(text).toContain('Composed by the idea-queue plugin')
+  })
+
+  test('a step prompt says which step it is and who sent it', () => {
+    expect(stepPrompt({ title: 'Tests', prompt: 'Add tests.' }, 2, 3)).toBe(
+      'Add tests.\n\n(Step 2 of 3 of the queue plan, "Tests", sent by the idea-queue plugin.)',
+    )
+  })
+})
+
+describe('queue', () => {
+  test('an idea typed mid-turn is dropped before the model and kept, with its task and branch', async ($, on) => {
+    const { sent, toasts, clock } = world(on)
+    await type($, 'build the parser')
+
+    expect(await type($, '+ dark mode', 't1')).toEqual({ drop: 'queued "dark mode" (1 waiting)' })
+    expect(toasts).toEqual(['queued "dark mode" (1 waiting)'])
+    await type($, '+ added\n-removed\n kept')
+    expect(sent).toEqual(['build the parser', '+ added\n-removed\n kept'])
+    expect((await queue($, 'list')).text).toBe('1. dark mode')
+
+    await queue($)
+    await clock.advance(100)
+    expect(sent.at(-1)).toContain('1. dark mode (while you worked on "build the parser", branch main)')
+  })
+
+  test('a comment pins itself to the fragment on the clipboard', async ($, on) => {
+    const w = { files: { '/proj/docs/report.md': REPORT }, clip: 'Revenue grew by 12% in the third quarter', grep: '', branch: 'main' }
+    const { toasts } = world(on, w)
+    await write($, '/proj/docs/report.md')
+
+    await type($, '+? where does this come from')
+    expect(toasts.at(-1)).toBe('queued ? docs/report.md:5 "Revenue grew by 12% in the th…" (1 waiting)')
+    expect((await queue($, 'list')).text).toBe(
+      '1. [?] docs/report.md:5 "Revenue grew by 12% in the third quarter": where does this come from\n\nTags in files:\n- [?] docs/report.md:9 "Costs stayed flat across all regions.": is this the same for Poland',
+    )
+  })
+
+  test('copied text no file holds is kept loose and said so; grep finds a file from an earlier session', async ($, on) => {
+    const w = { files: { '/proj/old.md': REPORT }, clip: 'nothing like this is written anywhere at all', grep: '', branch: 'main' }
+    const { toasts } = world(on, w)
+
+    expect(await type($, '+! make it shorter')).toEqual({
+      drop: 'queued ! "nothing like this is written…" - copied text not found in any .md file under /proj (1 waiting)',
+    })
+    expect((await queue($, 'list')).text).toBe('1. [!] "nothing like this is written anywhere at all" (not in a file): make it shorter')
+
+    w.clip = 'Costs stayed flat across all regions.'
+    w.grep = '/proj/old.md\n'
+    await type($, '+- drop this')
+    expect(toasts.at(-1)).toBe('queued - old.md:8 "Costs stayed flat across all…" (2 waiting)')
+
+    w.clip = ''
+    expect(await type($, '+? and this')).toEqual({ drop: 'queued ? "and this" - no text on the clipboard (3 waiting)' })
+    w.clip = '1. Costs stayed flat\n2. across all regions.'
+    await type($, '+? a list copied with its numbers')
+    expect(toasts.at(-1)).toBe('queued ? old.md:8 "1. Costs stayed flat 2. acros…" (4 waiting)')
+  })
+
+  test('on a Mac: pbpaste for the clipboard, and the walk finds the file BSD grep cannot', async ($, on) => {
+    const w: World = { files: { '/proj/notes/deep/old.md': REPORT, '/proj/node_modules/x/old.md': REPORT, '/proj/.git/old.md': REPORT }, clip: 'Costs stayed flat across all regions.', grep: '', branch: 'main', system: 'mac' }
+    const { toasts } = world(on, w)
+
+    await type($, '+- drop this')
+    expect(toasts.at(-1)).toBe('queued - notes/deep/old.md:8 "Costs stayed flat across all…" (1 waiting)')
+    expect(await type($, '+? @old.md where')).toEqual({ drop: 'queued ? notes/deep/old.md:8 "Costs stayed flat across all…" (2 waiting)' })
+  })
+
+  test('a heading or a line named after the mark pins without the clipboard', async ($, on) => {
+    const w = { files: { '/proj/docs/report.md': REPORT }, clip: '', grep: '', branch: 'main' }
+    const { toasts } = world(on, w)
+    await write($, '/proj/docs/report.md')
+
+    await type($, '+- #zrodla')
+    expect(toasts.at(-1)).toBe('queued - docs/report.md:11 (1 waiting)')
+    await type($, '+? @docs/report.md:3 why this order')
+    expect(toasts.at(-1)).toBe('queued ? docs/report.md:3 (2 waiting)')
+    expect(await type($, '+! #nowhere shorter')).toEqual({
+      drop: 'queued ! #nowhere - no heading "nowhere" in the 1 files written this session (3 waiting)',
+    })
+  })
+
+  test('/queue hands everything over as one planning prompt, undo and pop bring entries back', async ($, on) => {
+    const { sent, filled, clock } = world(on)
+    await type($, '+ a\n+? b')
+
+    expect((await queue($)).text).toBe('Organizing 1 idea and 1 comment.')
+    await clock.advance(100)
+    await clock.settle()
+    expect(sent).toHaveLength(1)
+    expect(sent[0]).toContain('Ideas:\n1. a')
+    expect((await queue($, 'list')).text).toBe('The queue is empty.')
+    expect((await queue($, 'undo')).text).toBe('Brought back 2 entries, 2 waiting.')
+
+    expect((await queue($, 'pop')).text).toBe('Back in the prompt box: b')
+    expect(filled).toEqual(['+? b'])
+    expect((await queue($, 'list')).text).toBe('1. a')
+  })
+
+  test('a planning prompt dropped beneath the mod gives the entries back', async ($, on) => {
+    const { sent, toasts, clock, w } = world(on)
+    await type($, '+ a')
+    w.isDropping = true
+
+    await queue($)
+    await clock.advance(100)
+    expect(sent).toEqual([])
+    expect(toasts.at(-1)).toBe('Could not hand the queue over (blocked by a hook); the entries are back in it')
+    expect((await queue($, 'list')).text).toBe('1. a')
+  })
+
+  test('file tags handed over once are not handed over again, and the band then offers the plan', async ($, on) => {
+    const w = { files: { '/proj/docs/report.md': REPORT }, clip: '', grep: '', branch: 'main' }
+    const { sent, clock } = world(on, w)
+    await write($, '/proj/docs/report.md')
+
+    expect((await queue($)).text).toBe('Organizing 1 comment.')
+    await clock.advance(100)
+    expect(sent.at(-1)).toContain('[a <!-- --> tag in the file]: is this the same for Poland')
+    expect((await queue($)).text).toContain('The queue is empty.')
+    expect((await queue($, 'list')).text).toContain('- (handed over) [?] docs/report.md:9')
+  })
+
+  test('remove and clear, and clearing an empty queue keeps what undo can bring back', async ($, on) => {
+    world(on)
+    await type($, '+ a\n+ b\n+ c')
+
+    expect((await queue($, 'remove 2')).text).toBe('Removed: b')
+    expect((await queue($, 'rm 9')).text).toContain('from 1 to 2')
+    expect((await queue($, 'Clear')).text).toBe('Cleared 2 entries. /queue undo brings them back.')
+    expect((await queue($, 'clear')).text).toBe('The queue is already empty.')
+    expect((await queue($, 'undo')).text).toBe('Brought back 2 entries, 2 waiting.')
+  })
+})
+
+describe('plan', () => {
+  const STEPS = [
+    { title: 'One', prompt: 'Do one.' },
+    { title: 'Two', prompt: 'Do two.' },
+    { title: 'Three', prompt: 'Do three.' },
+  ]
+
+  test('the model saves the plan; /queue run sends each step when the one before ends', async ($, on) => {
+    const { sent, toasts, clock } = world(on)
+    const saved = await $.tool.call({ tool: 'mcp__idea-queue__plan', steps: STEPS } as never)
+    expect(saved.result).toContain('Saved 3 steps')
+    expect((await queue($, 'plan')).text).toBe('1. [todo] One\n2. [todo] Two\n3. [todo] Three')
+
+    expect((await queue($, 'run')).text).toContain('3 steps, from step 1')
+    await clock.advance(100)
+    expect(sent).toEqual([stepPrompt(STEPS[0]!, 1, 3)])
+
+    await $.turn.start({ text: sent[0]!, turnId: 's1' })
+    await ends($, 's1')
+    await clock.advance(100)
+    expect(sent.at(-1)).toBe(stepPrompt(STEPS[1]!, 2, 3))
+
+    await $.turn.start({ text: sent.at(-1)!, turnId: 's2' })
+    expect((await queue($, 'stop')).text).toBe('The plan stops after step 2.')
+    await ends($, 's2')
+    await clock.advance(100)
+    expect(sent).toHaveLength(2)
+    expect(toasts.at(-1)).toBe('Step 2 done')
+    expect((await queue($, 'plan')).text).toBe('1. [done] One\n2. [done] Two\n3. [todo] Three')
+  })
+
+  test('a stop before the next step goes out keeps it from going out', async ($, on) => {
+    const { sent, clock } = world(on)
+    await $.tool.call({ tool: 'mcp__idea-queue__plan', steps: STEPS } as never)
+    await queue($, 'run')
+    await clock.advance(100)
+    await $.turn.start({ text: sent[0]!, turnId: 's1' })
+    expect((await $.tool.call({ tool: 'mcp__idea-queue__plan', steps: STEPS } as never)).deny).toContain('is running')
+
+    await ends($, 's1')
+    expect((await queue($, 'stop')).text).toBe('The plan stopped before step 2.')
+    await clock.advance(100)
+    expect(sent).toHaveLength(1)
+    expect((await queue($, 'plan')).text).toBe('1. [done] One\n2. [todo] Two\n3. [todo] Three')
+  })
+
+  test('a step prompt dropped beneath the mod lets the plan go', async ($, on) => {
+    const { toasts, clock, w } = world(on)
+    await $.tool.call({ tool: 'mcp__idea-queue__plan', steps: STEPS } as never)
+    w.isDropping = true
+
+    await queue($, 'run')
+    await clock.advance(100)
+    await clock.settle()
+    expect(toasts.at(-1)).toBe('Could not send step 1 of the plan: blocked by a hook')
+    expect((await queue($, 'stop')).text).toBe('Nothing is running.')
+  })
+
+  test('an interrupted step stops the plan; a bad plan is refused', async ($, on) => {
+    const { sent, toasts, clock } = world(on)
+    expect((await $.tool.call({ tool: 'mcp__idea-queue__plan', steps: [] } as never)).deny).toContain('non-empty')
+    await $.tool.call({ tool: 'mcp__idea-queue__plan', steps: STEPS } as never)
+
+    expect((await queue($, 'run 3')).text).toBe('Running step 3: Three')
+    await clock.advance(100)
+    await $.turn.start({ text: sent[0]!, turnId: 's3' })
+    expect((await queue($, 'run')).text).toBe('Step 3 is running. /queue stop stops after it.')
+    await ends($, 's3', 'aborted')
+    expect(toasts.at(-1)).toBe('Plan stopped: step 3 was interrupted')
+    expect((await queue($, 'plan')).text).toBe('1. [todo] One\n2. [todo] Two\n3. [todo] Three')
+  })
+
+  test('the band shows what waits and offers the next move', async ($, on) => {
+    world(on)
+    on('ui.render', { component: 'AbovePrompt' }, ($e, e) => {
+      const { Text } = $e.ui.resolve(e)
+
+      return <Text>engine</Text>
+    })
+    const band = async () => {
+      const ui = await $.ui.mount({
+        plugin: 'idea-queue',
+        surface: 'terminal',
+        component: 'AbovePrompt',
+        props: { hasSurvey: false } as never,
+        viewport: { columns: 120, rows: 30 },
+      })
+      const text = (await ui.find({ type: 'Text', text: /queue|engine/ }))?.text
+      const button = (await ui.find({ key: 'queue' }))?.props.label
+      await ui.unmount()
+
+      return [text, button]
+    }
+
+    expect(await band()).toEqual(['engine', undefined])
+    await type($, '+ x\n+? y')
+    expect(await band()).toEqual(['queue: 1 idea, 1 comment · ', 'organize'])
+    await queue($)
+    await $.tool.call({ tool: 'mcp__idea-queue__plan', steps: STEPS } as never)
+    expect(await band()).toEqual(['queue: plan: 3 of 3 steps left · ', 'run plan'])
+  })
+})
