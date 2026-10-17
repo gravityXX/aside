@@ -1,0 +1,18 @@
+{
+  "name": "idea-queue",
+  "owner": {
+    "name": "gravityXX",
+    "url": "https://github.com/gravityXX"
+  },
+  "description": "idea-queue: park ideas and comments while Claude works, then run them as a plan",
+  "plugins": [
+    {
+      "name": "idea-queue",
+      "description": "Park ideas and comments on what Claude wrote while it works, then turn them into an ordered plan of prompts and run it step by step",
+      "author": { "name": "gravityXX" },
+      "category": "productivity",
+      "source": "./",
+      "homepage": "https://github.com/gravityXX/idea-queue"
+    }
+  ]
+}
