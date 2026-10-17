@@ -29,7 +29,7 @@ A message that starts with `+` is stored instead of sent, mid-task included. The
 + cache the parsed config
 ```
 
-When every line starts with `+`, each line is its own entry. Otherwise the whole message is one entry. A pasted diff is not mistaken for an idea.
+When every line starts with `+`, each line is its own entry. Otherwise the whole message is one entry. A pasted diff is not mistaken for an idea. `/queue add tests for the parser` queues the same way, for when a command is closer to hand. Text that happens to look like a command (`/queue run 3`) is queued with `/queue + run 3`.
 
 ## Comment on what Claude wrote
 
@@ -42,7 +42,7 @@ Agents often leave a report or a plan in a markdown file that you read in a prev
 | `+-` | drop         | `+- drop this section`           |
 | `++` | dig deeper   | `++ compare with last year`      |
 
-idea-queue reads the clipboard, finds the fragment in the markdown files written in the session (by Claude or its subagents) or anywhere under the project, and pins the comment to that file and line. The match runs on words, so markup, line wraps and list numbers do not get in the way. When no file holds the copied text, the comment keeps it as a loose quote and says so.
+idea-queue reads the clipboard, finds the fragment in the markdown files written in the session (by Claude or its subagents) or anywhere under the project, and pins the comment to that file and line. The match runs on words, so markup, line wraps and list numbers do not get in the way. When no file holds the copied text, the comment keeps it as a loose quote and says so. A comment on Claude's own reply works without copying: select the lines with the mouse in the terminal (fullscreen mode). A clipboard unchanged since the previous comment counts as stale, and then the selection wins. With nothing copied, a comment takes the last tool output of the turn, a failure first, so `+? why did this fail` arrives with the error it is about.
 
 Pin a comment yourself, without the clipboard, right after the mark:
 
@@ -63,6 +63,12 @@ In an editor you can also leave tags in the file. `/queue` reads them from the f
 
 ## Plan and run
 
+There are three ways to hand the queue over:
+
+- `/queue` asks for a plan first (below).
+- `/queue send` hands everything over as it is, in one message, to be done now.
+- `/queue each` runs every entry as its own prompt, one after another, as new steps after those of the saved plan.
+
 `/queue` hands everything over in one message. Claude answers the questions straight away, merges related items, orders them, writes a self-contained prompt for each step and saves the steps with the plugin's `plan` tool. Nothing runs yet.
 
 `/queue run` sends the steps one by one: each step starts when the one before has finished. The band above the prompt shows `step 2/4 running` with a stop button. `/queue stop` lets the current step finish and stops there. An interrupted step stops the plan.
@@ -71,12 +77,17 @@ In an editor you can also leave tags in the file. `/queue` reads them from the f
 
 | Command            | What it does                                                    |
 | ------------------ | --------------------------------------------------------------- |
+| `/queue TEXT`      | Queue TEXT, as `+ TEXT` would (`/queue +? TEXT` for a comment)  |
 | `/queue`           | Organize the queue into a plan of prompts                       |
+| `/queue send`      | Hand everything over as it is, to be done now                   |
+| `/queue each`      | Run every entry as its own prompt, one after another            |
 | `/queue list`      | Show the queue, and the tags found in files                     |
+| `/queue edit N`    | Put entry N back in the prompt box to rework it                 |
+| `/queue move N M`  | Move entry N to place M                                         |
 | `/queue pop`       | Put the last entry back in the prompt box                       |
 | `/queue remove N`  | Remove entry N                                                  |
 | `/queue clear`     | Empty the queue                                                 |
-| `/queue undo`      | Bring back what the last `/queue` or `/queue clear` took        |
+| `/queue undo`      | Bring back what `/queue`, `send`, `each` or `clear` last took   |
 | `/queue scan FILE` | Read the tags of a file Claude did not write in this session    |
 | `/queue plan`      | Show the saved plan                                             |
 | `/queue run [N]`   | Run every step in order, or step N alone                        |
@@ -84,6 +95,16 @@ In an editor you can also leave tags in the file. `/queue` reads them from the f
 | `/queue help`      | Show this list                                                  |
 
 `/queue` runs at once even while Claude works, so `stop` lands in time. The prompts it sends wait for the turn to end.
+
+## Settings
+
+`/config` lists one setting, `whenTurnEnds`: what happens to the queue when Claude finishes a turn.
+
+- `wait` (default) - keep it until you run `/queue`; a toast says what waits.
+- `plan` - hand it over as a plan at once.
+- `send` - hand it over to be done at once.
+
+The plugin's own turns (a plan, a step) never set it off, and neither does a turn that ends while the saved plan still has steps to do: run or finish those first.
 
 Each project keeps its own queue and plan, across sessions. Each idea remembers the task that was running and the git branch, so the plan knows what "fix this too" refers to.
 

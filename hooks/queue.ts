@@ -238,8 +238,10 @@ export const listed = (ideas: readonly Idea[], root: string): string =>
     .map((idea, i) => {
       const mark = idea.kind === 'idea' ? '' : `[${KINDS[idea.kind].mark}] `
       const at = where(idea, root)
-      const quote = idea.quote ? ` "${snippet(idea.quote, 50)}"${idea.isLoose ? ' (not in a file)' : ''}` : ''
-      const head = at || quote ? `${at}${quote}: `.trimStart() : ''
+      const loose = idea.from === 'terminal' ? ' (from the terminal)' : ' (not in a file)'
+      const quote = idea.quote ? ` "${snippet(idea.quote, 50)}"${idea.isLoose ? loose : ''}` : ''
+      const output = idea.output ? ` [after: ${snippet(idea.output, 40)}]` : ''
+      const head = at || quote || output ? `${at}${quote}${output}: `.trimStart() : ''
 
       return `${i + 1}. ${mark}${head}${idea.text.replace(/\n/g, '\n   ')}`
     })
@@ -253,7 +255,20 @@ const context = (idea: Idea) => {
   return parts.some(Boolean) ? ` (${parts.filter(Boolean).join(', ')})` : ''
 }
 
-export const plan = (ideas: readonly Idea[], root: string): string => {
+// Where a comment stands, in words for the model: line, section, quote, tool output.
+const spotOf = (idea: Idea) => {
+  const at = [idea.line ? `line ${idea.line}` : '', idea.heading ? `section "${idea.heading}"` : '']
+    .filter(Boolean)
+    .join(', ')
+  const loose = idea.from === 'terminal' ? ' (selected in your reply in the terminal)' : ' (copied by me, not found in the project files)'
+  const on = idea.quote ? `on "${snippet(idea.quote, 160)}"${idea.isLoose ? loose : ''}` : ''
+  const output = idea.output ? `after this tool output: "${snippet(idea.output, 240)}"` : ''
+
+  return [at, on, output].filter(Boolean).join(', ')
+}
+
+// The queue as the model reads it: ideas, then comments grouped by file.
+const body = (ideas: readonly Idea[], root: string): string[] => {
   const plain = ideas.map((idea, i) => ({ idea, n: i + 1 })).filter(({ idea }) => idea.kind === 'idea')
   const comments = ideas.map((idea, i) => ({ idea, n: i + 1 })).filter(({ idea }) => idea.kind !== 'idea')
   const files = [...new Set(comments.map(({ idea }) => idea.file ?? ''))]
@@ -270,11 +285,7 @@ export const plan = (ideas: readonly Idea[], root: string): string => {
       return [
         head,
         ...own.map(({ idea, n }) => {
-          const at = [idea.line ? `line ${idea.line}` : '', idea.heading ? `section "${idea.heading}"` : '']
-            .filter(Boolean)
-            .join(', ')
-          const on = idea.quote ? `on "${snippet(idea.quote, 160)}"${idea.isLoose ? ' (copied by me, not found in the project files)' : ''}` : ''
-          const spot = [at, on].filter(Boolean).join(', ')
+          const spot = spotOf(idea)
           const tag = idea.isTag ? ' [a <!-- --> tag in the file]' : ''
 
           return `  ${n}. [${KINDS[idea.kind].label}]${spot ? ` ${spot}` : ''}${tag}: ${idea.text || '(no text)'}`
@@ -284,6 +295,19 @@ export const plan = (ideas: readonly Idea[], root: string): string => {
     sections.push(['Comments on what you wrote (question, change, drop, dig deeper):', ...groups].join('\n'))
   }
 
+  return sections
+}
+
+export const plan = (ideas: readonly Idea[], root: string, pending: readonly Step[] = []): string => {
+  const sections = body(ideas, root)
+  if (pending.length > 0) {
+    sections.push(
+      [
+        'The saved plan still has these steps to do. Keep them: merge them with the new items into one plan.',
+        ...pending.map((step, i) => `${i + 1}. ${step.title}: ${snippet(step.prompt, 300)}`),
+      ].join('\n'),
+    )
+  }
   sections.push(
     [
       'Organize all of it without doing any of it yet:',
@@ -299,6 +323,31 @@ export const plan = (ideas: readonly Idea[], root: string): string => {
   sections.push(MARKER)
 
   return sections.join('\n\n')
+}
+
+// The queue handed over as it is, to be worked through now, with no plan in between.
+export const send = (ideas: readonly Idea[], root: string): string =>
+  [
+    ...body(ideas, root),
+    [
+      'Work through all of it now, in this order, in this one reply:',
+      '- answer the questions first;',
+      '- then the changes, drops and things to dig into, then the ideas;',
+      '- when you handle a comment that is a <!-- --> tag in a file, remove that tag;',
+      '- if an item is unclear or contradicts another, ask instead of guessing.',
+    ].join('\n'),
+    MARKER,
+  ].join('\n\n')
+
+// One entry as a prompt of its own, for /queue each: what it says and what it is about.
+export const entryPrompt = (idea: Idea, root: string): string => {
+  const file = idea.file ? `In ${relative(idea.file, root)}: ` : ''
+  const spot = spotOf(idea)
+  const kind = idea.kind === 'idea' ? '' : `${KINDS[idea.kind].label[0]!.toUpperCase()}${KINDS[idea.kind].label.slice(1)}`
+  const head = [kind, file + spot].filter(Boolean).join(' - ')
+  const tag = idea.isTag ? '\n\nThis comment is a <!-- --> tag in the file; remove the tag once it is handled.' : ''
+
+  return `${head ? `${head}:\n` : ''}${idea.text || '(no text)'}${context(idea)}${tag}`
 }
 
 export const stepPrompt = (step: Step, n: number, total: number): string =>

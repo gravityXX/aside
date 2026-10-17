@@ -1,6 +1,6 @@
 {
   "name": "idea-queue",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Park ideas and comments on what Claude wrote while it works, then turn them into an ordered plan of prompts and run it step by step",
   "author": {
     "name": "gravityXX",
@@ -9,6 +9,27 @@
   "homepage": "https://github.com/gravityXX/idea-queue",
   "repository": "https://github.com/gravityXX/idea-queue",
   "license": "Apache-2.0",
-  "keywords": ["queue", "ideas", "backlog", "review", "comments", "workflow", "productivity"],
-  "types": "./types/index.d.ts"
+  "keywords": [
+    "queue",
+    "ideas",
+    "backlog",
+    "review",
+    "comments",
+    "workflow",
+    "productivity"
+  ],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "whenTurnEnds": {
+      "type": "string",
+      "title": "When Claude finishes a turn",
+      "description": "wait: keep the queue until you run /queue. plan: hand it over as a plan at once. send: hand it over to be done at once.",
+      "default": "wait",
+      "options": [
+        "wait",
+        "plan",
+        "send"
+      ]
+    }
+  }
 }

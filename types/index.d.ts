@@ -11,8 +11,11 @@ export type Idea = {
   line?: number
   heading?: string
   quote?: string
-  // The copied text was kept, but no file holds it.
+  // The quoted text was kept, but no file holds it; `from` says where it came from.
   isLoose?: true
+  from?: 'terminal' | 'clipboard'
+  // What the last tool printed when the comment came (an error first), for context.
+  output?: string
   // The task that was running, and the branch, when the idea came.
   task?: string
   branch?: string

@@ -11,9 +11,11 @@ import {
   ideasOf,
   listed,
   locate,
+  entryPrompt,
   plan as planPrompt,
   quoteWords,
   relative,
+  send as sendPrompt,
   snippet,
   stepPrompt,
   tags,
@@ -26,6 +28,8 @@ const band = atom({ plugin: 'idea-queue', key: 'band' } as const, EMPTY)
 const files = atom({ plugin: 'idea-queue', key: 'files' } as const, [])
 
 const MARKDOWN = /\.(md|markdown|mdx)$/i
+// The tools whose output a comment may be about when nothing else says so; any error counts.
+const OUTPUT_TOOLS = new Set(['Bash', 'Edit', 'Write', 'NotebookEdit'])
 const OWN = 'sent by the idea-queue plugin'
 // The system's own tools: a session's PATH may hold shell functions (rg) a child cannot run.
 const ENV = { LC_ALL: 'C.UTF-8' }
@@ -37,10 +41,17 @@ const HELP = [
   '  pin it yourself with @file, @file:42, @file#heading or #heading after the mark.',
   'In the editor, <!-- ? ... --> tags (? ! - +) in a markdown file count as comments too.',
   '',
+  'With nothing new copied, a comment takes the text selected in Claude\'s reply, or the last tool output.',
+  '',
+  '/queue TEXT - queue TEXT, as "+ TEXT" would ("/queue +? TEXT" for a comment, "/queue + run 3" for text that looks like a command)',
   '/queue - organize everything into a plan of prompts',
+  '/queue send - hand everything over as it is, to be done now',
+  '/queue each - run every entry as its own prompt, one after another',
   '/queue list - show the queue      /queue remove N - remove entry N',
+  '/queue edit N - put entry N back in the prompt box to rework it',
+  '/queue move N M - move entry N to place M',
   '/queue pop - put the last entry back in the prompt box',
-  '/queue clear - empty the queue    /queue undo - bring back what /queue or clear took',
+  '/queue clear - empty the queue    /queue undo - bring back what /queue, send, each or clear took',
   '/queue scan FILE - read the tags of a file the agents did not write here',
   '/queue plan - show the saved plan /queue run [N] - run all steps in order, or step N',
   '/queue stop - stop the plan after the current step',
@@ -50,7 +61,14 @@ const HELP = [
 const keys = async ($: Engine) => {
   const root = await $.session.root()
 
-  return { root, queue: `queue:${root}`, taken: `taken:${root}`, plan: `plan:${root}`, handed: `handed:${root}` }
+  return {
+    root,
+    queue: `queue:${root}`,
+    taken: `taken:${root}`,
+    plan: `plan:${root}`,
+    handed: `handed:${root}`,
+    editing: `editing:${root}`,
+  }
 }
 
 const loadIdeas = async ($: Engine, key: string): Promise<Idea[]> => {
@@ -254,12 +272,22 @@ const resolve = async ($: Engine, name: string, root: string, seen: readonly str
 
 // Where a comment points, and why it points nowhere when it does: `note` is said to the
 // person at once, so a comment that missed its fragment never passes unnoticed.
-type Pin = Pick<Idea, 'file' | 'line' | 'heading' | 'quote' | 'isLoose'> & { note?: string }
+type Pin = Pick<Idea, 'file' | 'line' | 'heading' | 'quote' | 'isLoose' | 'from' | 'output'> & { note?: string }
 
-// Where a comment points: what it names, else the fragment on the clipboard, found in the
-// session's files or the project's. Copied text no file holds is kept as a loose quote and
-// said so, since the person sees it and can take the entry back with /queue pop.
-const pin = async ($: Engine, entry: Entry, root: string, seen: readonly string[], clip: () => Promise<string>, source: (file: string) => Promise<string | undefined>): Promise<Pin> => {
+// What a comment can be about when it names no place: the clipboard (and whether it changed
+// since the last comment), the text selected in a transcript row, the last tool output.
+// Each is asked at most once per message.
+type About = { selection: () => Promise<string>; clipboard: () => Promise<{ text: string; isNew: boolean }>; output?: string }
+
+// The clipboard text the last comment saw: an unchanged clipboard is likely stale.
+let lastClipboard: string | undefined
+
+// Where a comment points: what it names; else a clipboard copied since the last comment;
+// else the text selected in a transcript row (Claude's reply); else an older clipboard.
+// Each is looked for in the session's files and the project's. Text no file holds is kept as
+// a loose quote and said so, since the person sees it and can take the entry back with
+// /queue pop. With nothing on the clipboard, or nothing found, the last tool output rides along.
+const pin = async ($: Engine, entry: Entry, root: string, seen: readonly string[], about: About, source: (file: string) => Promise<string | undefined>): Promise<Pin> => {
   const { anchor } = entry
   const named = anchor.file ? await resolve($, anchor.file, root, seen) : undefined
   if (named && anchor.line) {
@@ -280,25 +308,155 @@ const pin = async ($: Engine, entry: Entry, root: string, seen: readonly string[
     return { heading: anchor.heading, ...(named ? { file: named } : {}), note: `no heading "${anchor.heading}" in ${scope}` }
   }
 
-  const quote = await clip()
-  const count = quoteWords(quote).length
-  if (count === 0) {
-    return { ...(named ? { file: named } : {}), note: 'no text on the clipboard' }
-  }
-  if (count < 5) {
-    return { ...(named ? { file: named } : {}), quote: snippet(quote, 300), isLoose: true, note: `copied text too short to find (${count} words)` }
-  }
-  const more = named ? [] : (await search($, quote, root)).filter(file => !candidates.includes(file))
-  for (const file of [...candidates, ...more]) {
-    const text = await source(file)
-    const line = text === undefined ? undefined : locate(quote, text)
-    if (line !== undefined) {
-      return { file, line, quote: snippet(quote, 300) }
+  const find = async (quote: string) => {
+    if (quoteWords(quote).length < 5) return undefined
+    const more = named ? [] : (await search($, quote, root)).filter(file => !candidates.includes(file))
+    for (const file of [...candidates, ...more]) {
+      const text = await source(file)
+      const line = text === undefined ? undefined : locate(quote, text)
+      if (line !== undefined) return { file, line, quote: snippet(quote, 300) }
     }
+
+    return undefined
+  }
+  const base = named ? { file: named } : {}
+  const output = about.output ? { output: about.output } : {}
+  const withOutput = about.output ? '; the last tool output is attached' : ''
+
+  const { text: quote, isNew } = await about.clipboard()
+  const count = quoteWords(quote).length
+  const selected = await about.selection()
+  if (count > 0 && (isNew || quoteWords(selected).length === 0)) {
+    const found = await find(quote)
+    if (found) return found
+  }
+  if (quoteWords(selected).length > 0) {
+    return (await find(selected)) ?? { ...base, quote: snippet(selected, 300), isLoose: true, from: 'terminal' }
+  }
+
+  if (count === 0) {
+    return about.output ? { ...base, ...output, note: 'with the last tool output' } : { ...base, note: 'no text on the clipboard' }
   }
   const scope = named ? relative(named, root) : `any .md file under ${root}`
+  const why = count < 5 ? `copied text too short to find (${count} words)` : `copied text not found in ${scope}`
 
-  return { ...(named ? { file: named } : {}), quote: snippet(quote, 300), isLoose: true, note: `copied text not found in ${scope}` }
+  return { ...base, quote: snippet(quote, 300), isLoose: true, from: 'clipboard', ...output, note: `${why}${withOutput}` }
+}
+
+// Stores what a message (or /queue TEXT) holds and says what was queued and where it
+// points, or returns null when the text is no entry at all.
+const enqueue = async ($: Engine, text: string, task: string | undefined, output: string | undefined, images = 0): Promise<string | null> => {
+  const entries = capture(text)
+  if (entries === null) {
+    return null
+  }
+  const { root, queue } = await keys($)
+  const seen = await read($, files)
+  const now = await $.clock.now()
+  const branch = await branchOf($, root)
+  let clip: Promise<{ text: string; isNew: boolean }> | undefined
+  let sel: Promise<string> | undefined
+  const about: About = {
+    clipboard: () =>
+      (clip ??= clipboard($).then(text => {
+        const isNew = text !== lastClipboard
+        lastClipboard = text
+
+        return { text, isNew }
+      })),
+    // Only a selection inside one transcript row: one in the prompt box or a pane is not
+    // about Claude's output.
+    selection: () => (sel ??= $.ui.selection().then(one => (one?.requestId ? one.text.trim() : ''), () => '')),
+    ...(output ? { output } : {}),
+  }
+  // An entry taken out with /queue edit comes back where it was, keeping what it pointed at,
+  // unless the reworked text names a place of its own.
+  const { editing: editKey } = await keys($)
+  const editing = (await $.store.get(editKey)) as { index: number; idea: Idea } | undefined
+  await $.store.delete(editKey)
+  const isRework = editing !== undefined && entries.length === 1 && entries[0]!.kind === editing.idea.kind && Object.keys(entries[0]!.anchor).length === 0
+  const cache = new Map<string, Promise<string | undefined>>()
+  const source = (file: string) => {
+    if (!cache.has(file)) cache.set(file, readFile($, file))
+
+    return cache.get(file)!
+  }
+
+  const added: Idea[] = []
+  const notes: string[] = []
+  for (const entry of entries) {
+    if (isRework) {
+      const { text: _text, raw: _raw, ...kept } = editing!.idea
+      added.push({ ...kept, text: entry.text, raw: entry.raw })
+      continue
+    }
+    const { note, ...spot } = entry.kind === 'idea' ? ({} as Pin) : await pin($, entry, root, seen, about, source)
+    if (note) notes.push(note)
+    added.push({
+      text: entry.text,
+      raw: entry.raw,
+      at: now,
+      kind: entry.kind,
+      ...spot,
+      ...(task ? { task } : {}),
+      ...(branch ? { branch } : {}),
+    })
+  }
+
+  const all = await loadIdeas($, queue)
+  all.splice(isRework ? Math.min(editing!.index, all.length) : all.length, 0, ...added)
+  await saveIdeas($, queue, all)
+  await refresh($)
+  if (images > 0) notes.push('the image was not kept')
+  const said = queuedOf(added, notes, root, all.length)
+  $.ui.toast(said)
+
+  return said
+}
+
+// Hands the queue and the new file tags over: as one planning prompt ('plan'), or as it
+// is, to be done now ('send'). The prompt goes out from a timer, since a command's hook may
+// not submit one; a prompt dropped beneath gives everything back.
+const handOver = async ($: Engine, mode: 'plan' | 'send'): Promise<string> => {
+  const { root, queue, taken, handed } = await keys($)
+  const list = await loadIdeas($, queue)
+  // Tags already handed over stay in their files until a step removes them; they are
+  // not handed over again.
+  const inFiles = await fileTags($, true)
+  const all = [...list, ...inFiles]
+  if (all.length === 0) {
+    return 'The queue is empty. Start a message with "+" to add an idea, or "+?" to comment on a copied fragment.'
+  }
+
+  // The entries leave the queue as they are handed over; /queue undo brings them back.
+  if (list.length > 0) {
+    await saveIdeas($, taken, list)
+    await saveIdeas($, queue, [])
+  }
+  const before = ((await $.store.get(handed)) as string[] | undefined) ?? []
+  await $.store.set(handed, [...new Set([...before, ...inFiles.map(tagKey)])].slice(-500))
+  await refresh($, 0)
+  const giveBack = async (why: string) => {
+    await saveIdeas($, queue, [...list, ...(await loadIdeas($, queue))])
+    await $.store.set(handed, before)
+    await refresh($, inFiles.length)
+    $.ui.toast(`Could not hand the queue over (${why}); the entries are back in it`)
+  }
+  const { plan: planKey } = await keys($)
+  const pending = (await loadPlan($, planKey)).steps.filter(step => !step.isDone)
+  const text = mode === 'plan' ? planPrompt(all, root, pending) : sendPrompt(all, root)
+  $.clock.after(50, async () => {
+    try {
+      const sent = await $.prompt.submit({ text, asUser: true })
+      if ('drop' in sent && sent.drop !== undefined) await giveBack(sent.drop)
+    } catch (error) {
+      await giveBack(String(error))
+    }
+  })
+  const plain = all.filter(idea => idea.kind === 'idea').length
+  const parts = [plain ? ideasOf(plain) : '', all.length - plain ? commentsOf(all.length - plain) : ''].filter(Boolean)
+
+  return `${mode === 'plan' ? 'Organizing' : 'Sending'} ${parts.join(' and ')}.`
 }
 
 const parseSteps = (value: unknown): Step[] | null => {
@@ -395,16 +553,25 @@ const stopPlan = async ($: Engine): Promise<string> => {
   return text
 }
 
-export const register: Register = on => {
+export const register: Register = (on, options) => {
+  // What happens to the queue when Claude finishes a turn: wait for /queue (the default),
+  // or hand it over at once as a plan or as it is.
+  const whenTurnEnds = options.whenTurnEnds === 'plan' || options.whenTurnEnds === 'send' ? options.whenTurnEnds : 'wait'
   // Module variables start over on a reload; nothing in them has to last.
   let lastTask: string | undefined
   let nudged = 0
+  // The main loop's current (or last) turn, whether it was the plugin's own, and the last
+  // tool output in it: an error stays over a later success of the same turn.
+  let turn: string | undefined
+  let isOwnTurn = false
+  let output: { text: string; turnId: string | undefined; isError: boolean } | undefined
+  const outputNow = () => (output && output.turnId === turn ? output.text : undefined)
 
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'queue',
       description: 'Organize the ideas and comments queued with "+" into a plan of prompts',
-      argumentHint: '[list | pop | remove N | clear | undo | scan FILE | plan | run [N] | stop | help]',
+      argumentHint: '[TEXT | send | each | list | edit N | move N M | pop | remove N | clear | undo | scan FILE | plan | run [N] | stop | help]',
       // Runs at once mid-turn, so a stop lands before the next step; the prompts it sends
       // still wait for the turn to end.
       immediate: true,
@@ -434,6 +601,23 @@ export const register: Register = on => {
     await refresh($)
 
     return next(e)
+  })
+
+  on('tool.call', async ($, e, next) => {
+    const ran = await next(e)
+    // Only what a command or an edit printed, failed or not: a denied call, a missing file
+    // on Read or a refused web fetch is not what a comment is about.
+    const isError = ran.isError === true
+    if (e.agentId === undefined && ran.deny === undefined && OUTPUT_TOOLS.has(e.tool)) {
+      const keepsError = output?.isError === true && output.turnId === turn && !isError
+      if (!keepsError) {
+        const result = ran.deny === undefined ? ran.result : undefined
+        const text = ran.deny ?? ran.text ?? (typeof result === 'string' ? result : JSON.stringify(result ?? ''))
+        output = { text: `${e.tool}${isError ? ' failed' : ''}: ${snippet(text, 400)}`, turnId: turn, isError }
+      }
+    }
+
+    return ran
   })
 
   on('tool.call', { tool: 'Write' }, async ($, e, next) => {
@@ -475,49 +659,13 @@ export const register: Register = on => {
 
   on('prompt.submit', async ($, e, next) => {
     const isTyped = e.origin.kind === 'composer' && e.command === undefined
-    const entries = isTyped ? capture(e.text) : null
-    if (entries === null) {
+    const said = isTyped ? await enqueue($, e.text, lastTask, outputNow(), e.attachments?.length ?? 0) : null
+    if (said === null) {
       if (isTyped && e.text.trim() !== '') lastTask = snippet(e.text, 200)
       void refresh($)
 
       return next(e)
     }
-
-    const { root, queue } = await keys($)
-    const seen = await read($, files)
-    const now = await $.clock.now()
-    const branch = await branchOf($, root)
-    let clip: Promise<string> | undefined
-    const once = () => (clip ??= clipboard($))
-    const read_ = new Map<string, Promise<string | undefined>>()
-    const source = (file: string) => {
-      if (!read_.has(file)) read_.set(file, readFile($, file))
-
-      return read_.get(file)!
-    }
-
-    const added: Idea[] = []
-    const notes: string[] = []
-    for (const entry of entries) {
-      const { note, ...spot } = entry.kind === 'idea' ? ({} as Pin) : await pin($, entry, root, seen, once, source)
-      if (note) notes.push(note)
-      added.push({
-        text: entry.text,
-        raw: entry.raw,
-        at: now,
-        kind: entry.kind,
-        ...spot,
-        ...(lastTask ? { task: lastTask } : {}),
-        ...(branch ? { branch } : {}),
-      })
-    }
-
-    const all = [...(await loadIdeas($, queue)), ...added]
-    await saveIdeas($, queue, all)
-    await refresh($)
-    if (e.attachments?.length) notes.push('the image was not kept')
-    const said = queuedOf(added, notes, root, all.length)
-    $.ui.toast(said)
 
     return { drop: said }
   }).catch(($, e, next) =>
@@ -528,6 +676,10 @@ export const register: Register = on => {
   )
 
   on('turn.start', async ($, e, next) => {
+    if (e.agentId === undefined) {
+      turn = e.turnId
+      isOwnTurn = e.text.includes(OWN) || e.text.includes('Composed by the idea-queue plugin')
+    }
     if (e.agentId === undefined && e.text.includes(OWN)) {
       // The turn of a plan step: remember which, so its end runs the next one.
       const { plan: planKey } = await keys($)
@@ -570,9 +722,18 @@ export const register: Register = on => {
       return done
     }
 
-    // Files the agents wrote may hold new tags; then a nudge when more waits than before.
+    // Files the agents wrote may hold new tags; then the queue goes out by itself when the
+    // setting says so (never after the plugin's own turn), or a nudge when more waits.
     const now = await refresh($, (await fileTags($, true)).length)
     const waiting = now.ideas + now.comments + now.tags
+    // A saved plan with steps still to do is the person's to run first: nudge instead.
+    const isPending = plan.steps.some(step => !step.isDone)
+    if (!active && waiting > 0 && whenTurnEnds !== 'wait' && e.reason === 'answer' && !isOwnTurn && !isPending) {
+      $.ui.toast(await handOver($, whenTurnEnds))
+      nudged = 0
+
+      return done
+    }
     if (!active && waiting > nudged) {
       $.ui.toast(`Waiting in the queue: ${waiting} · /queue`)
     }
@@ -582,10 +743,33 @@ export const register: Register = on => {
   })
 
   on('command.run', { command: 'queue' }, async ($, e) => {
-    const { root, queue, taken, plan: planKey, handed } = await keys($)
+    const { root, queue, taken, plan: planKey, handed, editing } = await keys($)
     const list = await loadIdeas($, queue)
     const [verb = '', ...rest] = e.args.trim().split(/\s+/)
-    const word = verb.toLowerCase()
+    // A command only when the words after it have its exact shape; anything else is text to
+    // queue, so "/queue send a summary to the team" queues that sentence.
+    const isInt = (one: string | undefined) => one !== undefined && /^\d+$/.test(one)
+    const SHAPES: Record<string, (args: readonly string[]) => boolean> = {
+      help: args => args.length === 0,
+      list: args => args.length === 0,
+      ls: args => args.length === 0,
+      send: args => args.length === 0,
+      each: args => args.length === 0,
+      pop: args => args.length === 0,
+      clear: args => args.length === 0,
+      undo: args => args.length === 0,
+      plan: args => args.length === 0,
+      stop: args => args.length === 0,
+      edit: args => args.length === 1 && isInt(args[0]),
+      remove: args => args.length === 1 && isInt(args[0]),
+      rm: args => args.length === 1 && isInt(args[0]),
+      move: args => args.length === 2 && isInt(args[0]) && isInt(args[1]),
+      mv: args => args.length === 2 && isInt(args[0]) && isInt(args[1]),
+      run: args => args.length === 0 || (args.length === 1 && isInt(args[0])),
+      scan: args => args.length === 1 && MARKDOWN.test(args[0]!),
+    }
+    const shape = SHAPES[verb.toLowerCase()]
+    const word = verb === '' || shape?.(rest.filter(Boolean)) ? verb.toLowerCase() : '+text'
 
     if (word === 'help') {
       return { text: HELP }
@@ -599,6 +783,72 @@ export const register: Register = on => {
       const tagged = inFiles.length === 0 ? '' : `\n\nTags in files:\n${shown.join('\n')}`
 
       return { text: `${own}${tagged}` }
+    }
+
+    if (word === 'edit') {
+      const n = Number(rest[0])
+      if (list.length === 0) {
+        return { text: 'The queue is empty.' }
+      }
+      if (!Number.isInteger(n) || n < 1 || n > list.length) {
+        return { text: `Give a number from 1 to ${list.length}, as /queue list shows them.` }
+      }
+      const entry = list[n - 1]!
+      const filled = await $.prompt.fill({ text: entry.raw ?? `+ ${entry.text}`, mode: 'insert' })
+      if (!filled.isFilled) {
+        return { text: 'The prompt box cannot take it now; the entry stays in the queue.' }
+      }
+      list.splice(n - 1, 1)
+      await saveIdeas($, queue, list)
+      await $.store.set(editing, { index: n - 1, idea: entry })
+      await refresh($)
+
+      return { text: `Entry ${n} is in the prompt box: change it and press Enter; it goes back to place ${n}, still pointing where it did.` }
+    }
+
+    if (word === 'move' || word === 'mv') {
+      const [from, to] = [Number(rest[0]), Number(rest[1])]
+      const isPlace = (n: number) => Number.isInteger(n) && n >= 1 && n <= list.length
+      if (list.length < 2 || !isPlace(from) || !isPlace(to)) {
+        return { text: list.length < 2 ? 'Nothing to move.' : `Give two places from 1 to ${list.length}: /queue move 3 1` }
+      }
+      const [entry] = list.splice(from - 1, 1)
+      list.splice(to - 1, 0, entry!)
+      await saveIdeas($, queue, list)
+
+      return { text: listed(list, root) }
+    }
+
+    if (word === 'send') {
+      return { text: await handOver($, 'send') }
+    }
+
+    if (word === 'each') {
+      const plan = await loadPlan($, planKey)
+      if (plan.active && plan.active.sessionId === (await $.session.id())) {
+        return { text: `Step ${plan.active.step + 1} of the plan is running. /queue stop stops after it.` }
+      }
+      const inFiles = await fileTags($, true)
+      const all = [...list, ...inFiles]
+      if (all.length === 0) {
+        return { text: 'The queue is empty.' }
+      }
+      const steps = all.map(idea => ({ title: snippet(idea.text || where(idea, root) || KINDS[idea.kind].label, 50), prompt: entryPrompt(idea, root) }))
+      if (list.length > 0) {
+        await saveIdeas($, taken, list)
+        await saveIdeas($, queue, [])
+      }
+      const before = ((await $.store.get(handed)) as string[] | undefined) ?? []
+      await $.store.set(handed, [...new Set([...before, ...inFiles.map(tagKey)])].slice(-500))
+      // The entries join the saved plan as new steps: steps still to do are kept.
+      const first = plan.steps.length
+      await savePlan($, planKey, { steps: [...plan.steps, ...steps] })
+      await refresh($, 0)
+      await start($, first, true)
+      const kept = plan.steps.filter(step => !step.isDone).length
+      const note = kept > 0 ? ` The ${kept} steps of the plan still to do are kept before them; /queue run N runs one.` : ''
+
+      return { text: `Running ${steps.length} entries one by one, as steps ${first + 1}-${first + steps.length} of the plan (/queue plan shows it). /queue stop stops after the current one.${note}` }
     }
 
     if (word === 'pop') {
@@ -643,6 +893,10 @@ export const register: Register = on => {
     }
 
     if (word === 'undo') {
+      const running = (await loadPlan($, planKey)).active
+      if (running && running.sessionId === (await $.session.id())) {
+        return { text: `Step ${running.step + 1} of the plan is running; /queue stop first, so nothing is done twice.` }
+      }
       const back = await loadIdeas($, taken)
       if (back.length === 0) {
         return { text: 'Nothing to bring back.' }
@@ -718,44 +972,15 @@ export const register: Register = on => {
       return { text: await stopPlan($) }
     }
 
-    if (word !== '') {
-      return { text: HELP }
+    // Anything else is an entry to queue: "/queue add tests" as "+ add tests" would.
+    if (word === '+text') {
+      const text = e.args.trim()
+      const said = await enqueue($, text.startsWith('+') ? text : `+ ${text}`, lastTask, outputNow())
+
+      return { text: said ?? HELP }
     }
 
-    // Tags already handed over stay in their files until a step removes them; they are
-    // not handed over again.
-    const inFiles = await fileTags($, true)
-    const all = [...list, ...inFiles]
-    if (all.length === 0) {
-      return { text: 'The queue is empty. Start a message with "+" to add an idea, or "+?" to comment on a copied fragment.' }
-    }
-
-    // The entries leave the queue as they are handed over; /queue undo brings them back.
-    if (list.length > 0) {
-      await saveIdeas($, taken, list)
-      await saveIdeas($, queue, [])
-    }
-    const before = ((await $.store.get(handed)) as string[] | undefined) ?? []
-    await $.store.set(handed, [...new Set([...before, ...inFiles.map(tagKey)])].slice(-500))
-    await refresh($, 0)
-    const giveBack = async (why: string) => {
-      await saveIdeas($, queue, [...list, ...(await loadIdeas($, queue))])
-      await $.store.set(handed, before)
-      await refresh($, inFiles.length)
-      $.ui.toast(`Could not hand the queue over (${why}); the entries are back in it`)
-    }
-    $.clock.after(50, async () => {
-      try {
-        const sent = await $.prompt.submit({ text: planPrompt(all, root), asUser: true })
-        if ('drop' in sent && sent.drop !== undefined) await giveBack(sent.drop)
-      } catch (error) {
-        await giveBack(String(error))
-      }
-    })
-    const plain = all.filter(idea => idea.kind === 'idea').length
-    const parts = [plain ? ideasOf(plain) : '', all.length - plain ? commentsOf(all.length - plain) : ''].filter(Boolean)
-
-    return { text: `Organizing ${parts.join(' and ')}.` }
+    return { text: await handOver($, 'plan') }
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
