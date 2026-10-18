@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" width="880" height="203" viewBox="0 0 880 203" role="img" aria-label="Copy a sentence from a markdown preview with Ctrl+C, then type +? and a question in Claude Code: the comment is queued, pinned to docs/report.md line 42 with the copied sentence. The marks: + idea, +? question, +! change, +- drop, ++ dig deeper.">
+<svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" width="880" height="233" viewBox="0 0 880 233" role="img" aria-label="Copy a sentence from a markdown preview with Ctrl+C, then type +? and a question in Claude Code: the comment is queued, pinned to docs/report.md line 42 with the copied sentence. The marks: + idea, +? question, +! change, +- drop, ++ dig deeper.">
   <style>
     .m { font: 400 13.5px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fill: #f0f6fc; }
     .f { fill: #656c76; }
@@ -30,14 +30,14 @@
   <text x="504" y="66" class="m"><tspan class="f">❯ </tspan><tspan class="a">+?</tspan> where is this from</text>
   <text x="504" y="99" class="m k">queued ? docs/report.md:42</text>
   <text x="504" y="123" class="m k">"Revenue grew by 12% in Q3."</text>
-  <rect x="0.5" y="172" width="159" height="30" rx="15" fill="#151b23" stroke="#3d444d"/>
-  <text x="80.0" y="192" text-anchor="middle"><tspan class="m a">+</tspan><tspan class="s"> idea</tspan></text>
-  <rect x="180.5" y="172" width="159" height="30" rx="15" fill="#151b23" stroke="#3d444d"/>
-  <text x="260.0" y="192" text-anchor="middle"><tspan class="m a">+?</tspan><tspan class="s"> question</tspan></text>
-  <rect x="360.5" y="172" width="159" height="30" rx="15" fill="#151b23" stroke="#3d444d"/>
-  <text x="440.0" y="192" text-anchor="middle"><tspan class="m a">+!</tspan><tspan class="s"> change</tspan></text>
-  <rect x="540.5" y="172" width="159" height="30" rx="15" fill="#151b23" stroke="#3d444d"/>
-  <text x="620.0" y="192" text-anchor="middle"><tspan class="m a">+-</tspan><tspan class="s"> drop</tspan></text>
-  <rect x="720.5" y="172" width="159" height="30" rx="15" fill="#151b23" stroke="#3d444d"/>
-  <text x="800.0" y="192" text-anchor="middle"><tspan class="m a">++</tspan><tspan class="s"> dig deeper</tspan></text>
+  <rect x="0.5" y="186" width="159" height="30" rx="15" fill="#151b23" stroke="#3d444d"/>
+  <text x="80.0" y="206" text-anchor="middle"><tspan class="m a">+</tspan><tspan class="s"> idea</tspan></text>
+  <rect x="180.5" y="186" width="159" height="30" rx="15" fill="#151b23" stroke="#3d444d"/>
+  <text x="260.0" y="206" text-anchor="middle"><tspan class="m a">+?</tspan><tspan class="s"> question</tspan></text>
+  <rect x="360.5" y="186" width="159" height="30" rx="15" fill="#151b23" stroke="#3d444d"/>
+  <text x="440.0" y="206" text-anchor="middle"><tspan class="m a">+!</tspan><tspan class="s"> change</tspan></text>
+  <rect x="540.5" y="186" width="159" height="30" rx="15" fill="#151b23" stroke="#3d444d"/>
+  <text x="620.0" y="206" text-anchor="middle"><tspan class="m a">+-</tspan><tspan class="s"> drop</tspan></text>
+  <rect x="720.5" y="186" width="159" height="30" rx="15" fill="#151b23" stroke="#3d444d"/>
+  <text x="800.0" y="206" text-anchor="middle"><tspan class="m a">++</tspan><tspan class="s"> dig deeper</tspan></text>
 </svg>
