@@ -12,7 +12,7 @@ claude --plugin-dir .
 
 `--plugin-dir` loads the plugin from this folder for one session and reloads it on save. The tests use the engine's own test kit and need no account.
 
-For a type check, start a session with the plugin loaded once, so Claude Code writes its types to `.claude-plugin/types/`, then run `npx -p typescript tsc -p .`.
+For a type check, start a session with the plugin loaded once, so Claude Code writes its types to `.claude-plugin/types/`, then run `npx -p typescript@5.9.3 tsc -p .`.
 
 ## Code
 
