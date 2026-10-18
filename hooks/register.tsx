@@ -1,8 +1,8 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface as Engine, Register } from 'claude-code'
+import type { Elements, EngineInterface as Engine, Register } from 'claude-code'
 
 import type { Band, Idea, Plan, Step } from '../types'
-import type { Entry } from './queue'
+import type { Entry, ListingSection } from './queue'
 import {
   KINDS,
   capture,
@@ -32,6 +32,8 @@ import {
 
 const EMPTY: Band = { ideas: 0, comments: 0, tags: 0, steps: 0, done: 0 }
 const band = atom({ plugin: 'aside', key: 'band' } as const, EMPTY)
+// The pane the band's list button opens.
+const PANE = 'aside'
 // The markdown files written in this session, agents' included, newest last.
 const files = atom({ plugin: 'aside', key: 'files' } as const, [])
 
@@ -195,6 +197,70 @@ const refresh = async ($: Engine, tagCount?: number) => {
   await update($, band, () => next)
 
   return next
+}
+
+// What /aside shows: the queue, the tags in files and the plan, as the text the model reads.
+const listing = async ($: Engine): Promise<string> => {
+  const { root, queue, plan: planKey } = await keys($)
+  const list = inOrder(await loadIdeas($, queue))
+  const plan = await loadPlan($, planKey)
+  const states = plan.steps.map((step, i) => (plan.active?.step === i ? 'running' : step.isDone ? 'done' : 'to do'))
+  const width = Math.max(...states.map(state => state.length))
+  const steps = plan.steps.map((step, i) => `${String(i + 1).padStart(3)}  ${states[i]!.padEnd(width)}  ${step.title}`)
+  const left = plan.steps.filter(step => !step.isDone).length
+  const total = plan.steps.length
+  const planned = left > 0 ? `\n\nPlan: ${left} of ${total} ${total === 1 ? 'step' : 'steps'} to do (/aside run)\n\n${steps.join('\n')}` : ''
+  const fresh = new Set((await fileTags($, true)).map(tagKey))
+  const inFiles = await fileTags($)
+  const own = list.length === 0 ? 'The queue is empty.' : `${summary(list)}\n\n${listed(list, root)}`
+  const shown = inFiles.map(tag => entryLines(tag, root, '\u00b7', kindWidth(inFiles), fresh.has(tagKey(tag)) ? '' : 'handed over'))
+  const tagged = inFiles.length === 0 ? '' : `\n\nTags in files\n\n${shown.join('\n')}`
+
+  return `${own}${tagged}${planned}`
+}
+
+// The sections of a listing in columns: number, kind or state in its theme colour, then the
+// text, wrapped in its own column, and what it is about.
+const listingRows = ({ Box, Text }: Elements['terminal'], sections: readonly ListingSection[]) =>
+  sections.map((section, i) => {
+    const width = Math.max(0, ...section.rows.map(row => row.word.length))
+
+    return (
+      <Box flexDirection="column" marginTop={i === 0 ? 0 : 1}>
+        <Box>
+          {i === 0 ? <Text bold color="claude">aside  </Text> : null}
+          <Text bold>{section.title}</Text>
+        </Box>
+        {section.rows.map((row, n) => (
+          <Box marginTop={n === 0 ? 1 : 0}>
+            <Box width={5} flexShrink={0}>
+              <Text dimColor>{row.label.padStart(3)}</Text>
+            </Box>
+            <Box width={width + 2} flexShrink={0}>
+              <Text color={COLOURS[row.word] ?? 'text'}>{row.word}</Text>
+            </Box>
+            <Box flexDirection="column" flexShrink={1}>
+              {row.lines.map(line => (
+                <Text dimColor={row.word === 'done'}>{line}</Text>
+              ))}
+              {row.about.map(about => (
+                <Text dimColor>{`\u21b3 ${about}`}</Text>
+              ))}
+            </Box>
+          </Box>
+        ))}
+      </Box>
+    )
+  })
+
+// Opens the list pane, or closes it when it is open: the band's list button.
+const togglePane = async ($: Engine) => {
+  if ((await $.ui.panes()).some(pane => pane.id === PANE)) {
+    await $.ui.close({ id: PANE })
+    return
+  }
+  const opened = await $.ui.open({ id: PANE, title: 'aside', focus: true, closeOnEscape: true })
+  if (!opened.isPlaced) $.ui.toast('/aside shows the list')
 }
 
 const POWERSHELL = ['-NoProfile', '-NonInteractive', '-Command', '[Console]::OutputEncoding=[Text.Encoding]::UTF8; Get-Clipboard -Raw']
@@ -507,6 +573,7 @@ const tidyEntry = async ($: Engine, idea: Idea): Promise<void> => {
       const raw = one.raw?.endsWith(one.text) ? `${one.raw.slice(0, one.raw.length - one.text.length)}${fixed}` : one.raw
       list[i] = { ...one, text: fixed, ...(raw === undefined ? {} : { raw }) }
       await saveIdeas($, queue, list)
+      await refresh($)
     })
     .catch(() => undefined)
 }
@@ -693,7 +760,6 @@ export const register: Register = (on, options) => {
   tidy = options.tidy !== 'off'
   // Module variables start over on a reload; nothing in them has to last.
   let lastTask: string | undefined
-  let nudged = 0
   // The main loop's current (or last) turn, whether it was the plugin's own, and the last
   // tool output in it: an error stays over a later success of the same turn.
   let turn: string | undefined
@@ -934,21 +1000,14 @@ export const register: Register = (on, options) => {
     }
 
     // Files the agents wrote may hold new tags; then the queue goes out by itself when the
-    // setting says so (never after the plugin's own turn), or a nudge when more waits.
+    // setting says so, never after the plugin's own turn.
     const now = await refresh($, (await fileTags($, true)).length)
     const waiting = now.ideas + now.comments + now.tags
-    // A saved plan with steps still to do is the person's to run first: nudge instead.
+    // A saved plan with steps still to do is the person's to run first: the queue waits.
     const isPending = plan.steps.some(step => !step.isDone)
     if (!active && waiting > 0 && afterAnswer !== 'wait' && e.reason === 'answer' && !isOwnTurn && !isPending) {
       $.ui.toast(await handOver($, afterAnswer))
-      nudged = 0
-
-      return done
     }
-    if (!active && waiting > nudged) {
-      $.ui.toast(`Waiting in the queue: ${waiting} · /aside plan or /aside run`)
-    }
-    nudged = waiting
 
     return done
   })
@@ -987,20 +1046,7 @@ export const register: Register = (on, options) => {
     }
 
     if (word === '' || word === 'list' || word === 'ls') {
-      const plan = await loadPlan($, planKey)
-      const states = plan.steps.map((step, i) => (plan.active?.step === i ? 'running' : step.isDone ? 'done' : 'to do'))
-      const width = Math.max(...states.map(state => state.length))
-      const steps = plan.steps.map((step, i) => `${String(i + 1).padStart(3)}  ${states[i]!.padEnd(width)}  ${step.title}`)
-      const left = plan.steps.filter(step => !step.isDone).length
-      const total = plan.steps.length
-      const planned = left > 0 ? `\n\nPlan: ${left} of ${total} ${total === 1 ? 'step' : 'steps'} to do (/aside run)\n\n${steps.join('\n')}` : ''
-      const fresh = new Set((await fileTags($, true)).map(tagKey))
-      const inFiles = await fileTags($)
-      const own = list.length === 0 ? 'The queue is empty.' : `${summary(list)}\n\n${listed(list, root)}`
-      const shown = inFiles.map(tag => entryLines(tag, root, '\u00b7', kindWidth(inFiles), fresh.has(tagKey(tag)) ? '' : 'handed over'))
-      const tagged = inFiles.length === 0 ? '' : `\n\nTags in files\n\n${shown.join('\n')}`
-
-      return { text: `${own}${tagged}${planned}` }
+      return { text: await listing($) }
     }
 
     if (word === 'edit') {
@@ -1175,40 +1221,12 @@ export const register: Register = (on, options) => {
       return next(e)
     }
 
-    const { Box, Text } = $.ui.resolve(e)
+    const ui = $.ui.resolve(e)
+    const { Box } = ui
 
     return (
       <Box flexDirection="column" borderStyle="round" borderColor="promptBorder" paddingX={1}>
-        {sections.map((section, i) => {
-          const width = Math.max(0, ...section.rows.map(row => row.word.length))
-
-          return (
-            <Box flexDirection="column" marginTop={i === 0 ? 0 : 1}>
-              <Box>
-                {i === 0 ? <Text bold color="claude">aside  </Text> : null}
-                <Text bold>{section.title}</Text>
-              </Box>
-              {section.rows.map((row, n) => (
-                <Box marginTop={n === 0 ? 1 : 0}>
-                  <Box width={5} flexShrink={0}>
-                    <Text dimColor>{row.label.padStart(3)}</Text>
-                  </Box>
-                  <Box width={width + 2} flexShrink={0}>
-                    <Text color={COLOURS[row.word] ?? 'text'}>{row.word}</Text>
-                  </Box>
-                  <Box flexDirection="column" flexShrink={1}>
-                    {row.lines.map(line => (
-                      <Text dimColor={row.word === 'done'}>{line}</Text>
-                    ))}
-                    {row.about.map(about => (
-                      <Text dimColor>{`\u21b3 ${about}`}</Text>
-                    ))}
-                  </Box>
-                </Box>
-              ))}
-            </Box>
-          )
-        })}
+        {listingRows(ui, sections)}
       </Box>
     )
   })
@@ -1226,11 +1244,15 @@ export const register: Register = (on, options) => {
     else if (left > 0) parts.push(`plan: ${left} of ${now.steps} steps left`)
     if (now.ideas) parts.push(ideasOf(now.ideas))
     if (now.comments + now.tags) parts.push(commentsOf(now.comments + now.tags))
-    const action = now.running !== undefined ? 'stop' : waiting > 0 ? 'organize' : 'run plan'
+    const action = now.running !== undefined ? 'stop' : waiting > 0 ? 'list' : 'run plan'
     // The press does the work itself: $.command.run from here skips this plugin's own
     // command hook, and a stop is applied at once rather than when the turn ends.
     const press = async () => {
-      const said = action === 'stop' ? await stopPlan($) : action === 'run plan' ? await runPlan($) : await handOver($, 'plan')
+      if (action === 'list') {
+        await togglePane($)
+        return
+      }
+      const said = action === 'stop' ? await stopPlan($) : await runPlan($)
       if (said !== undefined) $.ui.toast(said)
     }
 
@@ -1240,6 +1262,33 @@ export const register: Register = (on, options) => {
       <Box>
         <Text dimColor>aside: {parts.join(', ')} · </Text>
         <Button key="queue" label={action} onPress={() => void press()} />
+      </Box>
+    )
+  })
+
+  // The list the band's button opens: drawn again whenever the queue or the plan changes.
+  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e, next) => {
+    if (e.surface !== 'terminal') {
+      return next(e)
+    }
+    const now = await read($, band)
+    const sections = readListing(await listing($))
+    const organize = async () => {
+      await $.ui.close({ id: PANE })
+      $.ui.toast(await handOver($, 'plan'))
+    }
+
+    const ui = $.ui.resolve(e)
+    const { Box, Button, Text } = ui
+
+    return (
+      <Box flexDirection="column">
+        {sections === null ? <Text dimColor>The queue is empty.</Text> : listingRows(ui, sections)}
+        <Box marginTop={1}>
+          {now.ideas + now.comments + now.tags > 0 ? <Button key="plan" label="plan" onPress={() => void organize()} /> : null}
+          <Text> </Text>
+          <Button key="close" label="close" onPress={() => void $.ui.close({ id: PANE })} />
+        </Box>
       </Box>
     )
   })
