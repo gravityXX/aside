@@ -1,6 +1,6 @@
 # aside
 
-**aside** is a prompt queue for Claude Code. Note ideas and comments while Claude works, without interrupting it, and hand them over when you are ready.
+<kbd>aside</kbd> is a prompt queue for <kbd>Claude Code</kbd>. Note ideas and comments while Claude works, without interrupting it, and hand them over when you are ready.
 
 <p>
   <a href="https://github.com/gravityXX/aside/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/gravityXX/aside/ci.yml?branch=main&style=flat-square&label=CI&color=555"></a>
@@ -13,13 +13,13 @@
   <img alt="While Claude works on your task, your ideas and comments go to a queue instead of to Claude. When it is done you answer it as usual, and /aside plan hands the queue over as steps." src="assets/how-it-works-light.svg">
 </picture>
 
-Want to queue prompts without interrupting Claude, or send something only after it finishes? That is what **aside** is for.
+Want to queue prompts without interrupting Claude, or send something only after it finishes? That is what <kbd>aside</kbd> is for.
 
 ## How it works
 
 ### 1. Note it while Claude works
 
-**To comment on something, copy it first** (<kbd>Ctrl</kbd>+<kbd>C</kbd> or <kbd>&#x2318;</kbd>+<kbd>C</kbd>), from anywhere: VS Code, a terminal, a web page. Then start a message with `+`. It goes to the queue, not to Claude, and takes what you copied along. No paste needed.
+**To comment on something, copy it first** (<kbd>Ctrl</kbd>+<kbd>C</kbd> or <kbd>&#x2318;</kbd>+<kbd>C</kbd>), from anywhere: <kbd>VS Code</kbd>, a <kbd>terminal</kbd>, a web page. Then start a message with `+`. It goes to the queue, not to Claude, and takes what you copied along. No paste needed.
 
 ```text
 > + cache the parsed config     idea
@@ -60,7 +60,7 @@ Nothing reaches Claude until you say so: look at the list, then plan, run or pop
 /plugin install aside@aside
 ```
 
-Requires Claude Code 2.1.301 or newer. The plugin API **aside** builds on is in early access and may change between releases.
+Requires <kbd>Claude Code</kbd> 2.1.301 or newer. The plugin API <kbd>aside</kbd> builds on is in early access and may change between releases.
 
 ## Commands
 
@@ -98,7 +98,7 @@ Requires Claude Code 2.1.301 or newer. The plugin API **aside** builds on is in 
 
 <br>
 
-**Copy from anywhere.** VS Code, a terminal, a markdown preview, a web page, a PDF: whatever lands on the clipboard counts. Text found in a markdown file of the project (five words or more) is pinned to its line. Anything else is kept as a quote.
+**Copy from anywhere.** <kbd>VS Code</kbd>, a <kbd>terminal</kbd>, a markdown preview, a web page, a PDF: whatever lands on the clipboard counts. Text found in a markdown file of the project (five words or more) is pinned to its line. Anything else is kept as a quote.
 
 **Name the place yourself,** right after the mark:
 
@@ -108,7 +108,7 @@ Requires Claude Code 2.1.301 or newer. The plugin API **aside** builds on is in 
 +- #appendix
 ```
 
-**Select instead of copying.** On Claude's own reply in the terminal (fullscreen mode), select the lines with the mouse.
+**Select instead of copying.** On Claude's own reply in the <kbd>terminal</kbd> (fullscreen mode), select the lines with the mouse.
 
 **Ask about a failure.** With nothing copied or selected, a comment carries the last tool output of the turn, an error first, so `+? why did this fail` arrives with its error.
 
