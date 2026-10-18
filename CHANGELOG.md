@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.1 - 2026-10-18
+
+- An idea names the task it came with only when it was queued while Claude was working; one queued at an idle prompt names none.
+
 ## 0.5.0 - 2026-10-17
 
 What the Claude Code feature requests for a prompt queue asked for and 0.4.0 lacked.
