@@ -118,7 +118,8 @@ const COMMANDS: readonly Command[] = [
   },
   {
     name: 'scan',
-    takes: args => args.length === 1 && MARKDOWN_PATH.test(args[0]!),
+    // A file name with spaces is one name: the words are taken together.
+    takes: args => args.length > 0 && MARKDOWN_PATH.test(args.join(' ')),
     usage: 'scan FILE',
     help: ['/aside scan FILE - read the tags of a file Claude did not write in this session'],
     about: 'read the tags of a markdown file',
@@ -186,7 +187,7 @@ async function runCommand($: Engine, ctx: Context, name: Name, args: readonly st
     case 'undo':
       return restoreTaken($)
     case 'scan':
-      return scanFile($, first ?? '')
+      return scanFile($, args.join(' '))
     case 'help':
       return HELP
   }
