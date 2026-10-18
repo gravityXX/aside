@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.8.1 - 2026-10-18
+
+- `/aside plan` only organizes: Claude is told to use no tool but the plan tool and to leave questions for their steps, instead of answering them at once.
+- The band's `organize` and `run plan` buttons work again. They called `/aside` through the engine, which skips the plugin's own command hook, and ended in "no command.run hook answered it".
+
 ## 0.8.0 - 2026-10-18
 
 - A new setting, `order`: `oldest` (default) keeps the queue first in, first out; `newest` makes it last in, first out. `/aside` lists, numbers and runs the queue in that order, and `pop` alone always takes the newest entry. The setting can change at any time without losing the order you set with `move`.

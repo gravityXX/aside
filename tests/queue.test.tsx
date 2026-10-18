@@ -258,7 +258,8 @@ describe('prompts', () => {
     expect(text).toContain('docs/r.md:\n  2. [question] line 5, on "Revenue grew": where from')
     expect(text).toContain('3. [question] line 9 [a <!-- --> tag in the file]: same for Poland')
     expect(text).toContain('Not tied to a file:\n  4. [change]: shorter')
-    expect(text).toContain('mcp__aside__plan')
+    expect(text).toContain('Use no tool but the mcp__aside__plan tool, so read nothing, run nothing and change nothing.')
+    expect(text).not.toContain('answer the questions right away')
     expect(text).toContain('Composed by the aside plugin')
   })
 
@@ -943,5 +944,23 @@ describe('plan', () => {
     await queue($, 'plan')
     await $.tool.call({ tool: 'mcp__aside__plan', steps: STEPS } as never)
     expect(await band()).toEqual(['aside: plan: 3 of 3 steps left · ', 'run plan'])
+  })
+
+  test('the band button organizes the queue, then runs the plan', async ($, on) => {
+    const { sent, clock, toasts } = world(on)
+    const press = async () => {
+      const ui = await $.ui.mount({ plugin: 'aside', surface: 'terminal', component: 'AbovePrompt', props: { hasSurvey: false } as never, viewport: { columns: 120, rows: 30 } })
+      await ui.press({ key: 'queue' })
+      await ui.unmount()
+      await clock.advance(100)
+    }
+    await type($, '+ x\n+? y')
+
+    await press()
+    expect(sent.at(-1)).toContain('Organize all of it, and only organize it')
+    await $.tool.call({ tool: 'mcp__aside__plan', steps: STEPS } as never)
+    await press()
+    expect(sent.at(-1)).toContain('Do one')
+    expect(toasts.join('\n')).not.toContain('no command.run hook')
   })
 })

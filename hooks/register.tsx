@@ -633,6 +633,36 @@ const start = async ($: Engine, index: number, isChain: boolean) => {
 
 // Stops the plan: a step that has not started yet does not start; a running one finishes
 // and is the last. A step another session left behind is let go here.
+// What /aside run adds when another session's step was running: this one takes it over.
+const takeOver = (plan: Plan) => (plan.active ? ` (another session had step ${plan.active.step + 1} running; this one takes over)` : '')
+
+// /aside run on the saved plan: step N, or the plan from its first step not done. Undefined
+// when no step is named and every step is done, so the queue runs entry by entry instead.
+const runPlan = async ($: Engine, n?: number): Promise<string | undefined> => {
+  const { plan: planKey } = await keys($)
+  const plan = await loadPlan($, planKey)
+  if (plan.active && plan.active.sessionId === (await $.session.id())) {
+    return `Step ${plan.active.step + 1} is running. /aside stop stops after it.`
+  }
+  const note = takeOver(plan)
+  if (n !== undefined) {
+    if (plan.steps.length === 0 || n < 1 || n > plan.steps.length) {
+      return plan.steps.length === 0 ? 'No plan: /aside run runs the queue entry by entry.' : `Give a step from 1 to ${plan.steps.length}, as /aside shows them.`
+    }
+    await start($, n - 1, false)
+
+    return `Running step ${n}: ${plan.steps[n - 1]!.title}${note}`
+  }
+  const first = plan.steps.findIndex(step => !step.isDone)
+  if (first < 0) {
+    return undefined
+  }
+  await start($, first, true)
+  const left = plan.steps.filter(step => !step.isDone).length
+
+  return `Running the plan: ${left === 1 ? '1 step' : `${left} steps`}, from step ${first + 1}. /aside stop stops after the current one.${note}`
+}
+
 const stopPlan = async ($: Engine): Promise<string> => {
   const { plan: planKey } = await keys($)
   const plan = await loadPlan($, planKey)
@@ -1096,28 +1126,11 @@ export const register: Register = (on, options) => {
       if (rest[0] === 'all') {
         return { text: await handOver($, 'send') }
       }
-      const plan = await loadPlan($, planKey)
-      const isMine = plan.active?.sessionId === (await $.session.id())
-      if (plan.active && isMine) {
-        return { text: `Step ${plan.active.step + 1} is running. /aside stop stops after it.` }
+      const ran = await runPlan($, rest[0] === undefined ? undefined : Number(rest[0]))
+      if (ran !== undefined) {
+        return { text: ran }
       }
-      const note = plan.active ? ` (another session had step ${plan.active.step + 1} running; this one takes over)` : ''
-      const first = plan.steps.findIndex(step => !step.isDone)
-      if (rest[0] !== undefined) {
-        const n = Number(rest[0])
-        if (plan.steps.length === 0 || n < 1 || n > plan.steps.length) {
-          return { text: plan.steps.length === 0 ? 'No plan: /aside run runs the queue entry by entry.' : `Give a step from 1 to ${plan.steps.length}, as /aside shows them.` }
-        }
-        await start($, n - 1, false)
-
-        return { text: `Running step ${n}: ${plan.steps[n - 1]!.title}${note}` }
-      }
-      if (first >= 0) {
-        await start($, first, true)
-        const left = plan.steps.filter(step => !step.isDone).length
-
-        return { text: `Running the plan: ${left === 1 ? '1 step' : `${left} steps`}, from step ${first + 1}. /aside stop stops after the current one.${note}` }
-      }
+      const note = takeOver(await loadPlan($, planKey))
 
       // No plan to run: every entry becomes a step of its own.
       const inFiles = await fileTags($, true)
@@ -1214,10 +1227,11 @@ export const register: Register = (on, options) => {
     if (now.ideas) parts.push(ideasOf(now.ideas))
     if (now.comments + now.tags) parts.push(commentsOf(now.comments + now.tags))
     const action = now.running !== undefined ? 'stop' : waiting > 0 ? 'organize' : 'run plan'
-    // A stop is applied here and now: $.command.run would wait for the turn to end.
+    // The press does the work itself: $.command.run from here skips this plugin's own
+    // command hook, and a stop is applied at once rather than when the turn ends.
     const press = async () => {
-      if (action === 'stop') $.ui.toast(await stopPlan($))
-      else await $.command.run({ command: 'aside', args: action === 'run plan' ? 'run' : 'plan' })
+      const said = action === 'stop' ? await stopPlan($) : action === 'run plan' ? await runPlan($) : await handOver($, 'plan')
+      if (said !== undefined) $.ui.toast(said)
     }
 
     const { Box, Button, Text } = $.ui.resolve(e)
