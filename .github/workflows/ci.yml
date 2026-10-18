@@ -4,32 +4,97 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Started by the bump step: a push with the workflow token starts no run by itself
+  workflow_dispatch:
 
 jobs:
   check:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
     steps:
       - uses: actions/checkout@v4
         with:
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-      - name: Install Claude Code
-        run: npm install -g @anthropic-ai/claude-code@2.1.301
-      - name: Validate
-        run: claude plugin validate .
-      - name: Test
-        run: claude plugin test .
-      - name: Changelog
-        run: |
-          version=$(jq -r .version .claude-plugin/plugin.json)
-          grep -q "^## $version " CHANGELOG.md || { echo "::error::CHANGELOG.md has no section for $version"; exit 1; }
+      - name: Install Commitizen
+        if: github.event_name != 'push'
+        run: pipx install commitizen==4.19.2
       - name: Commit messages
         if: github.event_name == 'pull_request'
         env:
           TITLE: ${{ github.event.pull_request.title }}
           RANGE: ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}
         run: |
-          pipx run --spec commitizen==4.19.2 cz check --rev-range "$RANGE"
-          pipx run --spec commitizen==4.19.2 cz check --message "$TITLE"
+          cz check --rev-range "$RANGE"
+          cz check --message "$TITLE"
+      - name: Next version
+        id: next
+        if: github.event_name != 'push'
+        run: |
+          last=$(cz version --project)
+          next=$(cz bump --get-next 2> /dev/null) || case $? in 3 | 21) next=$last ;; *) exit 1 ;; esac
+          echo "last=$last" >> "$GITHUB_OUTPUT"
+          echo "next=$next" >> "$GITHUB_OUTPUT"
+      - name: Bump
+        id: bump
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ github.head_ref }}
+          LAST: ${{ steps.next.outputs.last }}
+          NEXT: ${{ steps.next.outputs.next }}
+        run: |
+          current=$(jq -r .version .claude-plugin/plugin.json)
+          if [ "$current" = "$NEXT" ]; then
+            exit 0
+          fi
+          if [ "$current" = "$LAST" ]; then from='Unreleased'; else from="$current - [0-9-]+"; fi
+          if [ "$NEXT" = "$LAST" ]; then to='Unreleased'; else to="$NEXT - $(date -u +%F)"; fi
+          if ! grep -qE "^## ($from)\$" CHANGELOG.md; then
+            echo "::error::Note the change under '## Unreleased' at the top of CHANGELOG.md"
+            exit 1
+          fi
+          sed -i -E "0,/^## ($from)\$/s//## $to/" CHANGELOG.md
+          sed -i -E "s/^(  \"version\": \")[^\"]+\"/\1$NEXT\"/" .claude-plugin/plugin.json
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -qam "bump: version $LAST → $NEXT"
+          git push -q origin "HEAD:$BRANCH"
+          gh workflow run ci.yml --ref "$BRANCH"
+          echo "pushed=true" >> "$GITHUB_OUTPUT"
+      - name: Version
+        if: steps.bump.outputs.pushed != 'true'
+        env:
+          LAST: ${{ steps.next.outputs.last }}
+          NEXT: ${{ steps.next.outputs.next }}
+        run: |
+          version=$(jq -r .version .claude-plugin/plugin.json)
+          if ! grep -q "^## $version " CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no section for $version"
+            exit 1
+          fi
+          if [ -n "$NEXT" ] && [ "$version" != "$NEXT" ]; then
+            echo "::error::plugin.json says $version, the commits since v$LAST make it $NEXT"
+            exit 1
+          fi
+          if [ -n "$NEXT" ] && [ "$NEXT" != "$LAST" ]; then
+            echo "::notice title=Version::Release $LAST → $NEXT"
+          elif [ -n "$NEXT" ]; then
+            echo "::notice title=Version::No release, $LAST stays"
+          fi
+      - uses: actions/setup-node@v4
+        if: steps.bump.outputs.pushed != 'true'
+        with:
+          node-version: 24
+      - name: Install Claude Code
+        if: steps.bump.outputs.pushed != 'true'
+        run: npm install -g @anthropic-ai/claude-code@2.1.301
+      - name: Validate
+        if: steps.bump.outputs.pushed != 'true'
+        run: claude plugin validate .
+      - name: Test
+        if: steps.bump.outputs.pushed != 'true'
+        run: claude plugin test .
