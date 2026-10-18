@@ -18,7 +18,7 @@ For a type check, start a session with the plugin loaded once, so Claude Code wr
 
 - `hooks/queue.ts` - the pure logic: parsing `+` messages, finding a copied fragment in a file, the prompts.
 - `hooks/register.tsx` - the hooks: capture, the `/aside` command, plan and run, the band above the prompt.
-- `tests/queue.test.tsx` - the tests, one `describe` per area.
+- `tests/` - the tests, one file per area of what the plugin does: `typing`, `comments`, `commands`, `plan` and `ui`, plus `matching` for the rules that find a fragment, a heading or a tag in a file. `tests/world.tsx` sets up the machine beneath the plugin and the helpers the tests act through.
 - `assets/make_svgs.py` - draws the step pictures in the README, light and dark: `python3 assets/make_svgs.py`.
 
 ## Release
