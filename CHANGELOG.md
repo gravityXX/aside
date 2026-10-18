@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- The `stop` and `run plan` buttons sit on the line above the prompt, beside `list`, where they used to drop to the line below it.
+
 ## 0.17.0 - 2026-10-18
 
 - Each step of a plan ends its reply with a one-line result, which the plan keeps with the step and `/aside` shows under it. The last step of a run gets what every step done said, those before a pause included, and ends with a summary of the whole run: what each step did, what is still open and what comes next.
