@@ -19,6 +19,8 @@
 
 **To comment on something, copy it first** (<kbd>Ctrl</kbd>+<kbd>C</kbd> or <kbd>&#x2318;</kbd>+<kbd>C</kbd>), from anywhere: <kbd>VS Code</kbd>, a <kbd>terminal</kbd>, a <kbd>web page</kbd>. Then start a message with `+`, or end one with it. It goes to the queue, not to Claude. **No paste needed:** <kbd>aside</kbd> takes whatever is on your clipboard.
 
+What you typed in a hurry is tidied as it is queued: spelling, punctuation, wording. What you copied stays exactly as copied.
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/step-1-dark.svg">
   <img alt="Copy a sentence from a markdown preview with Ctrl+C, then type +? and a question in Claude Code: the comment is queued, pinned to docs/report.md line 42 with the copied sentence. The marks: + idea, +? question, +! change, +- drop, ++ dig deeper." src="assets/step-1-light.svg">
@@ -135,12 +137,13 @@ Tags count in markdown files Claude wrote or edited this session. `/aside scan F
 
 #### Settings
 
-Both are in `/config`; the first option is the default.
+All three are in `/config`; the first option is the default.
 
 | Setting | Options | What it does |
 | --- | --- | --- |
 | `whenTurnEnds` | `wait` `plan` `send` | When Claude finishes a turn: keep the queue, turn it into a plan, or send it to be done. Never while a saved plan has steps left. |
 | `order` | `oldest` `newest` | Which entry comes first in the list and in a run: first in, first out, or last in, first out. |
+| `tidy` | `on` `off` | Once an entry is queued, a small model fixes the spelling, punctuation and wording of what you typed, in its own language. The copied quote stays exactly as copied. |
 
 #### Clipboard
 
@@ -156,7 +159,8 @@ Only for a comment that names no line or heading, never for a plain `+` idea.
 #### Privacy
 
 - The queue stays on your machine, one per project.
-- Nothing reaches Claude until you run `/aside plan` or `/aside run`, or `whenTurnEnds` hands it over.
+- Nothing reaches Claude's conversation until you run `/aside plan` or `/aside run`, or `whenTurnEnds` hands it over.
+- With `tidy` on, the text you typed for each entry goes to a small model (Haiku) on its own to be corrected. The copied quote never does.
 
 </details>
 

@@ -24,6 +24,9 @@ import {
   stepPrompt,
   summary,
   tags,
+  TIDY_SYSTEM,
+  tidied,
+  tidyPrompt,
   where,
 } from './queue'
 
@@ -70,6 +73,13 @@ let planTool = 'mcp__aside__plan'
 // so the setting can change at any time; only what /aside shows, numbers and runs follows it.
 let order: 'oldest' | 'newest' = 'oldest'
 const inOrder = (list: readonly Idea[]): Idea[] => (order === 'newest' ? [...list].reverse() : [...list])
+
+// Whether a small model tidies each entry's own text once it is stored (the tidy setting).
+let tidy = true
+
+// Writes of typed entries go one after another, so two quick ones never overwrite each
+// other; a tidied text is written back in the same line.
+let storing: Promise<unknown> = Promise.resolve()
 
 // The colour of each kind and step state in the drawn list, from the theme, so it suits
 // light and dark alike.
@@ -466,11 +476,39 @@ const enqueue = async (
   }
   await saveIdeas($, queue, all)
   await refresh($)
+  if (tidy) for (const idea of added) void tidyEntry($, idea)
   if (images > 0) notes.push('the image was not kept')
   const said = queuedOf(added, notes, root, all.length)
   if (report === 'log') $.ui.log(said)
 
   return said
+}
+
+// An entry's own text, tidied by a small model once it is stored. It waits as typed until
+// the reply comes, and keeps that text when none comes in time or the entry has left the
+// queue by then. The edit box gets the tidied text too, with its mark and place as typed.
+const tidyEntry = async ($: Engine, idea: Idea): Promise<void> => {
+  if (idea.text.trim() === '') {
+    return
+  }
+  const ask = { model: 'haiku', system: TIDY_SYSTEM, prompt: tidyPrompt(idea.text), maxTokens: 1024, timeoutMs: 10_000 }
+  const reply = await $.model.complete(ask).catch(() => undefined)
+  const fixed = reply?.isAnswered ? tidied(reply.text, idea.text) : undefined
+  if (fixed === undefined) {
+    return
+  }
+  storing = storing
+    .then(async () => {
+      const { queue } = await keys($)
+      const list = await loadIdeas($, queue)
+      const i = list.findIndex(one => one.at === idea.at && one.kind === idea.kind && one.text === idea.text)
+      const one = list[i]
+      if (one === undefined) return
+      const raw = one.raw?.endsWith(one.text) ? `${one.raw.slice(0, one.raw.length - one.text.length)}${fixed}` : one.raw
+      list[i] = { ...one, text: fixed, ...(raw === undefined ? {} : { raw }) }
+      await saveIdeas($, queue, list)
+    })
+    .catch(() => undefined)
 }
 
 // The text selected in one transcript row: one in the prompt box or a pane is not about
@@ -622,6 +660,7 @@ export const register: Register = (on, options) => {
   // or hand it over at once as a plan or as it is.
   const whenTurnEnds = options.whenTurnEnds === 'plan' || options.whenTurnEnds === 'send' ? options.whenTurnEnds : 'wait'
   order = options.order === 'newest' ? 'newest' : 'oldest'
+  tidy = options.tidy !== 'off'
   // Module variables start over on a reload; nothing in them has to last.
   let lastTask: string | undefined
   let nudged = 0
@@ -636,8 +675,6 @@ export const register: Register = (on, options) => {
   const taskNow = () => (isRunning ? lastTask : undefined)
   // The last message queued, until the box it went back into has been emptied.
   let justQueued: string | undefined
-  // Typed entries are stored one after another, so two quick ones never overwrite each other.
-  let storing: Promise<unknown> = Promise.resolve()
   let output: { text: string; turnId: string | undefined; isError: boolean } | undefined
   const outputNow = () => (output && output.turnId === turn ? output.text : undefined)
 
