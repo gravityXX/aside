@@ -19,12 +19,13 @@
 
 **To comment on something, copy it first** (<kbd>Ctrl</kbd>+<kbd>C</kbd> or <kbd>&#x2318;</kbd>+<kbd>C</kbd>), from anywhere: <kbd>VS Code</kbd>, a <kbd>terminal</kbd>, a <kbd>web page</kbd>. Then start a message with `+`, or end one with it. It goes to the queue, not to Claude. **No paste needed:** <kbd>aside</kbd> takes whatever is on your clipboard.
 
-What you typed in a hurry is tidied as it is queued: spelling, punctuation, wording. What you copied stays exactly as copied.
-
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/step-1-dark.svg">
   <img alt="Copy a sentence from a markdown preview with Ctrl+C, then type +? and a question in Claude Code: the comment is queued, pinned to docs/report.md line 42 with the copied sentence. The marks: + idea, +? question, +! change, +- drop, ++ dig deeper." src="assets/step-1-light.svg">
 </picture>
+
+> [!NOTE]
+> What you type in a hurry is tidied as it is queued: spelling, punctuation, wording. What you copied stays exactly as copied. To keep entries as typed, set `tidy` to `off` in `/config`.
 
 ### 2. Answer Claude as usual
 
@@ -90,77 +91,42 @@ Requires <kbd>Claude Code</kbd> 2.1.301 or newer. The plugin API <kbd>aside</kbd
 
 ## More
 
+> [!IMPORTANT]
+> **The queue stays on your machine**, one per project. Nothing reaches Claude's conversation until you run `/aside plan` or `/aside run`, or `whenTurnEnds` does. With `tidy` on, the text you type goes to Haiku to be corrected. What you copied never does.
+
 <details>
 <summary>Other ways to comment</summary>
 
-#### Copy from anywhere
+<br>
 
-<kbd>VS Code</kbd>, a <kbd>terminal</kbd>, a <kbd>markdown preview</kbd>, a <kbd>web page</kbd>, a <kbd>PDF</kbd>: whatever lands on the clipboard counts. Text found in a markdown file of the project (five words or more) is pinned to its line. Anything else is kept as a quote.
-
-#### Queue a draft you already typed
-
-End it with the mark, after a space: `why is this so slow +?` is queued as `+? why is this so slow`.
-
-#### Select instead of copying
-
-In fullscreen mode, select lines of Claude's reply in the <kbd>terminal</kbd> with the mouse.
-
-#### Ask about a failure
-
-With nothing copied or selected, a comment carries the last tool output of the turn, an error first. `+? why did this fail` arrives with its error.
-
-#### Point at a place yourself
-
-Right after the mark:
-
-| You type | It points at |
+| You type or do | It queues |
 | --- | --- |
-| `+? @docs/report.md:42 why this order` | line 42 of `docs/report.md` |
-| `+! @report.md#results shorter` | the Results heading in `report.md` |
-| `+- #appendix` | an Appendix heading in a file written this session |
-
-#### Leave tags in a file
-
-| Tag | Counts as |
-| --- | --- |
-| `<!-- ? ... -->` | question |
-| `<!-- ! ... -->` | change |
-| `<!-- - ... -->` | drop |
-| `<!-- + ... -->` | dig deeper |
+| `why is this so slow +?` | the whole draft, as `+? why is this so slow` |
+| `+? why did this fail`, nothing copied | the question with the last tool output, an error first |
+| `+? @docs/report.md:42 why this order` | a question about line 42 of that file |
+| `+! @report.md#results shorter` | a change for the Results heading |
+| `+- #appendix` | a drop for an Appendix heading in a file written this session |
+| `<!-- ? why -->` in a markdown file | a question, and `!` a change, `-` a drop, `+` dig deeper |
+| select lines of Claude's reply | the selected lines, when nothing new is copied (fullscreen mode) |
 
 Tags count in markdown files Claude wrote or edited this session. `/aside scan FILE` adds any other file.
 
 </details>
 
 <details>
-<summary>Settings, platforms and privacy</summary>
+<summary>Settings</summary>
 
-#### Settings
+<br>
 
-All three are in `/config`; the first option is the default.
+Change these in `/config`:
 
-| Setting | Options | What it does |
-| --- | --- | --- |
-| `whenTurnEnds` | `wait` `plan` `send` | When Claude finishes a turn: keep the queue, turn it into a plan, or send it to be done. Never while a saved plan has steps left. |
-| `order` | `oldest` `newest` | Which entry comes first in the list and in a run: first in, first out, or last in, first out. |
-| `tidy` | `on` `off` | Once an entry is queued, a small model fixes the spelling, punctuation and wording of what you typed, in its own language. The copied quote stays exactly as copied. |
+| Setting | Default | Or | What it does |
+| --- | --- | --- | --- |
+| `whenTurnEnds` | `wait` | `plan`, `send` | When a turn ends: keep the queue, plan it, or send it |
+| `order` | `oldest` | `newest` | Which entry comes first in the list and in a run |
+| `tidy` | `on` | `off` | Fix the spelling and wording of what you type |
 
-#### Clipboard
-
-| System | Read with |
-| --- | --- |
-| WSL | `powershell.exe` |
-| macOS | `pbpaste` |
-| Linux | `wl-paste`, `xclip` or `xsel` |
-| Windows | `powershell` |
-
-Only for a comment that names no line or heading, never for a plain `+` idea.
-
-#### Privacy
-
-- The queue stays on your machine, one per project.
-- Nothing reaches Claude's conversation until you run `/aside plan` or `/aside run`, or `whenTurnEnds` hands it over.
-- With `tidy` on, the text you typed for each entry goes to a small model (Haiku) on its own to be corrected. The copied quote never does.
+The clipboard is read with `powershell` on WSL and Windows, `pbpaste` on macOS, and `wl-paste`, `xclip` or `xsel` on Linux, only for a comment that names no line or heading.
 
 </details>
 
