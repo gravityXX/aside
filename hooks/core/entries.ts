@@ -21,7 +21,7 @@ export type Anchor = { file?: string; line?: number; heading?: string }
 // An entry as typed, before it is pinned and stored.
 export type TypedEntry = { kind: Kind; text: string; anchor: Anchor; raw: string }
 
-const ANCHOR_PATTERN = /^(?:@(?<file>[^\s:#]+)(?::(?<line>\d+)|#(?<fileHeading>[\p{L}\p{N}-]+))?|#(?<heading>[\p{L}\p{N}-]+))(?=\s|$)/u
+const ANCHOR_PATTERN = /^(?:@(?<file>(?:[A-Za-z]:(?=[\\/]))?[^\s:#]+)(?::(?<line>\d+)|#(?<fileHeading>[\p{L}\p{N}-]+))?|#(?<heading>[\p{L}\p{N}-]+))(?=\s|$)/u
 
 const parseEntry = (raw: string): TypedEntry | null => {
   const body = raw.trim().slice(1)

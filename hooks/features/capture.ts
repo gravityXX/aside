@@ -22,7 +22,10 @@ type Pin = Pick<Entry, 'file' | 'line' | 'heading' | 'quote' | 'isLoose' | 'from
 // What a comment can be about when it names no place: the clipboard (and whether it changed
 // since the last comment), the text selected in a transcript row, the last tool output.
 // Each is asked at most once per message.
-type CommentSources = { selection: () => Promise<string>; clipboard: () => Promise<{ text: string; isNew: boolean }>; output?: string }
+// Where a comment's text may come from. `missing` says why nothing was read: no reader runs
+// here, or the comment came from another device, whose clipboard this machine cannot see.
+type Copied = { text: string; isNew: boolean; missing?: string }
+type CommentSources = { selection: () => Promise<string>; clipboard: () => Promise<Copied>; output?: string }
 
 type ReadSource = (file: string) => Promise<string | undefined>
 
@@ -32,12 +35,25 @@ function readReplySelection($: Engine): Promise<string> {
   return $.ui.selection().then(one => (one?.requestId ? one.text.trim() : ''), () => '')
 }
 
-function commentSources($: Engine, ctx: Context, output: string | undefined, selection: string | undefined): CommentSources {
-  let clipboard: Promise<{ text: string; isNew: boolean }> | undefined
+function commentSources($: Engine, ctx: Context, output: string | undefined, selection: string | undefined, isRemote: boolean): CommentSources {
+  let clipboard: Promise<Copied> | undefined
   let selected: Promise<string> | undefined
+  const readCopied = async (): Promise<Copied> => {
+    const read = await readClipboard($, ctx.session.clipboard)
+
+    return read.hasReader ? read : { ...read, missing: 'no clipboard reader here (wl-clipboard, xclip or xsel)' }
+  }
+
+  if (isRemote) {
+    return {
+      clipboard: () => Promise.resolve({ text: '', isNew: false, missing: 'sent from another device, so no clipboard was read' }),
+      selection: () => Promise.resolve(''),
+      ...(output ? { output } : {}),
+    }
+  }
 
   return {
-    clipboard: () => (clipboard ??= readClipboard($, ctx.session.clipboard)),
+    clipboard: () => (clipboard ??= readCopied()),
     selection: () => (selected ??= selection !== undefined ? Promise.resolve(selection) : readReplySelection($)),
     ...(output ? { output } : {}),
   }
@@ -84,7 +100,7 @@ async function pinToCopiedText(
   const output = sources.output ? { output: sources.output } : {}
   const withOutput = sources.output ? '; the last tool output is attached' : ''
 
-  const { text: quote, isNew } = await sources.clipboard()
+  const { text: quote, isNew, missing } = await sources.clipboard()
   const count = fragmentWords(quote).length
   const selected = await sources.selection()
   if (count > 0 && (isNew || fragmentWords(selected).length === 0)) {
@@ -96,7 +112,7 @@ async function pinToCopiedText(
   }
 
   if (count === 0) {
-    return sources.output ? { ...base, ...output, note: 'with the last tool output' } : { ...base, note: 'no text on the clipboard' }
+    return sources.output ? { ...base, ...output, note: 'with the last tool output' } : { ...base, note: missing ?? 'no text on the clipboard' }
   }
   const scope = named ? relativePath(named, root) : `any .md file under ${root}`
   const why = count < MIN_FRAGMENT_WORDS ? `copied text too short to find (${count} words)` : `copied text not found in ${scope}`
@@ -186,7 +202,7 @@ export async function addEntries(
   text: string,
   task: string | undefined,
   output: string | undefined,
-  options: { images?: number; selection?: string; report?: Report } = {},
+  options: { images?: number; selection?: string; report?: Report; isRemote?: boolean } = {},
 ): Promise<string | null> {
   const { images = 0, report = 'none' } = options
   const typed = parseEntries(text)
@@ -197,7 +213,7 @@ export async function addEntries(
   const seen = await readTrackedFiles($)
   const now = await $.clock.now()
   const branch = await readGitBranch($, keys.root)
-  const sources = commentSources($, ctx, output, options.selection)
+  const sources = commentSources($, ctx, output, options.selection, options.isRemote === true)
   // An entry taken out with /aside edit comes back where it was, keeping what it pointed at,
   // unless the reworked text names a place of its own.
   const editing = await loadEditing($, keys.editing)
@@ -249,7 +265,8 @@ function emptyBoxLater($: Engine, ctx: Context, typed: string) {
   })
 }
 
-const isTypedMessage = (e: { origin: { kind: string }; command?: unknown }) => e.origin.kind === 'composer' && e.command === undefined
+// Typed by the person: at this terminal, or on a phone or the web through Remote Control.
+const isTypedMessage = (e: { origin: { kind: string }; command?: unknown }) => (e.origin.kind === 'composer' || e.origin.kind === 'bridge') && e.command === undefined
 
 // A message typed with a mark is dropped before the model and queued. Enter is answered at
 // once, as on a plain prompt: the slow part (the clipboard, the search, the store) runs right
@@ -270,27 +287,30 @@ export async function queueTyped(ctx: Context, $: Engine, e: Submit[1], next: Su
   const task = e.turnId !== undefined ? ctx.session.lastTask : undefined
   const output = currentOutput(ctx)
   const images = e.attachments?.length ?? 0
+  // Sent from a phone or the web: this machine's clipboard, selection and prompt box are not
+  // the sender's.
+  const isRemote = e.origin.kind === 'bridge'
   const isComment = entries.some(entry => entry.kind !== 'idea' && Object.keys(entry.anchor).length === 0)
-  const selection = isComment ? await readReplySelection($) : ''
+  const selection = isComment && !isRemote ? await readReplySelection($) : ''
   $.clock.after(1, () =>
     chainWrite(
       ctx,
-      () => addEntries($, ctx, text, task, output, { images, selection, report: 'log' }),
+      () => addEntries($, ctx, text, task, output, { images, selection, report: 'log', isRemote }),
       // Caught too, so a failure here never stops the writes chained after it.
-      error => storeFailed($, ctx, text, error).catch(() => undefined),
+      error => storeFailed($, ctx, text, error, isRemote).catch(() => undefined),
     ),
   )
-  emptyBoxLater($, ctx, e.text.trim())
+  if (!isRemote) emptyBoxLater($, ctx, e.text.trim())
 
   return { drop: 'queued' }
 }
 
 // A typed entry that could not be stored goes back into the prompt box when the box is empty,
 // so nothing typed is lost; with a new draft there, the transcript line gives it whole.
-async function storeFailed($: Engine, ctx: Context, text: string, error: unknown) {
+async function storeFailed($: Engine, ctx: Context, text: string, error: unknown, isRemote: boolean) {
   if (ctx.session.justQueued === text.trim()) ctx.session.justQueued = undefined
   const why = describeError(error)
-  const box = await $.prompt.read().catch(() => undefined)
+  const box = isRemote ? undefined : await $.prompt.read().catch(() => undefined)
   const filled = box?.text.trim() === '' ? await $.prompt.fill({ text, mode: 'replace' }).catch(() => undefined) : undefined
   $.ui.log(
     filled?.isFilled

@@ -7,7 +7,8 @@ const GREP_ENV = { LC_ALL: 'C.UTF-8' }
 
 export async function tryReadFile($: Engine, path: string): Promise<string | undefined> {
   try {
-    return await $.fs.read(path)
+    // A leading byte-order mark would hide a heading or tag on the first line.
+    return (await $.fs.read(path)).replace(/^\uFEFF/, '')
   } catch {
     return undefined
   }
@@ -15,8 +16,10 @@ export async function tryReadFile($: Engine, path: string): Promise<string | und
 
 const POWERSHELL_ARGS = ['-NoProfile', '-NonInteractive', '-Command', '[Console]::OutputEncoding=[Text.Encoding]::UTF8; Get-Clipboard -Raw']
 
-// The clipboard readers to try, in order: Windows' own under WSL, then macOS, Wayland,
-// X11 and native Windows.
+// The clipboard readers to try, in order: Windows' own under WSL and on Windows, then macOS,
+// Wayland and X11. Each system is tried for every one, since a reader that is not installed
+// is refused at once: WSL with no WSL_DISTRO_NAME (an ssh login, a systemd service) still
+// reaches powershell.exe.
 const CLIPBOARD_READERS: readonly (readonly string[])[] = [
   ['powershell.exe', ...POWERSHELL_ARGS],
   ['pbpaste'],
@@ -30,9 +33,9 @@ const CLIPBOARD_READERS: readonly (readonly string[])[] = [
 // last read saw: an unchanged clipboard is likely stale.
 export type ClipboardState = { reader?: readonly string[]; last?: string }
 
-async function readClipboardText($: Engine, state: ClipboardState): Promise<string> {
-  const isWsl = (await $.env.get('WSL_DISTRO_NAME')) !== undefined
-  const candidates = state.reader ? [state.reader] : CLIPBOARD_READERS.filter(argv => isWsl || argv[0] !== 'powershell.exe')
+// The clipboard's text, '' with nothing to read; undefined when no reader runs here at all.
+async function readClipboardText($: Engine, state: ClipboardState): Promise<string | undefined> {
+  const candidates = state.reader ? [state.reader] : CLIPBOARD_READERS
   let isFallback = false
   for (const argv of candidates) {
     try {
@@ -54,16 +57,17 @@ async function readClipboardText($: Engine, state: ClipboardState): Promise<stri
     }
   }
 
-  return ''
+  return isFallback ? '' : undefined
 }
 
-// The clipboard's text, and whether it changed since the last read.
-export async function readClipboard($: Engine, state: ClipboardState): Promise<{ text: string; isNew: boolean }> {
-  const text = await readClipboardText($, state)
+// The clipboard's text, whether it changed since the last read, and whether any reader runs here.
+export async function readClipboard($: Engine, state: ClipboardState): Promise<{ text: string; isNew: boolean; hasReader: boolean }> {
+  const read = await readClipboardText($, state)
+  const text = read ?? ''
   const isNew = text !== state.last
   state.last = text
 
-  return { text, isNew }
+  return { text, isNew, hasReader: read !== undefined }
 }
 
 export async function readGitBranch($: Engine, root: string): Promise<string | undefined> {
@@ -123,8 +127,9 @@ export async function searchMarkdown($: Engine, quote: string, root: string): Pr
       ],
       { timeoutMs: 8000, env: GREP_ENV, stdin: '' },
     )
-    // 0: found, 1: nothing found; anything else is a grep that cannot do this.
-    if (ran.exitCode === 0 || ran.exitCode === 1) {
+    // 0: found, 1: nothing found, 2 with hits: found, with a folder it could not read; any
+    // other 2 is a grep that cannot do this.
+    if (ran.exitCode === 0 || ran.exitCode === 1 || (ran.exitCode === 2 && ran.stdout.trim() !== '')) {
       return ran.stdout.split('\n').filter(Boolean).slice(0, 20)
     }
   } catch {
@@ -144,7 +149,8 @@ export async function searchMarkdown($: Engine, quote: string, root: string): Pr
 // A file named after "@": as written from the root, else a session file ending with it,
 // else the first one under the root at that path.
 export async function resolveFile($: Engine, name: string, root: string, seen: readonly string[]): Promise<string> {
-  const direct = name.startsWith('/') ? name : `${root}/${name}`
+  // Absolute as written: "/home/...", or a Windows drive, "C:\\..." or "C:/...".
+  const direct = /^(?:[A-Za-z]:)?[\\/]/.test(name) ? name : `${root}/${name}`
   if (await $.fs.exists(direct).catch(() => false)) {
     return direct
   }

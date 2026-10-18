@@ -72,7 +72,7 @@ describe('where a comment points', () => {
     w.clip = 'Costs stayed flat across all regions.'
     expect(await queue('+? and this')).toBe('queued ? docs/report.md:8 "Costs stayed flat across all…" (2 waiting)')
     // Which reader is asked shows nowhere the person sees, so the commands run are checked.
-    expect(runs.filter(name => !['git', 'grep'].includes(name))).toEqual(['pbpaste', 'wl-paste', 'xclip', 'pbpaste', 'wl-paste', 'xclip'])
+    expect(runs.filter(name => !['git', 'grep'].includes(name))).toEqual(['powershell.exe', 'pbpaste', 'wl-paste', 'xclip', 'powershell.exe', 'pbpaste', 'wl-paste', 'xclip'])
   })
 
   test('on Linux, the first clipboard reader that works is kept for the session', async ($, on) => {
@@ -83,7 +83,56 @@ describe('where a comment points', () => {
     w.clip = 'Costs stayed flat across all regions.'
     expect(await queue('+? and this')).toBe('queued ? docs/report.md:8 "Costs stayed flat across all…" (2 waiting)')
     // As above: the readers asked are seen only in the commands run.
-    expect(runs.filter(name => !['git', 'grep'].includes(name))).toEqual(['pbpaste', 'wl-paste', 'wl-paste'])
+    expect(runs.filter(name => !['git', 'grep'].includes(name))).toEqual(['powershell.exe', 'pbpaste', 'wl-paste', 'wl-paste'])
+  })
+
+  test('on WSL with no WSL_DISTRO_NAME, as over ssh, the clipboard is still read through powershell.exe', async ($, on) => {
+    const { write, queue } = world($, on, { env: {}, files: REPORT_FILES, clip: 'Revenue grew by 12% in the third quarter' })
+    await write(REPORT_PATH)
+
+    expect(await queue('+? where does this come from')).toBe('queued ? docs/report.md:5 "Revenue grew by 12% in the th…" (1 waiting)')
+  })
+
+  test('with no clipboard reader installed, a comment says so rather than that nothing was copied', async ($, on) => {
+    const { queue } = world($, on, { system: 'linux', readers: {} })
+
+    expect(await queue('+? where from')).toBe('queued ? "where from" - no clipboard reader here (wl-clipboard, xclip or xsel) (1 waiting)')
+  })
+
+  test('grep that found the file but could not read some folder still pins the comment', async ($, on) => {
+    // The file sits where the walk never goes, so only grep's own hit can find it.
+    const files = { '/proj/.notes/old.md': REPORT }
+    const { queue } = world($, on, { files, grep: '/proj/.notes/old.md\n', grepExit: 2, clip: 'Revenue grew by 12% in the third quarter' })
+
+    expect(await queue('+? where from')).toBe('queued ? .notes/old.md:5 "Revenue grew by 12% in the th…" (1 waiting)')
+  })
+
+  test('a heading on the first line is found behind a byte-order mark', async ($, on) => {
+    const { write, queue } = world($, on, { files: { [REPORT_PATH]: `\uFEFF${REPORT}` } })
+    await write(REPORT_PATH)
+
+    expect(await queue('+! #report shorter')).toBe('queued ! docs/report.md:1 (1 waiting)')
+  })
+
+  test('a comment names a Windows file by its drive, and /aside scan reads one, spaces and all', async ($, on) => {
+    const files = { 'C:\\proj\\docs\\report.md': REPORT, 'C:\\notes\\todo.md': 'notes', '/proj/My Notes.md': '<!-- ? why this -->' }
+    const { queue, aside, shown } = world($, on, { files })
+
+    expect(await queue('+? @C:\\proj\\docs\\report.md:5 why')).toBe('queued ? C:\\proj\\docs\\report.md:5 (1 waiting)')
+    expect(await aside('scan C:\\notes\\todo.md')).toBe('C:\\notes\\todo.md: 0 tags; /aside includes the file from now on.')
+    expect(await aside('scan My Notes.md')).toContain('My Notes.md')
+    expect((await shown()).slice(-3)).toEqual(['Tags in files', '· question why this', '↳ My Notes.md:1'])
+  })
+
+  test('a comment sent from a phone or the web is queued, without this machine\'s clipboard', async ($, on) => {
+    const { runs, shown, idle } = world($, on, { clip: 'Revenue grew by 12% in the third quarter' })
+    const fromPhone = (text: string) => $.prompt.submit({ text, origin: { kind: 'bridge' } as never, wait: false })
+
+    expect(await fromPhone('+ dark mode')).toEqual({ drop: 'queued' })
+    expect(await fromPhone('+? where from')).toEqual({ drop: 'queued' })
+    await idle()
+    expect(runs.filter(name => !['git', 'grep'].includes(name))).toEqual([])
+    expect((await shown()).slice(0, 3)).toEqual(['1 idea and 1 comment waiting', '1 idea dark mode', '2 question where from'])
   })
 
   test('with nothing copied, a comment points nowhere and says so', async ($, on) => {
