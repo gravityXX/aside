@@ -464,6 +464,26 @@ describe('from the issues', () => {
   })
 })
 
+describe('the task an idea came with', () => {
+  test('queued while a turn runs, an idea names its task; queued at an idle prompt, none', async ($, on) => {
+    const { sent, clock } = world(on)
+    await type($, 'build the parser')
+    await $.turn.start({ text: 'build the parser', turnId: 't1' })
+    await type($, '+ dark mode', 't1')
+    await queue($, 'and its tests')
+    await ends($, 't1')
+    await type($, '+ rename the loader')
+    await queue($, 'and the docs')
+    await queue($, 'send')
+    await clock.advance(100)
+
+    expect(sent.at(-1)).toContain('1. dark mode (while you worked on "build the parser", branch main)')
+    expect(sent.at(-1)).toContain('2. and its tests (while you worked on "build the parser", branch main)')
+    expect(sent.at(-1)).toContain('3. rename the loader (branch main)')
+    expect(sent.at(-1)).toContain('4. and the docs (branch main)')
+  })
+})
+
 describe('when a turn ends', () => {
   test('whenTurnEnds: plan hands the queue over by itself, but not after its own turn', { options: { whenTurnEnds: 'plan' } }, async ($, on) => {
     const { sent, clock } = world(on)

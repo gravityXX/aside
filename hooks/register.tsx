@@ -564,6 +564,11 @@ export const register: Register = (on, options) => {
   // tool output in it: an error stays over a later success of the same turn.
   let turn: string | undefined
   let isOwnTurn = false
+  // Whether a main-loop turn is in flight: only an entry queued then was made "while Claude
+  // worked on" the last prompt; one queued at an idle prompt names no task. A typed "+" knows
+  // it from its own turnId; /queue TEXT, which carries none, asks this.
+  let isRunning = false
+  const taskNow = () => (isRunning ? lastTask : undefined)
   let output: { text: string; turnId: string | undefined; isError: boolean } | undefined
   const outputNow = () => (output && output.turnId === turn ? output.text : undefined)
 
@@ -659,7 +664,7 @@ export const register: Register = (on, options) => {
 
   on('prompt.submit', async ($, e, next) => {
     const isTyped = e.origin.kind === 'composer' && e.command === undefined
-    const said = isTyped ? await enqueue($, e.text, lastTask, outputNow(), e.attachments?.length ?? 0) : null
+    const said = isTyped ? await enqueue($, e.text, e.turnId !== undefined ? lastTask : undefined, outputNow(), e.attachments?.length ?? 0) : null
     if (said === null) {
       if (isTyped && e.text.trim() !== '') lastTask = snippet(e.text, 200)
       void refresh($)
@@ -678,6 +683,7 @@ export const register: Register = (on, options) => {
   on('turn.start', async ($, e, next) => {
     if (e.agentId === undefined) {
       turn = e.turnId
+      isRunning = true
       isOwnTurn = e.text.includes(OWN) || e.text.includes('Composed by the idea-queue plugin')
     }
     if (e.agentId === undefined && e.text.includes(OWN)) {
@@ -698,6 +704,7 @@ export const register: Register = (on, options) => {
     if (e.agentId !== undefined) {
       return done
     }
+    isRunning = false
 
     const { plan: planKey } = await keys($)
     const plan = await loadPlan($, planKey)
@@ -975,7 +982,7 @@ export const register: Register = (on, options) => {
     // Anything else is an entry to queue: "/queue add tests" as "+ add tests" would.
     if (word === '+text') {
       const text = e.args.trim()
-      const said = await enqueue($, text.startsWith('+') ? text : `+ ${text}`, lastTask, outputNow())
+      const said = await enqueue($, text.startsWith('+') ? text : `+ ${text}`, taskNow(), outputNow())
 
       return { text: said ?? HELP }
     }
