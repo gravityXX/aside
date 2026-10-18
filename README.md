@@ -1,76 +1,95 @@
-<h1 align="center">idea-queue</h1>
+# aside
 
-<p align="center">
-  Comment on what Claude wrote without interrupting it.<br>
-  Run it all later, as a plan.
+Note ideas and comments while Claude works, without interrupting it. Hand them over when you are ready.
+
+<p>
+  <a href="https://github.com/gravityXX/aside/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/gravityXX/aside/ci.yml?branch=main&style=flat-square&label=CI&color=555"></a>
+  <img alt="Version" src="https://img.shields.io/github/package-json/v/gravityXX/aside?filename=.claude-plugin%2Fplugin.json&style=flat-square&label=version&color=555">
+  <img alt="License" src="https://img.shields.io/github/license/gravityXX/aside?style=flat-square&color=555">
 </p>
 
-<p align="center">
-  <a href="https://github.com/gravityXX/idea-queue/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/gravityXX/idea-queue/ci.yml?branch=main&style=flat-square&label=CI&color=555"></a>
-  <img alt="Version" src="https://img.shields.io/github/package-json/v/gravityXX/idea-queue?filename=.claude-plugin%2Fplugin.json&style=flat-square&label=version&color=555">
-  <img alt="License" src="https://img.shields.io/github/license/gravityXX/idea-queue?style=flat-square&color=555">
-</p>
+## How it works
 
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/comment-flow-dark.svg">
-    <img alt="Copy a sentence from a markdown preview, then type +? and a question in Claude Code: the comment is pinned to report.md line 42" src="assets/comment-flow-light.svg" width="840">
-  </picture>
-</p>
+### 1. Note it while Claude works
 
-## Comment on a document
-
-Copy a sentence from any markdown preview, then type a mark and your comment. idea-queue finds the sentence in the file and pins the comment to its line.
+Start a message with `+`: it goes to the queue, not to Claude. To comment on something, copy it first, from anywhere. No paste: aside reads the clipboard.
 
 ```text
-+? question      +! change      +- drop      ++ go deeper
+> + cache the parsed config     idea
+> +! make it a table            change
+> +- not needed here            drop
+> ++ compare with 2024          dig deeper
+> +? where is this from         question
+  queued ? docs/report.md:42 "Revenue grew by 12% in Q3." (5 waiting)
 ```
 
-## Park an idea
+### 2. Answer Claude as usual
 
-Start a message with `+`. It waits in the queue instead of reaching Claude, even mid-task.
+Your reply goes to Claude. By default the queue just waits, in a line above the prompt.
 
 ```text
-+ cache the parsed config
+Claude: Shall I update the docs too?
+queue: 1 idea, 4 comments · organize
+> yes, go ahead
 ```
 
-## Plan and run
+### 3. Plan or run when ready
 
-`/queue plan` hands everything over at once, grouped by file. Claude answers the questions and turns the rest into steps, which `/queue run` runs one by one.
+Nothing reaches Claude until you say so: look at the list, then plan, run or pop.
 
 ```text
-docs/report.md:
-  [question] line 42, on "Revenue grew by 12% in Q3.": where does this come from
-  [change]   line 57, on "Costs by region": make this a table
+> /aside          see the list
+> /aside plan     Claude turns it into steps
+> /aside run      run them
+> /aside pop 2    or take one entry into the prompt box
 ```
 
 ## Install
 
 ```text
-/plugin marketplace add gravityXX/idea-queue
-/plugin install idea-queue@idea-queue
+/plugin marketplace add gravityXX/aside
+/plugin install aside@aside
 ```
 
-> [!NOTE]
-> Needs Claude Code 2.1.301 or newer. The plugin API it builds on is in early access.
+Requires Claude Code 2.1.301 or newer. The plugin API aside builds on is in early access and may change between releases.
 
 ## Commands
 
-| Command          | What it does                                   |
-| ---------------- | ---------------------------------------------- |
-| `/queue`         | Show the queue and the plan                    |
-| `/queue plan`    | Turn the queue into steps                      |
-| `/queue run`     | Run the steps, or the entries, one by one      |
-| `/queue run all` | Send everything in one message, no plan        |
-| `/queue stop`    | Stop after the current step                    |
-| `/queue pop [N]` | Put an entry in the prompt box, ready to send  |
-| `/queue edit N`  | Rework an entry and queue it again             |
-| `/queue clear`   | Empty the queue (`/queue undo` brings it back) |
+<table>
+  <tr>
+    <th colspan="2">Queue</th>
+    <th colspan="2">Entries</th>
+  </tr>
+  <tr>
+    <td><code>/aside</code></td><td>Show the queue and the plan</td>
+    <td><code>/aside pop [N]</code></td><td>Put the last one (or N) in the box</td>
+  </tr>
+  <tr>
+    <td><code>/aside plan</code></td><td>Turn the queue into steps</td>
+    <td><code>/aside edit N</code></td><td>Rework one and queue it again</td>
+  </tr>
+  <tr>
+    <td><code>/aside run [N]</code></td><td>Run the steps, or step N</td>
+    <td><code>/aside remove N</code></td><td>Remove one</td>
+  </tr>
+  <tr>
+    <td><code>/aside run all</code></td><td>Send the queue as is, no plan</td>
+    <td><code>/aside clear</code></td><td>Empty the queue</td>
+  </tr>
+  <tr>
+    <td><code>/aside stop</code></td><td>Stop after the current step</td>
+    <td><code>/aside undo</code></td><td>Bring back what plan, run or clear took</td>
+  </tr>
+</table>
 
-`/queue help` lists every command; Tab completes them.
+`/aside help` lists every command; Tab completes them.
 
 <details>
-<summary>More ways to comment</summary>
+<summary>Other ways to comment</summary>
+
+Copy from anywhere: VS Code, a terminal, a markdown preview, a web page, a PDF. Any way of copying works; only what lands on the clipboard counts.
+
+Text found in a markdown file of the project (five words or more) is pinned to its line. Anything else is kept as a quote, marked (not in a file).
 
 Name the place yourself, right after the mark:
 
@@ -80,23 +99,23 @@ Name the place yourself, right after the mark:
 +- #appendix
 ```
 
-On Claude's own reply in the terminal, select the lines with the mouse (fullscreen mode) instead of copying. With nothing copied, a comment takes the last command output, so `+? why did this fail` arrives with its error.
+On Claude's own reply in the terminal, select the lines with the mouse (fullscreen mode) instead of copying. With nothing copied or selected, or copied text no file holds, a comment carries the last tool output of the turn (an error first), so `+? why did this fail` arrives with its error.
 
-In an editor, tags in a markdown file count too: `<!-- ? question -->`, `<!-- ! change -->`, `<!-- - drop -->`, `<!-- + go deeper -->`.
+In markdown files Claude wrote or edited this session, tags count too: `<!-- ? question -->`, `<!-- ! change -->`, `<!-- - drop -->`, `<!-- + dig deeper -->`. `/aside scan FILE` adds any other file.
 
 </details>
 
 <details>
 <summary>Settings, platforms and privacy</summary>
 
-`/config` has one setting, `whenTurnEnds`: what happens to the queue when Claude finishes a turn. `wait` (default) keeps it until you run `/queue plan` or `/queue run`, `plan` turns it into a plan at once, `send` sends it to be done at once.
+`/config` has one setting, `whenTurnEnds`: what happens to the queue when Claude finishes a turn. `wait` (default) keeps it until you run `/aside plan` or `/aside run`, `plan` turns it into a plan at once, `send` sends it to be done at once. Neither hands it over while a saved plan still has steps to do.
 
-The clipboard is read with `powershell.exe` on WSL, `pbpaste` on macOS, `wl-paste`, `xclip` or `xsel` on Linux and `powershell` on Windows. It is read only for a comment that names no place, never for a plain `+` idea.
+The clipboard is read with `powershell.exe` on WSL, `pbpaste` on macOS, `wl-paste`, `xclip` or `xsel` on Linux and `powershell` on Windows. It is read only for a comment that names no line or heading, never for a plain `+` idea.
 
-The queue stays on your machine, one per project. Nothing reaches Claude until you run `/queue plan` or `/queue run`.
+The queue stays on your machine, one per project. Nothing reaches Claude until you run `/aside plan` or `/aside run`, or `whenTurnEnds` hands it over.
 
 </details>
 
-## License
+<br>
 
-Apache 2.0, see [LICENSE](LICENSE).
+<p><sub><a href="LICENSE">LICENSE</a> &#xB7; <a href="CHANGELOG.md">CHANGELOG</a> &#xB7; <a href="CONTRIBUTING.md">CONTRIBUTING</a></sub></p>

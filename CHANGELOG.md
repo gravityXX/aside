@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.0 - 2026-10-18
+
+- Renamed from idea-queue to aside: the plugin is `aside`, the command is `/aside` (was `/queue`), the plan tool is `mcp__aside__plan`. A queue kept under the old name does not carry over.
+
 ## 0.6.1 - 2026-10-18
 
 - Tab completes `/queue` subcommands, then entry numbers (`pop`, `edit`, `remove`, `move`) and plan step numbers (`run`), each with a dim description.

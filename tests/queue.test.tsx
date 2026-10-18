@@ -62,7 +62,7 @@ const world = (on: On, w: World = { files: {}, clip: '', grep: '', branch: 'main
     return { value: [...names].map(([name, kind]) => ({ name, kind, size: 100, mtimeMs: 0, isLink: false })) } as never
   })
   on('command.register', ($, e) => ({ value: { command: e.name } }))
-  on('tool.register', ($, e) => ({ value: { tool: `mcp__queue__${e.name}` } }))
+  on('tool.register', ($, e) => ({ value: { tool: `mcp__aside__${e.name}` } }))
   on('ui.toast', ($, e) => {
     toasts.push(e.text)
 
@@ -116,7 +116,7 @@ const world = (on: On, w: World = { files: {}, clip: '', grep: '', branch: 'main
 let current: { toasts: string[]; clock: { advance: (ms: number) => Promise<void>; settle: () => Promise<void> } } | undefined
 
 const queue = ($: Engine, args = '') =>
-  $.command.run({ command: 'queue', args, origin: COMPOSER, presentation: SCREEN })
+  $.command.run({ command: 'aside', args, origin: COMPOSER, presentation: SCREEN })
 
 // Enter at the prompt, then the moment it takes to store what was queued.
 const type = async ($: Engine, text: string, turnId?: string) => {
@@ -226,13 +226,13 @@ describe('prompts', () => {
     expect(text).toContain('docs/r.md:\n  2. [question] line 5, on "Revenue grew": where from')
     expect(text).toContain('3. [question] line 9 [a <!-- --> tag in the file]: same for Poland')
     expect(text).toContain('Not tied to a file:\n  4. [change]: shorter')
-    expect(text).toContain('mcp__idea-queue__plan')
-    expect(text).toContain('Composed by the idea-queue plugin')
+    expect(text).toContain('mcp__aside__plan')
+    expect(text).toContain('Composed by the aside plugin')
   })
 
   test('a step prompt says which step it is and who sent it', () => {
     expect(stepPrompt({ title: 'Tests', prompt: 'Add tests.' }, 2, 3)).toBe(
-      'Add tests.\n\n(Step 2 of 3 of the queue plan, "Tests", sent by the idea-queue plugin.)',
+      'Add tests.\n\n(Step 2 of 3 of the queue plan, "Tests", sent by the aside plugin.)',
     )
   })
 })
@@ -305,7 +305,7 @@ describe('queue', () => {
     expect(await typed($, '+! #nowhere shorter')).toBe('queued ! #nowhere - no heading "nowhere" in the 1 files written this session (3 waiting)')
   })
 
-  test('/queue hands everything over as one planning prompt, undo and pop bring entries back', async ($, on) => {
+  test('/aside hands everything over as one planning prompt, undo and pop bring entries back', async ($, on) => {
     const { sent, filled, clock } = world(on)
     await type($, '+ a\n+? b')
 
@@ -352,7 +352,7 @@ describe('queue', () => {
 
     expect((await queue($, 'remove 2')).text).toBe('Removed: b')
     expect((await queue($, 'rm 9')).text).toContain('from 1 to 2')
-    expect((await queue($, 'Clear')).text).toBe('Cleared 2 entries. /queue undo brings them back.')
+    expect((await queue($, 'Clear')).text).toBe('Cleared 2 entries. /aside undo brings them back.')
     expect((await queue($, 'clear')).text).toBe('The queue is already empty.')
     expect((await queue($, 'undo')).text).toBe('Brought back 2 entries, 2 waiting.')
   })
@@ -361,7 +361,7 @@ describe('queue', () => {
 describe('from the issues', () => {
   const REPORT_FILES = { '/proj/docs/report.md': REPORT }
 
-  test('/queue TEXT queues TEXT, as + would, and a known word still runs its command', async ($, on) => {
+  test('/aside TEXT queues TEXT, as + would, and a known word still runs its command', async ($, on) => {
     const { toasts } = world(on)
 
     expect((await queue($, 'add tests for the parser')).text).toBe('queued "add tests for the parser" (1 waiting)')
@@ -371,7 +371,7 @@ describe('from the issues', () => {
     expect((await queue($, 'list')).text).toBe('1. add tests for the parser\n2. [?] why this order')
   })
 
-  test('/queue send hands everything over as it is, to be done now; undo brings it back', async ($, on) => {
+  test('/aside send hands everything over as it is, to be done now; undo brings it back', async ($, on) => {
     const { sent, clock } = world(on)
     await type($, '+ a\n+? b')
 
@@ -380,11 +380,11 @@ describe('from the issues', () => {
     expect(sent).toHaveLength(1)
     expect(sent[0]).toContain('Ideas:\n1. a')
     expect(sent[0]).toContain('Work through all of it now')
-    expect(sent[0]).not.toContain('mcp__idea-queue__plan')
+    expect(sent[0]).not.toContain('mcp__aside__plan')
     expect((await queue($, 'undo')).text).toBe('Brought back 2 entries, 2 waiting.')
   })
 
-  test('/queue each runs every entry as its own prompt, one after another', async ($, on) => {
+  test('/aside each runs every entry as its own prompt, one after another', async ($, on) => {
     const { sent, clock } = world(on, { files: REPORT_FILES, clip: '', grep: '', branch: 'main' })
     await write($, '/proj/docs/report.md')
     await type($, '+ dark mode\n+! @docs/report.md:5 as a table')
@@ -404,12 +404,12 @@ describe('from the issues', () => {
     expect((await queue($, 'list')).text).toContain('The queue is empty.')
   })
 
-  test('/queue edit N puts an entry back in the box, /queue move N M reorders', async ($, on) => {
+  test('/aside edit N puts an entry back in the box, /aside move N M reorders', async ($, on) => {
     const { filled } = world(on)
     await type($, '+ a\n+ b\n+? c')
 
     expect((await queue($, 'move 3 1')).text).toBe('1. [?] c\n2. a\n3. b')
-    expect((await queue($, 'move 9 1')).text).toBe('Give two places from 1 to 3: /queue move 3 1')
+    expect((await queue($, 'move 9 1')).text).toBe('Give two places from 1 to 3: /aside move 3 1')
     expect((await queue($, 'edit 2')).text).toBe('Entry 2 is in the prompt box: change it and press Enter; it goes back to place 2, still pointing where it did.')
     expect(filled).toEqual(['+ a'])
     expect((await queue($, 'list')).text).toBe('1. [?] c\n2. b')
@@ -536,14 +536,14 @@ describe('tab completion', () => {
       .then(result => result.suggestions.map(row => `${row.text}: ${row.description ?? ''}`))
   }
 
-  test('after "/queue " Tab offers the subcommands, then the entry numbers', async ($, on) => {
+  test('after "/aside " Tab offers the subcommands, then the entry numbers', async ($, on) => {
     world(on)
     on('prompt.autocomplete', () => ({ suggestions: [] }))
     await type($, '+ dark mode\n+? why so slow')
 
-    expect(await complete($, '/queue cl')).toEqual(['clear: empty the queue'])
-    expect(await complete($, '/queue p')).toEqual(['plan: organize the queue into steps', 'pop: put an entry in the box, ready to send'])
-    expect(await complete($, '/queue pop ')).toEqual(['1: dark mode', '2: [?] why so slow'])
+    expect(await complete($, '/aside cl')).toEqual(['clear: empty the queue'])
+    expect(await complete($, '/aside p')).toEqual(['plan: organize the queue into steps', 'pop: put an entry in the box, ready to send'])
+    expect(await complete($, '/aside pop ')).toEqual(['1: dark mode', '2: [?] why so slow'])
     expect(await complete($, 'just text')).toEqual([])
   })
 })
@@ -587,13 +587,13 @@ describe('when a turn ends', () => {
 
   test('a saved plan with steps to do holds the automatic hand-over back', { options: { whenTurnEnds: 'plan' } }, async ($, on) => {
     const { sent, toasts, clock } = world(on)
-    await $.tool.call({ tool: 'mcp__idea-queue__plan', steps: [{ title: 'One', prompt: 'Do one.' }] } as never)
+    await $.tool.call({ tool: 'mcp__aside__plan', steps: [{ title: 'One', prompt: 'Do one.' }] } as never)
     await $.turn.start({ text: 'build', turnId: 't1' })
     await type($, '+ c', 't1')
     await ends($, 't1')
     await clock.advance(100)
     expect(sent).toEqual([])
-    expect(toasts.at(-1)).toBe('Waiting in the queue: 1 · /queue plan or /queue run')
+    expect(toasts.at(-1)).toBe('Waiting in the queue: 1 · /aside plan or /aside run')
 
     await queue($, 'plan')
     await clock.advance(100)
@@ -601,7 +601,7 @@ describe('when a turn ends', () => {
     expect(sent[0]).toContain('1. One: Do one.')
   })
 
-  test('the default waits for /queue', async ($, on) => {
+  test('the default waits for /aside', async ($, on) => {
     const { sent, clock } = world(on)
     await $.turn.start({ text: 'build', turnId: 't1' })
     await type($, '+ dark mode', 't1')
@@ -618,9 +618,9 @@ describe('plan', () => {
     { title: 'Three', prompt: 'Do three.' },
   ]
 
-  test('the model saves the plan; /queue run sends each step when the one before ends', async ($, on) => {
+  test('the model saves the plan; /aside run sends each step when the one before ends', async ($, on) => {
     const { sent, toasts, clock } = world(on)
-    const saved = await $.tool.call({ tool: 'mcp__idea-queue__plan', steps: STEPS } as never)
+    const saved = await $.tool.call({ tool: 'mcp__aside__plan', steps: STEPS } as never)
     expect(saved.result).toContain('Saved 3 steps')
     expect((await queue($)).text).toContain('1. [todo] One\n2. [todo] Two\n3. [todo] Three')
 
@@ -644,11 +644,11 @@ describe('plan', () => {
 
   test('a stop before the next step goes out keeps it from going out', async ($, on) => {
     const { sent, clock } = world(on)
-    await $.tool.call({ tool: 'mcp__idea-queue__plan', steps: STEPS } as never)
+    await $.tool.call({ tool: 'mcp__aside__plan', steps: STEPS } as never)
     await queue($, 'run')
     await clock.advance(100)
     await $.turn.start({ text: sent[0]!, turnId: 's1' })
-    expect((await $.tool.call({ tool: 'mcp__idea-queue__plan', steps: STEPS } as never)).deny).toContain('is running')
+    expect((await $.tool.call({ tool: 'mcp__aside__plan', steps: STEPS } as never)).deny).toContain('is running')
 
     await ends($, 's1')
     expect((await queue($, 'stop')).text).toBe('The plan stopped before step 2.')
@@ -659,7 +659,7 @@ describe('plan', () => {
 
   test('a step prompt dropped beneath the mod lets the plan go', async ($, on) => {
     const { toasts, clock, w } = world(on)
-    await $.tool.call({ tool: 'mcp__idea-queue__plan', steps: STEPS } as never)
+    await $.tool.call({ tool: 'mcp__aside__plan', steps: STEPS } as never)
     w.isDropping = true
 
     await queue($, 'run')
@@ -669,51 +669,51 @@ describe('plan', () => {
     expect((await queue($, 'stop')).text).toBe('Nothing is running.')
   })
 
-  test('/queue run runs the saved plan first; with the plan done, the queue entry by entry', async ($, on) => {
+  test('/aside run runs the saved plan first; with the plan done, the queue entry by entry', async ($, on) => {
     const { sent, clock } = world(on)
-    await $.tool.call({ tool: 'mcp__idea-queue__plan', steps: [{ title: 'One', prompt: 'Do one.' }] } as never)
+    await $.tool.call({ tool: 'mcp__aside__plan', steps: [{ title: 'One', prompt: 'Do one.' }] } as never)
     await type($, '+ extra')
 
-    expect((await queue($, 'run')).text).toBe('Running the plan: 1 step, from step 1. /queue stop stops after the current one.')
+    expect((await queue($, 'run')).text).toBe('Running the plan: 1 step, from step 1. /aside stop stops after the current one.')
     await clock.advance(100)
     await $.turn.start({ text: sent[0]!, turnId: 'x1' })
-    expect((await queue($, 'undo')).text).toBe('Step 1 of the plan is running; /queue stop first, so nothing is done twice.')
+    expect((await queue($, 'undo')).text).toBe('Step 1 of the plan is running; /aside stop first, so nothing is done twice.')
     await ends($, 'x1')
 
-    expect((await queue($, 'run')).text).toBe('Running 1 entry one by one. /queue stop stops after the current one.')
+    expect((await queue($, 'run')).text).toBe('Running 1 entry one by one. /aside stop stops after the current one.')
     await clock.advance(100)
     expect(sent.at(-1)).toContain('extra')
   })
 
-  test('/queue pop N takes entry N into the box, ready to send', async ($, on) => {
+  test('/aside pop N takes entry N into the box, ready to send', async ($, on) => {
     const { filled } = world(on)
     await type($, '+ a\n+ b\n+ c')
 
     expect((await queue($, 'pop 2')).text).toBe('In the prompt box, ready to send: b')
     expect(filled).toEqual(['b'])
-    expect((await queue($, 'pop 9')).text).toBe('Give a number from 1 to 2, as /queue shows them.')
+    expect((await queue($, 'pop 9')).text).toBe('Give a number from 1 to 2, as /aside shows them.')
     expect((await queue($)).text).toBe('1. a\n2. c')
   })
 
-  test('/queue alone shows the queue and the plan; nothing is sent', async ($, on) => {
+  test('/aside alone shows the queue and the plan; nothing is sent', async ($, on) => {
     const { sent, clock } = world(on)
     await type($, '+ a')
-    await $.tool.call({ tool: 'mcp__idea-queue__plan', steps: [{ title: 'One', prompt: 'Do one.' }] } as never)
+    await $.tool.call({ tool: 'mcp__aside__plan', steps: [{ title: 'One', prompt: 'Do one.' }] } as never)
 
-    expect((await queue($)).text).toBe('1. a\n\nPlan (/queue run):\n1. [todo] One')
+    expect((await queue($)).text).toBe('1. a\n\nPlan (/aside run):\n1. [todo] One')
     await clock.advance(100)
     expect(sent).toEqual([])
   })
 
   test('an interrupted step stops the plan; a bad plan is refused', async ($, on) => {
     const { sent, toasts, clock } = world(on)
-    expect((await $.tool.call({ tool: 'mcp__idea-queue__plan', steps: [] } as never)).deny).toContain('non-empty')
-    await $.tool.call({ tool: 'mcp__idea-queue__plan', steps: STEPS } as never)
+    expect((await $.tool.call({ tool: 'mcp__aside__plan', steps: [] } as never)).deny).toContain('non-empty')
+    await $.tool.call({ tool: 'mcp__aside__plan', steps: STEPS } as never)
 
     expect((await queue($, 'run 3')).text).toBe('Running step 3: Three')
     await clock.advance(100)
     await $.turn.start({ text: sent[0]!, turnId: 's3' })
-    expect((await queue($, 'run')).text).toBe('Step 3 is running. /queue stop stops after it.')
+    expect((await queue($, 'run')).text).toBe('Step 3 is running. /aside stop stops after it.')
     await ends($, 's3', 'aborted')
     expect(toasts.at(-1)).toBe('Plan stopped: step 3 was interrupted')
     expect((await queue($)).text).toContain('1. [todo] One\n2. [todo] Two\n3. [todo] Three')
@@ -728,7 +728,7 @@ describe('plan', () => {
     })
     const band = async () => {
       const ui = await $.ui.mount({
-        plugin: 'idea-queue',
+        plugin: 'aside',
         surface: 'terminal',
         component: 'AbovePrompt',
         props: { hasSurvey: false } as never,
@@ -745,7 +745,7 @@ describe('plan', () => {
     await type($, '+ x\n+? y')
     expect(await band()).toEqual(['queue: 1 idea, 1 comment · ', 'organize'])
     await queue($, 'plan')
-    await $.tool.call({ tool: 'mcp__idea-queue__plan', steps: STEPS } as never)
+    await $.tool.call({ tool: 'mcp__aside__plan', steps: STEPS } as never)
     expect(await band()).toEqual(['queue: plan: 3 of 3 steps left · ', 'run plan'])
   })
 })
