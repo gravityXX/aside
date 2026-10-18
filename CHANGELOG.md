@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.10.1 - 2026-10-18
 
 - `/aside undo` brings back the tags in files that a plan or run took, so the next `/aside plan` takes them again. Each plan, run or clear replaces what undo brings back, and a hand-over that failed leaves nothing to bring back twice.
 - The tests are split by what they check (typing, comments, commands, the plan, the band and pane, matching in files) and check what the person sees, not how the plugin does it.
