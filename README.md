@@ -25,7 +25,7 @@
 </picture>
 
 > [!NOTE]
-> What you type in a hurry is tidied as it is queued: spelling, punctuation, wording. What you copied stays exactly as copied. To keep entries as typed, set `tidy` to `off` in `/config`.
+> What you type in a hurry is tidied as it is queued: spelling, punctuation, wording. What you copied stays exactly as copied. To keep entries as typed, set `tidy` to `off` in `/config`. The other settings are under [More](#more).
 
 ### 2. Answer Claude as usual
 
