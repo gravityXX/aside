@@ -1,4 +1,14 @@
-# idea-queue
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/banner-dark.svg">
+  <img alt="idea-queue: park ideas while Claude works, then run them as a plan" src="assets/banner-light.svg">
+</picture>
+
+<p>
+  <a href="https://github.com/gravityXX/idea-queue/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/gravityXX/idea-queue/actions/workflows/ci.yml/badge.svg"></a>
+  <img alt="Version" src="https://img.shields.io/github/package-json/v/gravityXX/idea-queue?filename=.claude-plugin%2Fplugin.json&label=version">
+  <img alt="License" src="https://img.shields.io/github/license/gravityXX/idea-queue">
+  <img alt="Claude Code 2.1.301+" src="https://img.shields.io/badge/Claude%20Code-2.1.301%2B-d97757">
+</p>
 
 Ideas keep coming while Claude works. Park them without interrupting it, then run them as a plan.
 
@@ -16,7 +26,8 @@ Ideas keep coming while Claude works. Park them without interrupting it, then ru
 /plugin install idea-queue@idea-queue
 ```
 
-Needs Claude Code 2.1.301 or newer.
+> [!NOTE]
+> Needs Claude Code 2.1.301 or newer. The plugin API it builds on is in early access and may change between releases.
 
 ## Park an idea
 
@@ -42,7 +53,9 @@ Reading a report Claude left? Copy a sentence from it and type a comment. idea-q
 
 - `/queue plan` - Claude reads the queue, answers the questions, merges what belongs together and writes one prompt per step. Nothing runs yet.
 - `/queue run` - the steps run one by one. With no plan, each entry is a step.
-- `/queue run all` - for a few small things: everything in one message, at once.
+
+> [!TIP]
+> Just a few small things? `/queue run all` sends everything in one message, to be done at once.
 
 A bar above the prompt shows what waits and what runs, with a button for the next move.
 
@@ -94,8 +107,6 @@ In an editor, tags in a markdown file count too: `<!-- ? question -->`, `<!-- ! 
 The clipboard is read with `powershell.exe` on WSL, `pbpaste` on macOS, `wl-paste`, `xclip` or `xsel` on Linux and `powershell` on Windows. It is read only for a comment that names no place, never for a plain `+` idea.
 
 The queue stays on your machine, one per project. Nothing reaches Claude until you run `/queue plan` or `/queue run`.
-
-The plugin API it uses is in early access and may change between Claude Code releases.
 
 </details>
 
