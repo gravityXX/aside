@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Nothing changes in use. The tests are split by what they check (typing, comments, commands, the plan, the band and pane, matching in files) and check what the person sees, not how the plugin does it.
+
 ## 0.10.0 - 2026-10-18
 
 - The button on the line above the prompt reads `list` instead of `organize`: it opens a pane with the queue and the plan, drawn as `/aside` draws them and kept up to date while it is open. Its `plan` button organizes the queue, as `organize` did; `close` or Escape closes it.
