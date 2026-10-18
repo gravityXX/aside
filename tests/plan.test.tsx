@@ -287,6 +287,58 @@ describe('running the plan', () => {
     expect(await shown()).toEqual(['The queue is empty.'])
   })
 
+  test('with every step done, /aside run N runs entry N alone, and the rest stay', async ($, on) => {
+    const { sent, type, aside, shown, savePlan, answer, idle } = world($, on)
+    await savePlan([{ title: 'One', prompt: 'Do one.' }])
+    await aside('run')
+    await idle()
+    await answer('s1')
+    await type('+ a\n+ b\n+ c')
+
+    expect(await aside('run 3')).toBe('Running entry 3: c')
+    await idle()
+    expect(sent.at(-1)).toBe('c (branch main)\n\n(Step 1 of 1 of the queue plan, "c", sent by the aside plugin.)')
+    expect(await shown()).toEqual(['2 ideas waiting', '1 idea a', '2 idea b', 'Plan: 1 of 1 step to do (/aside run)', '1 running c'])
+  })
+
+  test('/aside run 3 1 runs those entries one after another, in that order', async ($, on) => {
+    const { sent, type, aside, shown, answer, idle } = world($, on)
+    await type('+ a\n+ b\n+ c')
+
+    expect(await aside('run 3 1')).toBe('Running entries 3, 1 one by one. /aside stop stops after the current one.')
+    await idle()
+    await answer('e1')
+    await answer('e2')
+    expect(sent.map(text => text.split('\n')[0])).toEqual(['c (branch main)', 'a (branch main)'])
+    expect(await shown()).toEqual(['1 idea waiting', '1 idea b'])
+  })
+
+  test('while the plan has steps to do, /aside run 3 1 runs those steps in that order, then stops', async ($, on) => {
+    const { sent, toasts, aside, shown, savePlan, answer, idle } = world($, on)
+    await savePlan(STEPS)
+
+    expect(await aside('run 3 1')).toBe('Running steps 3, 1 one by one. /aside stop stops after the current one.')
+    await idle()
+    await answer('s3')
+    await answer('s1')
+    expect(sent).toEqual([
+      `Do three.\n\n(Step 3 of 3 of the queue plan, "Three", sent by the aside plugin.\nPlan: 1 One (to do) · 2 Two (to do) · 3 Three (this one).\n${NEXT})`,
+      `Do one.\n\n(Step 1 of 3 of the queue plan, "One", sent by the aside plugin.\nPlan: 1 One (this one) · 2 Two (to do) · 3 Three (done).\n${LAST})`,
+    ])
+    expect(toasts).toEqual(['Step 1 done'])
+    expect(await shown()).toEqual(['The queue is empty.', 'Plan: 1 of 3 steps to do (/aside run)', '1 done One', '2 to do Two', '3 done Three'])
+  })
+
+  test('numbers out of range are refused, naming what they count', async ($, on) => {
+    const { type, aside, savePlan } = world($, on)
+    await type('+ a')
+
+    expect(await aside('run 2')).toBe('Give an entry from 1 to 1, as /aside shows them.')
+    expect(await aside('run 1 5')).toBe('Give entries from 1 to 1, as /aside shows them.')
+    await savePlan(STEPS)
+    expect(await aside('run 4')).toBe('Give a step from 1 to 3, as /aside shows them.')
+  })
+
   test('a step run alone is told to do only that step', async ($, on) => {
     const { sent, aside, savePlan, idle } = world($, on)
     await savePlan(STEPS)

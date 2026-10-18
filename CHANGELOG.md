@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- `/aside run N [M ...]` counts what `/aside` shows: the steps of the plan while it has steps to do, else the entries of the queue. `/aside run 11 10` runs entries 11 and 10 one after another, in that order, and leaves the rest of the queue; `/aside run 3 1` runs those two steps of the plan. A number out of range is refused with what it counts.
+
 ## 0.13.0 - 2026-10-18
 
 - The line above the prompt keeps its `list` button while a step runs, with `stop` beside it, and shows `run plan` beside `list` whenever the plan has steps left. The list pane offers no `plan` while a step runs.

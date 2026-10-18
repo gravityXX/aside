@@ -29,8 +29,9 @@ export type Plan = {
   steps: Step[]
   // The step running now: isChain runs the next one when it ends, turnId names its turn
   // once it started, sessionId the session that runs it (the store is shared by all), and
-  // pausedFor what Claude asked for when it paused the plan from this step.
-  active?: { step: number; isChain: boolean; turnId?: string; sessionId: string; pausedFor?: string }
+  // pausedFor what Claude asked for when it paused the plan from this step, and then the
+  // steps still to run after it when /aside run named them (in place of the chain).
+  active?: { step: number; isChain: boolean; turnId?: string; sessionId: string; pausedFor?: string; then?: number[] }
 }
 
 export type Band = { ideas: number; comments: number; tags: number; steps: number; done: number; running?: number }

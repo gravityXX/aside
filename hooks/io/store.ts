@@ -147,6 +147,13 @@ export async function unhandTags($: Engine, keys: Keys, tagIds: readonly string[
   await $.store.set(keys.handed, handed.filter(id => !tagIds.includes(id)))
 }
 
+// Takes the entries `chosen` out of the queue to hand them over; the rest stay. /aside undo
+// brings the chosen back until Claude has answered them.
+export async function takeChosen($: Engine, keys: Keys, stored: readonly Entry[], chosen: readonly Entry[]) {
+  await saveTake($, keys, { entries: [...chosen], tagIds: [], by: 'hand-over' })
+  await saveEntries($, keys.queue, stored.filter(entry => !chosen.includes(entry)))
+}
+
 // Takes the queue (`stored`, oldest first) and the new tags out to hand them over: both go
 // where /aside undo finds them, and the tags are marked so they are not handed over again.
 // `giveBack` undoes all of it when the hand-over fails.
