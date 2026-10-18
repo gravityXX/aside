@@ -8,10 +8,8 @@
   <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-555?style=flat-square"></a>
 </p>
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/how-it-works-dark.svg">
-  <img alt="While Claude works on your task, your ideas and comments go to a queue instead of to Claude. When it is done you answer it as usual, and /aside plan hands the queue over as steps, which Claude sums up after the last one." src="assets/how-it-works-light.svg">
-</picture>
+![While Claude works on your task, your ideas and comments go to a queue instead of to Claude. When it is done you answer it as usual, and /aside plan hands the queue over as steps, which Claude sums up after the last one.](assets/how-it-works-light.svg#gh-light-mode-only)
+![While Claude works on your task, your ideas and comments go to a queue instead of to Claude. When it is done you answer it as usual, and /aside plan hands the queue over as steps, which Claude sums up after the last one.](assets/how-it-works-dark.svg#gh-dark-mode-only)
 
 ## How it works
 
@@ -19,10 +17,8 @@
 
 **To comment on something, copy it first** (<kbd>Ctrl</kbd>+<kbd>C</kbd> or <kbd>&#x2318;</kbd>+<kbd>C</kbd>), from anywhere: <kbd>VS Code</kbd>, a <kbd>terminal</kbd>, a <kbd>web page</kbd>. Then start a message with `+`, or end one with it. It goes to the queue, not to Claude. **No paste needed:** <kbd>aside</kbd> takes whatever is on your clipboard.
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/step-1-dark.svg">
-  <img alt="Copy a sentence from a markdown preview with Ctrl+C, then type +? and a question in Claude Code: the comment is queued, pinned to docs/report.md line 42 with the copied sentence. The marks: + idea, +? question, +! change, +- drop, ++ dig deeper." src="assets/step-1-light.svg">
-</picture>
+![Copy a sentence from a markdown preview with Ctrl+C, then type +? and a question in Claude Code: the comment is queued, pinned to docs/report.md line 42 with the copied sentence. The marks: + idea, +? question, +! change, +- drop, ++ dig deeper.](assets/step-1-light.svg#gh-light-mode-only)
+![Copy a sentence from a markdown preview with Ctrl+C, then type +? and a question in Claude Code: the comment is queued, pinned to docs/report.md line 42 with the copied sentence. The marks: + idea, +? question, +! change, +- drop, ++ dig deeper.](assets/step-1-dark.svg#gh-dark-mode-only)
 
 > [!NOTE]
 > What you type in a hurry is tidied as it is queued: spelling, punctuation, wording. What you copied stays exactly as copied. To keep entries as typed, set `tidy` to `off` in `/config`. The other settings are under [More](#more).
@@ -31,19 +27,15 @@
 
 Your reply goes to Claude. By default the queue just waits, in a line above the prompt. Its <kbd>list</kbd> button opens a pane with the queue, the tags in files and the plan, and <kbd>plan</kbd> to organize them. Beside it, <kbd>run plan</kbd> shows while the plan has steps left, <kbd>continue</kbd> after a step paused it, and <kbd>stop</kbd> while a step runs. `/aside` opens the same pane while Claude works.
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/step-2-dark.svg">
-  <img alt="Claude asks whether to update the docs. Above the prompt, the queue line shows 1 idea and 4 comments with a list button. You answer as usual; the queue keeps waiting." src="assets/step-2-light.svg">
-</picture>
+![Claude asks whether to update the docs. Above the prompt, the queue line shows 1 idea and 4 comments with a list button. You answer as usual; the queue keeps waiting.](assets/step-2-light.svg#gh-light-mode-only)
+![Claude asks whether to update the docs. Above the prompt, the queue line shows 1 idea and 4 comments with a list button. You answer as usual; the queue keeps waiting.](assets/step-2-dark.svg#gh-dark-mode-only)
 
 ### 3. Look at it when ready
 
 Nothing reaches Claude until you say so. `/aside` shows the queue in a frame, and `/aside pop N` puts one entry in the prompt box, ready to send.
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/step-3-dark.svg">
-  <img alt="/aside shows the list in a frame, 1 idea and 1 comment with its file, line and quote; /aside pop 2 puts entry 2 in the prompt box." src="assets/step-3-light.svg">
-</picture>
+![/aside shows the list in a frame, 1 idea and 1 comment with its file, line and quote; /aside pop 2 puts entry 2 in the prompt box.](assets/step-3-light.svg#gh-light-mode-only)
+![/aside shows the list in a frame, 1 idea and 1 comment with its file, line and quote; /aside pop 2 puts entry 2 in the prompt box.](assets/step-3-dark.svg#gh-dark-mode-only)
 
 ### 4. Plan and run
 
@@ -51,10 +43,8 @@ Nothing reaches Claude until you say so. `/aside` shows the queue in a frame, an
 
 `/aside run` sends one step at a time, each ending with a one-line result. A step that needs you pauses the plan: answer, then press <kbd>continue</kbd>. After the last step, Claude sums the run up.
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/step-4-dark.svg">
-  <img alt="/aside plan has Claude save the queue as steps and /aside run sends them one after another. Above the prompt: step 2 of 3 running, with list and stop buttons. The plan shows step 1 done with its result under it, step 2 running and step 3 to do; after the last step Claude ends with a summary of the run." src="assets/step-4-light.svg">
-</picture>
+![/aside plan has Claude save the queue as steps and /aside run sends them one after another. Above the prompt: step 2 of 3 running, with list and stop buttons. The plan shows step 1 done with its result under it, step 2 running and step 3 to do; after the last step Claude ends with a summary of the run.](assets/step-4-light.svg#gh-light-mode-only)
+![/aside plan has Claude save the queue as steps and /aside run sends them one after another. Above the prompt: step 2 of 3 running, with list and stop buttons. The plan shows step 1 done with its result under it, step 2 running and step 3 to do; after the last step Claude ends with a summary of the run.](assets/step-4-dark.svg#gh-dark-mode-only)
 
 ## Install
 

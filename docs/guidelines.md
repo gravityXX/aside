@@ -178,8 +178,8 @@ The plugin runs on the Claude Code plugin API: hooks `($, e, next)` added with `
 
 `assets/make_svgs.py` draws every picture in the README, the timeline and the steps, light and dark.
 
-1. Python 3.12 or newer, the standard library only. It runs from the repository root: `uv run --no-project assets/make_svgs.py`.
-2. It is formatted with `uvx ruff format --line-length 120 assets`, linted with `uvx ruff check assets` and typed so that `uvx mypy --strict assets/make_svgs.py` passes.
+1. Python 3.12 or newer, the standard library only. It runs from the repository root: `python3 assets/make_svgs.py`.
+2. It is formatted with `uvx ruff@0.17.1 format --line-length 120 assets`, linted with `uvx ruff@0.17.1 check assets` and typed so that `uvx mypy@2.4.0 --strict assets/make_svgs.py` passes.
 3. Colours live in `THEMES`: a light and a dark set with the same keys. Layout numbers are named constants (`W`, `ROW`, `PAD`).
 4. The SVGs are its output. Change the script, run it and commit both; never edit an SVG by hand.
 5. Every picture comes in light and dark and has an `aria-label` that says what it shows.
@@ -202,9 +202,9 @@ The plugin runs on the Claude Code plugin API: hooks `($, e, next)` added with `
 ```sh
 claude plugin validate .
 claude plugin test .
-npx -p typescript tsc -p .
+npx -p typescript@5.9.3 tsc -p .
 # when assets/make_svgs.py changed
-uvx ruff format --check --line-length 120 assets && uvx ruff check assets && uvx mypy --strict assets/make_svgs.py
+uvx ruff@0.17.1 format --check --line-length 120 assets && uvx ruff@0.17.1 check assets && uvx mypy@2.4.0 --strict assets/make_svgs.py
 ```
 
 ## 10. Decisions

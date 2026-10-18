@@ -1,6 +1,6 @@
 """Draws the README's pictures, the timeline and the steps, in a light and a dark version each.
 
-Run from the repository root: uv run --no-project assets/make_svgs.py
+Run from the repository root: python3 assets/make_svgs.py
 """
 
 from pathlib import Path
