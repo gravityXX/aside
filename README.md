@@ -1,62 +1,47 @@
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/banner-dark.svg">
-  <img alt="idea-queue: park ideas while Claude works, then run them as a plan" src="assets/banner-light.svg">
-</picture>
+<h1 align="center">idea-queue</h1>
 
-<p>
-  <a href="https://github.com/gravityXX/idea-queue/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/gravityXX/idea-queue/actions/workflows/ci.yml/badge.svg"></a>
-  <img alt="Version" src="https://img.shields.io/github/package-json/v/gravityXX/idea-queue?filename=.claude-plugin%2Fplugin.json&label=version">
-  <img alt="License" src="https://img.shields.io/github/license/gravityXX/idea-queue">
-  <img alt="Claude Code 2.1.301+" src="https://img.shields.io/badge/Claude%20Code-2.1.301%2B-d97757">
+<p align="center">
+  Comment on what Claude wrote without interrupting it.<br>
+  Run it all later, as a plan.
 </p>
 
-Claude is in the middle of a task. You are reading the report it just wrote, and you have a question about one number, a section you would drop, an idea for later. Interrupting would derail it. Typing it all out later means finding every spot again.
+<p align="center">
+  <a href="https://github.com/gravityXX/idea-queue/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/gravityXX/idea-queue/ci.yml?branch=main&style=flat-square&label=CI&color=555"></a>
+  <img alt="Version" src="https://img.shields.io/github/package-json/v/gravityXX/idea-queue?filename=.claude-plugin%2Fplugin.json&style=flat-square&label=version&color=555">
+  <img alt="License" src="https://img.shields.io/github/license/gravityXX/idea-queue?style=flat-square&color=555">
+</p>
 
-With idea-queue you copy the sentence, type your comment and go on reading. Claude never sees it until you say so.
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/comment-flow-dark.svg">
+    <img alt="Copy a sentence from a markdown preview, then type +? and a question in Claude Code: the comment is pinned to report.md line 42" src="assets/comment-flow-light.svg" width="840">
+  </picture>
+</p>
 
-## Comment on what Claude wrote
+## Comment on a document
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/comment-flow-dark.svg">
-  <img alt="Copy a sentence from the markdown preview with Ctrl+C, type +? and a question in Claude Code; the comment is pinned to report.md line 42" src="assets/comment-flow-light.svg">
-</picture>
-
-1. Select a sentence in the preview of any markdown file and press `Ctrl+C`.
-2. In Claude Code, type a mark and your comment, and press Enter.
-3. That is all. idea-queue finds the copied sentence in the file and pins your comment to its line, with the quote.
-
-| Mark | Means     | Example                               |
-| ---- | --------- | ------------------------------------- |
-| `+?` | question  | `+? where does this number come from` |
-| `+!` | change    | `+! make this a table`                |
-| `+-` | drop      | `+- drop this section`                |
-| `++` | go deeper | `++ compare with last year`           |
-
-No need to edit the file, open it in an editor or say where you were. The preview can stay a preview.
-
-## Then Claude gets it all at once
-
-When the task is done, `/queue plan` hands everything over, grouped by file, each comment with its line and the sentence it is about:
+Copy a sentence from any markdown preview, then type a mark and your comment. idea-queue finds the sentence in the file and pins the comment to its line.
 
 ```text
-docs/report.md:
-  1. [question] line 42, on "Revenue grew by 12% in Q3.": where does this number come from
-  2. [change] line 57, on "Costs by region": make this a table
-  3. [drop] line 80, on "Appendix: raw data": drop this section
++? question      +! change      +- drop      ++ go deeper
 ```
-
-Claude answers the questions straight away, merges what belongs together and writes one prompt per step. `/queue run` then runs the steps one by one, each when the one before has finished.
-
-> [!TIP]
-> Just a few small things? `/queue run all` sends everything in one message, to be done at once.
 
 ## Park an idea
 
-Not about a document, just a thought for later? Start the message with `+`. It goes into the queue instead of to Claude, even mid-task, and the prompt box is ready for the next one.
+Start a message with `+`. It waits in the queue instead of reaching Claude, even mid-task.
 
 ```text
-+ rename the config loader
 + cache the parsed config
+```
+
+## Plan and run
+
+`/queue plan` hands everything over at once, grouped by file. Claude answers the questions and turns the rest into steps, which `/queue run` runs one by one.
+
+```text
+docs/report.md:
+  [question] line 42, on "Revenue grew by 12% in Q3.": where does this come from
+  [change]   line 57, on "Costs by region": make this a table
 ```
 
 ## Install
@@ -67,7 +52,7 @@ Not about a document, just a thought for later? Start the message with `+`. It g
 ```
 
 > [!NOTE]
-> Needs Claude Code 2.1.301 or newer. The plugin API it builds on is in early access and may change between releases.
+> Needs Claude Code 2.1.301 or newer. The plugin API it builds on is in early access.
 
 ## Commands
 
@@ -75,7 +60,8 @@ Not about a document, just a thought for later? Start the message with `+`. It g
 | ---------------- | ---------------------------------------------- |
 | `/queue`         | Show the queue and the plan                    |
 | `/queue plan`    | Turn the queue into steps                      |
-| `/queue run`     | Run the steps, or the entries, in order        |
+| `/queue run`     | Run the steps, or the entries, one by one      |
+| `/queue run all` | Send everything in one message, no plan        |
 | `/queue stop`    | Stop after the current step                    |
 | `/queue pop [N]` | Put an entry in the prompt box, ready to send  |
 | `/queue edit N`  | Rework an entry and queue it again             |
