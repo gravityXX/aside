@@ -29,11 +29,11 @@
 
 ### 2. Answer Claude as usual
 
-Your reply goes to Claude. By default the queue just waits, in a line above the prompt.
+Your reply goes to Claude. By default the queue just waits, in a line above the prompt. Its <kbd>list</kbd> button opens the entries, with <kbd>plan</kbd> to organize them.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/step-2-dark.svg">
-  <img alt="Claude asks whether to update the docs. Above the prompt, the queue line shows 1 idea and 4 comments with an organize button. You answer as usual; the queue keeps waiting." src="assets/step-2-light.svg">
+  <img alt="Claude asks whether to update the docs. Above the prompt, the queue line shows 1 idea and 4 comments with a list button. You answer as usual; the queue keeps waiting." src="assets/step-2-light.svg">
 </picture>
 
 ### 3. Plan or run when ready

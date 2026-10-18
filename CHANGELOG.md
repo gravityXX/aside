@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- The button on the line above the prompt reads `list` instead of `organize`: it opens a pane with the queue and the plan, drawn as `/aside` draws them and kept up to date while it is open. Its `plan` button organizes the queue, as `organize` did; `close` or Escape closes it.
+- No more "Waiting in the queue" toast when Claude answers: the line above the prompt already shows what waits.
+
 ## 0.9.0 - 2026-10-18
 
 - The setting `whenTurnEnds` is now `afterClaudeAnswers`, and its value `send` is now `run all`, as the command it stands for. A value set under the old name is not carried over: set `afterClaudeAnswers` again in `/config`.

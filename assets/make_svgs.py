@@ -156,13 +156,13 @@ def step2(c: dict) -> str:
         line(y0, [("● ", "a"), ("Done. Shall I update the docs too?", "")])
         + f'  <rect x="{PAD - 8}" y="{band_y}" width="{W - 2 * PAD + 16}" height="30" rx="6" fill="{c["band"]}" stroke="{c["bandb"]}"/>\n'
         + f'  <text x="{PAD}" y="{band_y + 20}" class="m d">aside: 1 idea, 4 comments</text>\n'
-        + f'  <rect x="{W - PAD - 92}" y="{band_y + 5}" width="84" height="20" rx="4" fill="{c["btn"]}" stroke="{c["line"]}"/>\n'
-        + f'  <text x="{W - PAD - 50}" y="{band_y + 19}" class="m" text-anchor="middle">organize</text>\n'
+        + f'  <rect x="{W - PAD - 60}" y="{band_y + 5}" width="52" height="20" rx="4" fill="{c["btn"]}" stroke="{c["line"]}"/>\n'
+        + f'  <text x="{W - PAD - 34}" y="{band_y + 19}" class="m" text-anchor="middle">list</text>\n'
         + line(band_y + 30 + ROW, [("❯ ", "f"), ("yes, go ahead", "")], "your reply goes to Claude as usual")
     )
     label = (
         "Claude finishes and asks whether to update the docs. Above the prompt, a line shows the queue, aside: 1 idea, 4 comments, "
-        "with an organize button. You answer yes, go ahead, which goes to Claude as usual; the queue keeps waiting."
+        "with a list button that opens the entries. You answer yes, go ahead, which goes to Claude as usual; the queue keeps waiting."
     )
     return window(c, int(band_y + 30 + ROW + 26), "Claude Code", body, label)
 

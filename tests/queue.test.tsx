@@ -74,6 +74,19 @@ const world = (on: On, w: World = { files: {}, clip: '', grep: '', branch: 'main
     return { value: undefined }
   })
   // The transcript line a stored entry leaves, kept beside the toasts.
+  // The panes the mod has open, by id: the terminal seats each one it opens.
+  const panes: string[] = []
+  on('ui.open', ($, e) => {
+    if (!panes.includes(e.id)) panes.push(e.id)
+
+    return { value: { isPlaced: true } }
+  })
+  on('ui.close', ($, e) => {
+    panes.splice(panes.indexOf(e.id), panes.includes(e.id) ? 1 : 0)
+
+    return { value: undefined }
+  })
+  on('ui.panes', () => ({ value: panes.map(id => ({ id, title: id, isShown: true, isFocused: false, isPlaced: true })) }) as never)
   on('ui.log', ($, e) => {
     toasts.push(e.text)
 
@@ -126,7 +139,7 @@ const world = (on: On, w: World = { files: {}, clip: '', grep: '', branch: 'main
 
   current = { toasts, clock }
 
-  return { sent, toasts, filled, asked, clock, w }
+  return { sent, toasts, filled, asked, clock, panes, w }
 }
 
 let current: { toasts: string[]; clock: { advance: (ms: number) => Promise<void>; settle: () => Promise<void> } } | undefined
@@ -785,10 +798,11 @@ describe('when a turn ends', () => {
     await $.tool.call({ tool: 'mcp__aside__plan', steps: [{ title: 'One', prompt: 'Do one.' }] } as never)
     await $.turn.start({ text: 'build', turnId: 't1' })
     await type($, '+ c', 't1')
+    const shown = toasts.length
     await ends($, 't1')
     await clock.advance(100)
     expect(sent).toEqual([])
-    expect(toasts.at(-1)).toBe('Waiting in the queue: 1 · /aside plan or /aside run')
+    expect(toasts.slice(shown)).toEqual([])
 
     await queue($, 'plan')
     await clock.advance(100)
@@ -950,27 +964,60 @@ describe('plan', () => {
 
     expect(await band()).toEqual(['engine', undefined])
     await type($, '+ x\n+? y')
-    expect(await band()).toEqual(['aside: 1 idea, 1 comment · ', 'organize'])
+    expect(await band()).toEqual(['aside: 1 idea, 1 comment · ', 'list'])
     await queue($, 'plan')
     await $.tool.call({ tool: 'mcp__aside__plan', steps: STEPS } as never)
     expect(await band()).toEqual(['aside: plan: 3 of 3 steps left · ', 'run plan'])
   })
 
-  test('the band button organizes the queue, then runs the plan', async ($, on) => {
-    const { sent, clock, toasts } = world(on)
-    const press = async () => {
-      const ui = await $.ui.mount({ plugin: 'aside', surface: 'terminal', component: 'AbovePrompt', props: { hasSurvey: false } as never, viewport: { columns: 120, rows: 30 } })
+  test('the band button opens the list, whose plan button organizes the queue', async ($, on) => {
+    const { sent, clock, toasts, panes } = world(on)
+    const draw = (component: 'AbovePrompt' | 'Pane', props: unknown) =>
+      $.ui.mount({ plugin: 'aside', surface: 'terminal', component, props: props as never, requestId: 'aside', viewport: { columns: 120, rows: 30 } })
+    const pressBand = async () => {
+      const ui = await draw('AbovePrompt', { hasSurvey: false })
       await ui.press({ key: 'queue' })
       await ui.unmount()
       await clock.advance(100)
     }
     await type($, '+ x\n+? y')
 
-    await press()
+    await pressBand()
+    expect(panes).toEqual(['aside'])
+    await pressBand()
+    expect(panes).toEqual([])
+
+    await pressBand()
+    const pane = await draw('Pane', { title: 'aside', isFocused: true, bodyColumns: 100, placement: 'inline' })
+    expect((await pane.find({ type: 'Text', text: /^x$/ }))?.text).toBe('x')
+    expect((await pane.find({ type: 'Text', text: /^question$/ }))?.props.color).toBe('warning')
+    await pane.press({ key: 'plan' })
+    await pane.unmount()
+    await clock.advance(100)
+    expect(panes).toEqual([])
     expect(sent.at(-1)).toContain('Organize all of it, and only organize it')
+
     await $.tool.call({ tool: 'mcp__aside__plan', steps: STEPS } as never)
-    await press()
+    await pressBand()
     expect(sent.at(-1)).toContain('Do one')
     expect(toasts.join('\n')).not.toContain('no command.run hook')
+  })
+
+  test('the list pane says so when the queue is empty, and closes on its button', async ($, on) => {
+    const { panes } = world(on)
+    const draw = (component: 'AbovePrompt' | 'Pane', props: unknown) =>
+      $.ui.mount({ plugin: 'aside', surface: 'terminal', component, props: props as never, requestId: 'aside', viewport: { columns: 120, rows: 30 } })
+    await type($, '+ x')
+    const bar = await draw('AbovePrompt', { hasSurvey: false })
+    await bar.press({ key: 'queue' })
+    await bar.unmount()
+    await queue($, 'clear')
+
+    const pane = await draw('Pane', { title: 'aside', isFocused: true, bodyColumns: 100, placement: 'inline' })
+    expect((await pane.find({ type: 'Text', text: /queue is empty/ }))?.text).toBe('The queue is empty.')
+    expect(await pane.find({ key: 'plan' })).toBeUndefined()
+    await pane.press({ key: 'close' })
+    await pane.unmount()
+    expect(panes).toEqual([])
   })
 })
