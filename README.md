@@ -90,7 +90,7 @@ For two or three small things a plan is a needless stop: `/queue run all` sends 
 | `/queue scan FILE` | Read the tags of a file Claude did not write in this session    |
 | `/queue help`      | Show this list                                                  |
 
-`/queue` runs at once even while Claude works, so `stop` lands in time. The prompts it sends wait for the turn to end.
+Tab completes the subcommands after `/queue `, and the entry or step numbers after `pop`, `edit`, `remove`, `move` and `run`. `/queue` runs at once even while Claude works, so `stop` lands in time. The prompts it sends wait for the turn to end.
 
 ## Settings
 
