@@ -686,9 +686,9 @@ const stopPlan = async ($: Engine): Promise<string> => {
 }
 
 export const register: Register = (on, options) => {
-  // What happens to the queue when Claude finishes a turn: wait for /aside (the default),
-  // or hand it over at once as a plan or as it is.
-  const whenTurnEnds = options.whenTurnEnds === 'plan' || options.whenTurnEnds === 'send' ? options.whenTurnEnds : 'wait'
+  // What aside does by itself when Claude finishes answering: wait for /aside (the default),
+  // or hand the queue over at once, as /aside plan or /aside run all would.
+  const afterAnswer = options.afterClaudeAnswers === 'plan' ? 'plan' : options.afterClaudeAnswers === 'run all' ? 'send' : 'wait'
   order = options.order === 'newest' ? 'newest' : 'oldest'
   tidy = options.tidy !== 'off'
   // Module variables start over on a reload; nothing in them has to last.
@@ -939,8 +939,8 @@ export const register: Register = (on, options) => {
     const waiting = now.ideas + now.comments + now.tags
     // A saved plan with steps still to do is the person's to run first: nudge instead.
     const isPending = plan.steps.some(step => !step.isDone)
-    if (!active && waiting > 0 && whenTurnEnds !== 'wait' && e.reason === 'answer' && !isOwnTurn && !isPending) {
-      $.ui.toast(await handOver($, whenTurnEnds))
+    if (!active && waiting > 0 && afterAnswer !== 'wait' && e.reason === 'answer' && !isOwnTurn && !isPending) {
+      $.ui.toast(await handOver($, afterAnswer))
       nudged = 0
 
       return done

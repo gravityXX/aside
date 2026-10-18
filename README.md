@@ -92,7 +92,7 @@ Requires <kbd>Claude Code</kbd> 2.1.301 or newer. The plugin API <kbd>aside</kbd
 ## More
 
 > [!IMPORTANT]
-> **The queue stays on your machine**, one per project. Nothing reaches Claude's conversation until you run `/aside plan` or `/aside run`, or `whenTurnEnds` does. With `tidy` on, the text you type goes to Haiku to be corrected. What you copied never does.
+> **The queue stays on your machine**, one per project. Nothing reaches Claude's conversation until you run `/aside plan` or `/aside run`, or `afterClaudeAnswers` does. With `tidy` on, the text you type goes to Haiku to be corrected. What you copied never does.
 
 <details>
 <summary>Other ways to comment</summary>
@@ -122,7 +122,7 @@ Change these in `/config`:
 
 | Setting | Default | Or | What it does |
 | --- | --- | --- | --- |
-| `whenTurnEnds` | `wait` | `plan`, `send` | When a turn ends: keep the queue, plan it, or send it |
+| `afterClaudeAnswers` | `wait` | `plan`, `run all` | Once Claude answers: wait for you, or plan or run all by itself |
 | `order` | `oldest` | `newest` | Which entry comes first in the list and in a run |
 | `tidy` | `on` | `off` | Fix the spelling and wording of what you type |
 

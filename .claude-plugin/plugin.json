@@ -1,6 +1,6 @@
 {
   "name": "aside",
-  "version": "0.8.1",
+  "version": "0.9.0",
   "description": "A prompt queue for Claude Code. Queue prompts, ideas and comments while Claude works, without interrupting it, and send them once it finishes or whenever you are ready.",
   "author": {
     "name": "gravityXX",
@@ -23,15 +23,15 @@
   ],
   "types": "./types/index.d.ts",
   "userConfig": {
-    "whenTurnEnds": {
+    "afterClaudeAnswers": {
       "type": "string",
-      "title": "When Claude finishes a turn",
-      "description": "wait: keep the queue until you run /aside. plan: hand it over as a plan at once. send: hand it over to be done at once.",
+      "title": "After Claude answers",
+      "description": "What aside does by itself when Claude finishes answering and something is queued. wait: nothing, you run /aside. plan: what /aside plan does. run all: what /aside run all does.",
       "default": "wait",
       "options": [
         "wait",
         "plan",
-        "send"
+        "run all"
       ]
     },
     "order": {
