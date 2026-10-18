@@ -82,6 +82,14 @@ describe('where a comment points', () => {
     expect(await queue('+! #nowhere shorter')).toBe('queued ! #nowhere - no heading "nowhere" in the 1 files written this session (5 waiting)')
   })
 
+  test('a comment that names only a place has no text of its own', async ($, on) => {
+    const { write, queue, shown } = world($, on, { files: REPORT_FILES })
+    await write(REPORT_PATH)
+
+    expect(await queue('+- #zrodla')).toBe('queued - docs/report.md:11 (1 waiting)')
+    expect((await shown()).slice(0, 3)).toEqual(['1 comment waiting', '1 drop (no text)', '↳ docs/report.md:11'])
+  })
+
   test("a fresh copy comes first; with the clipboard unchanged, the selection in Claude's reply wins", async ($, on) => {
     const { w, write, queue, shown } = world($, on, {
       files: REPORT_FILES,

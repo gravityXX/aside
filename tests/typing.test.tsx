@@ -36,7 +36,7 @@ describe('what is queued', () => {
   })
 
   test('a draft that ends with a mark is queued whole, as if the mark came first', async ($, on) => {
-    const { sent, type, shown } = world($, on)
+    const { sent, filled, type, aside, shown } = world($, on)
     await type('why is the build so slow +?')
     await type('a long draft\n- over two lines\n+')
     await type('look into the cache ++')
@@ -49,14 +49,20 @@ describe('what is queued', () => {
       '- over two lines',
       '3 dig deeper look into the cache',
     ])
+    await aside('edit 1')
+    await type(filled.at(-1)!)
+    await aside('edit 2')
+    expect(filled).toEqual(['+? why is the build so slow', '+ a long draft\n- over two lines'])
   })
 
-  test('plain text, a + inside it and a mark with nothing after it go to Claude', async ($, on) => {
-    const { sent, type, shown } = world($, on)
+  test('plain text, a + inside it and a mark with nothing after it go to Claude, and nothing is said', async ($, on) => {
+    const { sent, toasts, logged, type, shown } = world($, on)
     const prompts = ['fix the build', 'a + b', 'I love C++', 'what is 2 + 2', '+?', '+   ']
     for (const text of prompts) await type(text)
 
     expect(sent).toEqual(prompts)
+    expect(toasts).toEqual([])
+    expect(logged).toEqual([])
     expect(await shown()).toEqual(['The queue is empty.'])
   })
 
