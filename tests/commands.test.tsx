@@ -254,6 +254,7 @@ describe('tab completion', () => {
     expect(await complete($, '/aside pop ')).toEqual(['1: dark mode', '2: question: why so slow'])
     expect(await complete($, '/aside remove 1 ')).toEqual(['1: dark mode', '2: question: why so slow'])
     expect(await complete($, '/aside pop 1 ')).toEqual([])
+    expect(await complete($, '/aside run 2 ')).toEqual(['1: dark mode', '2: question: why so slow'])
     expect(await complete($, 'just text')).toEqual([])
   })
 })

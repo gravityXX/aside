@@ -118,9 +118,12 @@ export const entryPrompt = (entry: Entry, root: string, withContext = true): str
 export const popPrompt = (entry: Entry, root: string): string =>
   entry.kind === 'idea' ? entry.text : entryPrompt(entry, root, false)
 
+// How a step stands in its run: run on its own, with more steps to come, or the last one.
+export type StepMode = 'alone' | 'more' | 'last'
+
 // A step of the plan as the prompt that runs it: the step's own prompt, then, in a plan of
 // several, where it stands, so Claude does this step alone and knows how to pause the plan.
-export const stepPrompt = (steps: readonly Step[], index: number, isChain: boolean, waitTool: string): string => {
+export const stepPrompt = (steps: readonly Step[], index: number, mode: StepMode, waitTool: string): string => {
   const step = steps[index]!
   const head = `${step.prompt}\n\n(Step ${index + 1} of ${steps.length} of the queue plan, "${step.title}", ${STEP_MARKER}.`
   if (steps.length === 1) {
@@ -128,12 +131,11 @@ export const stepPrompt = (steps: readonly Step[], index: number, isChain: boole
   }
   const stateOf = (one: Step, i: number) => (i === index ? 'this one' : one.isDone ? 'done' : 'to do')
   const map = steps.map((one, i) => `${i + 1} ${shortenText(one.title, 60)} (${stateOf(one, i)})`).join(' · ')
-  const isLast = !steps.some((one, i) => i > index && !one.isDone)
-  const next = !isChain
-    ? 'Do this step only.'
-    : isLast
-      ? 'Do this step only; it is the last one.'
-      : `Do this step only; the next one is sent when you answer. If you need my answer first, call the ${waitTool} tool and stop.`
+  const next = {
+    alone: 'Do this step only.',
+    last: 'Do this step only; it is the last one.',
+    more: `Do this step only; the next one is sent when you answer. If you need my answer first, call the ${waitTool} tool and stop.`,
+  }[mode]
 
   return `${head}\nPlan: ${map}.\n${next})`
 }

@@ -7,7 +7,7 @@ import { MARKDOWN_PATH } from '../core/markdown'
 import { shortenText } from '../core/text'
 import { loadEntries, loadPlan, projectKeys, refreshBand } from '../io/store'
 import { addEntries } from './capture'
-import { handOverQueue, registerPlanTool, registerWaitTool, runEntries, runPlan, stopPlan } from './plan'
+import { handOverQueue, registerPlanTool, registerWaitTool, runChosen, runEntries, runPlan, stopPlan } from './plan'
 import { clearQueue, editEntry, moveEntry, popEntry, removeEntries, restoreTaken, scanFile, showListing } from './queue'
 
 type Name = 'list' | 'plan' | 'run' | 'stop' | 'pop' | 'edit' | 'move' | 'remove' | 'clear' | 'undo' | 'scan' | 'help'
@@ -22,9 +22,10 @@ type Command = {
   // How the command is written in the argument hint, and the lines /aside help gives it.
   usage?: string
   help: readonly string[]
-  // What Tab shows beside the name, and the numbers it offers after it.
+  // What Tab shows beside the name, and the numbers it offers after it: entries, or what
+  // /aside run counts (the steps while the plan has steps to do, else the entries).
   about: string
-  completes?: 'entries' | 'steps'
+  completes?: 'entries' | 'run'
 }
 
 const isNumber = (word: string | undefined) => word !== undefined && /^\d+$/.test(word)
@@ -48,14 +49,15 @@ const COMMANDS: readonly Command[] = [
   },
   {
     name: 'run',
-    takes: args => none(args) || (args.length === 1 && (isNumber(args[0]) || args[0] === 'all')),
-    usage: 'run [N | all]',
+    takes: args => none(args) || (args.length === 1 && args[0] === 'all') || args.every(isNumber),
+    usage: 'run [N ... | all]',
     help: [
       '/aside run - run the plan step by step; with no plan, each entry as its own step',
-      '/aside run N - run step N alone       /aside run all - send everything at once, no plan',
+      '/aside run N [M ...] - run those steps of the plan, or those entries once no step is left to do',
+      '/aside run all - send everything at once, no plan',
     ],
     about: 'run the plan, or the queue entry by entry',
-    completes: 'steps',
+    completes: 'run',
   },
   {
     name: 'stop',
@@ -147,12 +149,15 @@ const ARGUMENT_HINT = `[${[...COMMANDS.flatMap(command => command.usage ?? []), 
 
 const commandNamed = (word: string) => COMMANDS.find(command => command.name === word || command.aliases?.includes(word))
 
-async function runQueue($: Engine, ctx: Context, arg: string | undefined) {
-  if (arg === 'all') {
+async function runQueue($: Engine, ctx: Context, args: readonly string[]) {
+  if (args[0] === 'all') {
     return handOverQueue($, ctx, 'send')
   }
+  if (args.length > 0) {
+    return runChosen($, ctx, args.map(Number))
+  }
 
-  return (await runPlan($, ctx, arg === undefined ? undefined : Number(arg))) ?? runEntries($, ctx)
+  return (await runPlan($, ctx)) ?? runEntries($, ctx)
 }
 
 async function runCommand($: Engine, ctx: Context, name: Name, args: readonly string[]): Promise<string> {
@@ -163,7 +168,7 @@ async function runCommand($: Engine, ctx: Context, name: Name, args: readonly st
     case 'plan':
       return handOverQueue($, ctx, 'plan')
     case 'run':
-      return runQueue($, ctx, first)
+      return runQueue($, ctx, args)
     case 'stop':
       return stopPlan($)
     case 'pop':
@@ -202,13 +207,15 @@ export async function runAside(ctx: Context, $: Engine, e: AsideEvent) {
   return { text: command?.takes(args) ? await runCommand($, ctx, command.name, args) : await queueText($, ctx, e.args.trim()) }
 }
 
-// The numbers Tab offers after a command: the entries as /aside shows them, or the steps
-// still to do.
-async function numberRows($: Engine, ctx: Context, of: 'entries' | 'steps', digits: string) {
+// The numbers Tab offers after a command: the entries as /aside shows them, or for /aside run
+// while the plan has steps to do, the steps still to do.
+async function numberRows($: Engine, ctx: Context, of: 'entries' | 'run', digits: string) {
   const keys = await projectKeys($)
+  const plan = await loadPlan($, keys.plan)
+  const isSteps = of === 'run' && plan.steps.some(step => !step.isDone)
   const items =
-    of === 'steps'
-      ? (await loadPlan($, keys.plan)).steps.map((step, i) => ({ n: i + 1, label: step.title, isDone: step.isDone === true }))
+    isSteps
+      ? plan.steps.map((step, i) => ({ n: i + 1, label: step.title, isDone: step.isDone === true }))
       : inOrder(await loadEntries($, keys.queue), ctx.settings.order).map((entry, i) => ({
           n: i + 1,
           label: entry.kind === 'idea' ? entry.text : `${KINDS[entry.kind].label}: ${entry.text}`,

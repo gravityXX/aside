@@ -1,12 +1,13 @@
 import type { Args, EngineInterface as Engine, Hook, MatchedHook } from 'claude-code'
 
-import type { Plan, Step } from '../../types'
+import type { Entry, Plan, Step } from '../../types'
 import type { Context } from '../context'
 import { inOrder, KINDS } from '../core/entries'
 import { describeCount, formatPlace } from '../core/listing'
 import { entryPrompt, isOwnPrompt, planningPrompt, sendPrompt, STEP_MARKER, stepPrompt } from '../core/prompts'
+import type { StepMode } from '../core/prompts'
 import { formatCount, shortenText } from '../core/text'
-import { forgetAnsweredTake, loadEntries, loadPlan, projectKeys, refreshBand, savePlan, takeForHandOver } from '../io/store'
+import { forgetAnsweredTake, loadEntries, loadPlan, projectKeys, refreshBand, savePlan, takeChosen, takeForHandOver } from '../io/store'
 import type { Keys } from '../io/store'
 import { tagsInFiles } from './queue'
 
@@ -68,12 +69,31 @@ async function releaseStep($: Engine, index: number, why: string) {
   $.ui.toast(`Could not send step ${index + 1} of the plan: ${why}`)
 }
 
-// Runs step `index` of the plan; with `isChain`, the next one follows when it ends. A stop
-// that lands before its prompt goes out keeps it from going out at all.
-async function startStep($: Engine, ctx: Context, index: number, isChain: boolean) {
+// The step that follows `index` in its run: the first of `then` when /aside run named the
+// steps, the next one not done in a chain, none for a step run on its own.
+function nextInRun(steps: readonly Step[], index: number, isChain: boolean, then: readonly number[] | undefined): number {
+  if (then !== undefined) {
+    return then[0] ?? -1
+  }
+
+  return isChain ? steps.findIndex((step, i) => i > index && !step.isDone) : -1
+}
+
+function stepMode(steps: readonly Step[], index: number, isChain: boolean, then: readonly number[] | undefined): StepMode {
+  if (!isChain && then === undefined) {
+    return 'alone'
+  }
+
+  return nextInRun(steps, index, isChain, then) >= 0 ? 'more' : 'last'
+}
+
+// Runs step `index` of the plan; with `isChain`, the next one not done follows when it ends,
+// with `then`, those steps in that order. A stop that lands before its prompt goes out keeps
+// it from going out at all.
+async function startStep($: Engine, ctx: Context, index: number, isChain: boolean, then?: readonly number[]) {
   const keys = await projectKeys($)
   const plan = await loadPlan($, keys.plan)
-  plan.active = { step: index, isChain, sessionId: await $.session.id() }
+  plan.active = { step: index, isChain, sessionId: await $.session.id(), ...(then ? { then: [...then] } : {}) }
   await savePlan($, keys.plan, plan)
   await refreshBand($)
   submitLater(
@@ -82,7 +102,7 @@ async function startStep($: Engine, ctx: Context, index: number, isChain: boolea
       const now = await loadPlan($, keys.plan)
       const isStillDue = now.active?.step === index && now.active.turnId === undefined
 
-      return isStillDue ? stepPrompt(plan.steps, index, isChain, ctx.session.waitTool) : undefined
+      return isStillDue ? stepPrompt(plan.steps, index, stepMode(plan.steps, index, isChain, then), ctx.session.waitTool) : undefined
     },
     why => releaseStep($, index, why),
   )
@@ -91,26 +111,23 @@ async function startStep($: Engine, ctx: Context, index: number, isChain: boolea
 // What /aside run adds when another session's step was running: this one takes it over.
 const takeOverNote = (plan: Plan) => (plan.active ? ` (another session had step ${plan.active.step + 1} running; this one takes over)` : '')
 
-// /aside run on the saved plan: step `n`, or the plan from its first step not done.
-// Undefined when no step is named and every step is done, so the queue runs entry by entry instead.
-export async function runPlan($: Engine, ctx: Context, n?: number): Promise<string | undefined> {
+// Why nothing new starts while a step of the plan runs in this session, if one does.
+async function runningHere($: Engine, plan: Plan): Promise<string | undefined> {
+  return plan.active && plan.active.sessionId === (await $.session.id())
+    ? `Step ${plan.active.step + 1} is running. /aside stop stops after it.`
+    : undefined
+}
+
+// /aside run on the saved plan, from its first step not done. Undefined when every step is
+// done, so the queue runs entry by entry instead.
+export async function runPlan($: Engine, ctx: Context): Promise<string | undefined> {
   const keys = await projectKeys($)
   const plan = await loadPlan($, keys.plan)
-  if (plan.active && plan.active.sessionId === (await $.session.id())) {
-    return `Step ${plan.active.step + 1} is running. /aside stop stops after it.`
+  const running = await runningHere($, plan)
+  if (running) {
+    return running
   }
   const note = takeOverNote(plan)
-  if (n !== undefined) {
-    if (plan.steps.length === 0) {
-      return 'No plan: /aside run runs the queue entry by entry.'
-    }
-    if (n < 1 || n > plan.steps.length) {
-      return `Give a step from 1 to ${plan.steps.length}, as /aside shows them.`
-    }
-    await startStep($, ctx, n - 1, false)
-
-    return `Running step ${n}: ${plan.steps[n - 1]!.title}${note}`
-  }
   const first = plan.steps.findIndex(step => !step.isDone)
   if (first < 0) {
     return undefined
@@ -119,6 +136,62 @@ export async function runPlan($: Engine, ctx: Context, n?: number): Promise<stri
   const left = plan.steps.filter(step => !step.isDone).length
 
   return `Running the plan: ${formatCount(left, 'step')}, from step ${first + 1}. /aside stop stops after the current one.${note}`
+}
+
+// An entry as a step of a plan of its own.
+const entryStep = (entry: Entry, root: string): Step => ({
+  title: shortenText(entry.text || formatPlace(entry, root) || KINDS[entry.kind].label, 50),
+  prompt: entryPrompt(entry, root),
+})
+
+async function runChosenSteps($: Engine, ctx: Context, plan: Plan, chosen: readonly number[]): Promise<string> {
+  if (!chosen.every(n => n >= 1 && n <= plan.steps.length)) {
+    return `Give ${chosen.length === 1 ? 'a step' : 'steps'} from 1 to ${plan.steps.length}, as /aside shows them.`
+  }
+  const note = takeOverNote(plan)
+  const [first, ...rest] = chosen.map(n => n - 1)
+  await startStep($, ctx, first!, false, rest.length > 0 ? rest : undefined)
+
+  return chosen.length === 1
+    ? `Running step ${chosen[0]}: ${plan.steps[first!]!.title}${note}`
+    : `Running steps ${chosen.join(', ')} one by one. /aside stop stops after the current one.${note}`
+}
+
+async function runChosenEntries($: Engine, ctx: Context, keys: Keys, plan: Plan, chosen: readonly number[]): Promise<string> {
+  const stored = await loadEntries($, keys.queue)
+  const list = inOrder(stored, ctx.settings.order)
+  if (list.length === 0) {
+    return 'The queue is empty.'
+  }
+  if (!chosen.every(n => n >= 1 && n <= list.length)) {
+    return `Give ${chosen.length === 1 ? 'an entry' : 'entries'} from 1 to ${list.length}, as /aside shows them.`
+  }
+  const note = takeOverNote(plan)
+  const entries = chosen.map(n => list[n - 1]!)
+  const steps = entries.map(entry => entryStep(entry, keys.root))
+  await takeChosen($, keys, stored, entries)
+  await savePlan($, keys.plan, { steps })
+  await refreshBand($)
+  await startStep($, ctx, 0, true)
+
+  return entries.length === 1
+    ? `Running entry ${chosen[0]}: ${steps[0]!.title}${note}`
+    : `Running entries ${chosen.join(', ')} one by one. /aside stop stops after the current one.${note}`
+}
+
+// /aside run N [M ...]: the steps with those numbers while the plan has steps to do, else the
+// entries with those numbers, one after another in the order given. A number means what
+// /aside shows.
+export async function runChosen($: Engine, ctx: Context, numbers: readonly number[]): Promise<string> {
+  const keys = await projectKeys($)
+  const plan = await loadPlan($, keys.plan)
+  const running = await runningHere($, plan)
+  if (running) {
+    return running
+  }
+  const chosen = [...new Set(numbers)]
+
+  return plan.steps.some(step => !step.isDone) ? runChosenSteps($, ctx, plan, chosen) : runChosenEntries($, ctx, keys, plan, chosen)
 }
 
 // /aside run with no plan to run: every entry, and every new tag, becomes a step of its own.
@@ -131,10 +204,7 @@ export async function runEntries($: Engine, ctx: Context): Promise<string> {
   if (all.length === 0) {
     return 'Nothing to run: the queue is empty and the plan is done.'
   }
-  const steps = all.map(entry => ({
-    title: shortenText(entry.text || formatPlace(entry, keys.root) || KINDS[entry.kind].label, 50),
-    prompt: entryPrompt(entry, keys.root),
-  }))
+  const steps = all.map(entry => entryStep(entry, keys.root))
   await takeForHandOver($, keys, stored, tags)
   await savePlan($, keys.plan, { steps })
   await refreshBand($, 0)
@@ -159,6 +229,7 @@ export async function stopPlan($: Engine): Promise<string> {
     text = `The plan stopped before step ${n}.`
   } else {
     active.isChain = false
+    delete active.then
     text = `The plan stops after step ${n}.`
   }
   await savePlan($, keys.plan, plan)
@@ -263,7 +334,6 @@ export async function pausePlanFromTool(ctx: Context, $: Engine, e: PlanToolCall
     return { deny: 'no step of the aside plan is running; call this tool only from a step of the plan' }
   }
   const reason = (e as unknown as { reason?: unknown }).reason
-  active.isChain = false
   active.pausedFor = typeof reason === 'string' && reason.trim() !== '' ? shortenText(reason, 120) : 'it needs your answer'
   await savePlan($, keys.plan, plan)
 
@@ -302,11 +372,11 @@ async function finishStep($: Engine, ctx: Context, keys: Keys, plan: Plan, reaso
   delete plan.active
   if (reason === 'answer') {
     plan.steps[active.step]!.isDone = true
-    const after = plan.steps.findIndex((step, i) => i > active.step && !step.isDone)
+    const after = nextInRun(plan.steps, active.step, active.isChain, active.then)
     await savePlan($, keys.plan, plan)
-    if (active.isChain && after >= 0) {
-      await startStep($, ctx, after, true)
-    } else if (active.pausedFor !== undefined && after >= 0) {
+    if (after >= 0 && active.pausedFor === undefined) {
+      await startStep($, ctx, after, active.isChain, active.then?.slice(1))
+    } else if (after >= 0) {
       $.ui.toast(`Plan paused after step ${active.step + 1}: ${active.pausedFor}. /aside run continues.`)
     } else {
       $.ui.toast(active.isChain ? 'Plan done' : `Step ${active.step + 1} done`)
