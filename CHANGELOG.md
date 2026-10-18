@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.20.0 - 2026-10-18
 
 - The plan is drawn as a line of steps, in the `/aside` frame, the list pane and the saved plan's row: each step's mark in its state's colour (done, running, to do), and under a step done how long it took and what it said. A double line marks where a step paused the run, and the plan's title gives its time so far.
 - The line above the prompt shows how far the plan is, as in `plan ▰▰▱▱ 2/4 · step 3 running`.
