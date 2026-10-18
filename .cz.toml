@@ -1,0 +1,7 @@
+[tool.commitizen]
+name = "cz_conventional_commits"
+version_provider = "scm"
+tag_format = "v$version"
+version_files = [".claude-plugin/plugin.json:\"version\""]
+major_version_zero = true
+update_changelog_on_bump = false
