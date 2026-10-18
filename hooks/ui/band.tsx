@@ -1,7 +1,7 @@
 import type { EngineInterface as Engine, MatchedHook } from 'claude-code'
 
 import type { Context } from '../context'
-import { formatCount } from '../core/text'
+import { describeError, formatCount } from '../core/text'
 import { runPlan, stopPlan } from '../features/plan'
 import { toggleListPane } from '../features/queue'
 import { readBand } from '../io/store'
@@ -12,8 +12,12 @@ type Action = 'stop' | 'continue' | 'run plan'
 // hook, and a stop is applied at once rather than when the turn ends. Continue and run plan
 // are both /aside run: it goes on with a paused run, or starts one.
 async function pressAction($: Engine, ctx: Context, action: Action) {
-  const said = action === 'stop' ? await stopPlan($) : await runPlan($, ctx)
-  if (said !== undefined) $.ui.toast(said)
+  try {
+    const said = action === 'stop' ? await stopPlan($) : await runPlan($, ctx)
+    if (said !== undefined) $.ui.toast(said)
+  } catch (error) {
+    $.ui.toast(`aside could not ${action === 'stop' ? 'stop' : 'run'} the plan (${describeError(error)}).`)
+  }
 }
 
 // The line above the prompt: what waits and where the plan is, the list button, and beside it

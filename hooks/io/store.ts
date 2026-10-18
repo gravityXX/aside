@@ -97,12 +97,14 @@ export function saveEditing($: Engine, key: string, editing: Editing) {
   return $.store.set(key, editing)
 }
 
-// The entry being edited, if any; it is taken, so the next message is the only one that gets it.
-export async function takeEditing($: Engine, key: string): Promise<Editing | undefined> {
-  const editing = (await $.store.get(key)) as Editing | undefined
-  await $.store.delete(key)
+// The entry being edited, if any. The next message that is stored takes it (forgetEditing),
+// so a message that fails to store leaves it for the one after.
+export async function loadEditing($: Engine, key: string): Promise<Editing | undefined> {
+  return (await $.store.get(key)) as Editing | undefined
+}
 
-  return editing
+export function forgetEditing($: Engine, key: string) {
+  return $.store.delete(key)
 }
 
 // What /aside undo brings back: the entries and the tags the last plan, run or clear took.
@@ -158,8 +160,10 @@ export async function giveBackItems($: Engine, keys: Keys, items: readonly Entry
   const isItem = (entry: Entry) => items.some(item => item.at === entry.at && item.text === entry.text)
   const tagIds = items.filter(item => item.isTag).map(tagId)
   const take = await loadTake($, keys)
-  const back = take.entries.filter(isItem)
-  await saveEntries($, keys.queue, [...back, ...(await loadEntries($, keys.queue))])
+  const queue = await loadEntries($, keys.queue)
+  // A call made again after one that failed half-way finds some already back.
+  const back = take.entries.filter(entry => isItem(entry) && !queue.some(one => one.at === entry.at && one.text === entry.text))
+  await saveEntries($, keys.queue, [...back, ...queue])
   await unhandTags($, keys, tagIds)
   await saveTake($, keys, { ...take, entries: take.entries.filter(entry => !isItem(entry)), tagIds: take.tagIds.filter(id => !tagIds.includes(id)) })
 }
@@ -173,28 +177,46 @@ export async function unhandTags($: Engine, keys: Keys, tagIds: readonly string[
 // Takes the entries `chosen` out of the queue to hand them over; the rest stay. /aside undo
 // brings the chosen back until Claude has answered them.
 export async function takeChosen($: Engine, keys: Keys, stored: readonly Entry[], chosen: readonly Entry[]) {
-  await saveTake($, keys, { entries: [...chosen], tagIds: [], by: 'hand-over' })
-  await saveEntries($, keys.queue, stored.filter(entry => !chosen.includes(entry)))
+  const previous = await loadTake($, keys)
+  try {
+    await saveTake($, keys, { entries: [...chosen], tagIds: [], by: 'hand-over' })
+    await saveEntries($, keys.queue, stored.filter(entry => !chosen.includes(entry)))
+  } catch (error) {
+    // The chosen entries are still in the queue: undo brings back what it did before, not them.
+    await saveTake($, keys, previous).catch(() => undefined)
+    throw error
+  }
 }
 
 // Takes the queue (`stored`, oldest first) and the new tags out to hand them over: both go
 // where /aside undo finds them, and the tags are marked so they are not handed over again.
-// `giveBack` undoes all of it when the hand-over fails.
+// `giveBack` undoes all of it when the hand-over fails. A take that fails half-way is undone
+// at once, before its error goes on: the queue as it was, and the take undo had before, so
+// nothing is left both in the queue and in the take, and nothing undo had is lost.
 export async function takeForHandOver($: Engine, keys: Keys, stored: readonly Entry[], tags: readonly Entry[]) {
-  await saveTake($, keys, { entries: [...stored], tagIds: tags.map(tagId), by: 'hand-over' })
-  if (stored.length > 0) {
-    await saveEntries($, keys.queue, [])
-  }
   const before = await loadHanded($, keys.handed)
-  await $.store.set(keys.handed, [...new Set([...before, ...tags.map(tagId)])].slice(-500))
-
-  return {
-    giveBack: async () => {
-      await saveEntries($, keys.queue, [...stored, ...(await loadEntries($, keys.queue))])
-      await $.store.set(keys.handed, before)
-      await forgetTake($, keys)
-    },
+  const previous = await loadTake($, keys)
+  let isQueueTaken = false
+  const giveBack = async () => {
+    if (isQueueTaken) await saveEntries($, keys.queue, [...stored, ...(await loadEntries($, keys.queue))])
+    await $.store.set(keys.handed, before)
+    await forgetTake($, keys)
   }
+  try {
+    await saveTake($, keys, { entries: [...stored], tagIds: tags.map(tagId), by: 'hand-over' })
+    if (stored.length > 0) {
+      await saveEntries($, keys.queue, [])
+      isQueueTaken = true
+    }
+    await $.store.set(keys.handed, [...new Set([...before, ...tags.map(tagId)])].slice(-500))
+  } catch (error) {
+    // The handed write comes last: when anything failed, it was never made.
+    if (isQueueTaken) await saveEntries($, keys.queue, [...stored, ...(await loadEntries($, keys.queue))]).catch(() => undefined)
+    await saveTake($, keys, previous).catch(() => undefined)
+    throw error
+  }
+
+  return { giveBack }
 }
 
 // Counts what waits and where the plan is, for the line above the prompt. The tags are

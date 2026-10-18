@@ -26,23 +26,30 @@ const CLIPBOARD_READERS: readonly (readonly string[])[] = [
   ['powershell', ...POWERSHELL_ARGS],
 ]
 
-// The clipboard reader that ran first, kept for the rest of the session, and the text the
+// The clipboard reader that works here, kept for the rest of the session, and the text the
 // last read saw: an unchanged clipboard is likely stale.
 export type ClipboardState = { reader?: readonly string[]; last?: string }
 
 async function readClipboardText($: Engine, state: ClipboardState): Promise<string> {
   const isWsl = (await $.env.get('WSL_DISTRO_NAME')) !== undefined
   const candidates = state.reader ? [state.reader] : CLIPBOARD_READERS.filter(argv => isWsl || argv[0] !== 'powershell.exe')
+  let isFallback = false
   for (const argv of candidates) {
     try {
       const ran = await $.process.run([...argv], { timeoutMs: 5000, stdin: '' })
-      // 126 and 127: the shell could not find or run it; any other exit means it is there.
-      if (ran.exitCode === 126 || ran.exitCode === 127) continue
-      state.reader = argv
-      const text = ran.exitCode === 0 ? ran.stdout.replace(/\r\n/g, '\n').trim() : ''
+      // A reader that ran and failed may have no clipboard to reach here (wl-paste with no
+      // Wayland, xclip with no display), or only nothing to read this time: the next one is
+      // tried, and kept only when no reader before it ran, so the next read asks again.
+      if (ran.exitCode !== 0) {
+        isFallback = true
+        continue
+      }
+      if (!isFallback) state.reader = argv
+      const text = ran.stdout.replace(/\r\n/g, '\n').trim()
 
       return text.length > 20_000 ? '' : text
     } catch {
+      // The engine refuses a reader that is not installed or does not start.
       continue
     }
   }

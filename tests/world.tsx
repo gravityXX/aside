@@ -28,14 +28,21 @@ export const STEPS = [
 ]
 
 // The machine under the plugin. Unless a test says otherwise: WSL with GNU grep, an empty
-// clipboard, no files and the branch main.
+// clipboard, no files, the branch main and a store that takes every write.
 export type Machine = {
   files: Record<string, string>
   clip: string
   // What grep prints for any search.
   grep: string
   branch: string
-  system: 'wsl' | 'mac'
+  system: 'wsl' | 'mac' | 'linux'
+  // On Linux, how each clipboard reader there exits: 0 reads the clipboard, any other code fails
+  // as wl-paste does with no Wayland. A reader left out is not installed.
+  readers?: Record<string, number>
+  // The store refuses every write, as when it is full.
+  isStoreFull?: boolean
+  // The store refuses the n-th write from now, once, as a store that fills up half-way.
+  refuseWrite?: number
   // The text selected in a transcript row.
   selection?: string
   // The terminal is too narrow to seat a pane.
@@ -59,7 +66,7 @@ const ran = (stdout: string, exitCode = 0) => ({
 // A project at /proj with the plugin loaded, and what reaches the person and Claude:
 // `sent` the prompts Claude got, `toasts` the notices in the corner, `logged` the lines in
 // the transcript, `filled` what went into the prompt box, `asked` the notes the small model
-// was asked to tidy, `panes` the panes open.
+// was asked to tidy, `panes` the panes open, `runs` the commands the plugin ran.
 export const world = ($: Engine, on: On, given: Partial<Machine> = {}) => {
   const w: Machine = { files: {}, clip: '', grep: '', branch: 'main', system: 'wsl', ...given }
   const sent: string[] = []
@@ -68,10 +75,27 @@ export const world = ($: Engine, on: On, given: Partial<Machine> = {}) => {
   const filled: string[] = []
   const asked: string[] = []
   const panes: string[] = []
+  const runs: string[] = []
 
-  mock.store(on)
+  // The plugin's store, as mock.store keeps it, but one that can refuse a write.
+  const store = new Map<string, unknown>()
+  on('store.get', ($e, e) => ({ value: store.get(e.key) }) as never)
+  on('store.set', ($e, e) => {
+    if (w.refuseWrite !== undefined && --w.refuseWrite === 0) {
+      w.refuseWrite = undefined
+      return { deny: 'the store is full' }
+    }
+    if (w.isStoreFull) return { deny: 'the store is full' }
+    store.set(e.key, structuredClone(e.value))
+    return { value: undefined }
+  })
+  on('store.delete', ($e, e) => {
+    store.delete(e.key)
+    return { value: undefined }
+  })
+  on('store.keys', () => ({ value: [...store.keys()] }))
   const clock = mock.clock(on, { now: 1000 })
-  mock.env(on, w.system === 'mac' ? { HOME: '/Users/me' } : { WSL_DISTRO_NAME: 'Ubuntu' })
+  mock.env(on, w.system === 'mac' ? { HOME: '/Users/me' } : w.system === 'linux' ? { HOME: '/home/me' } : { WSL_DISTRO_NAME: 'Ubuntu' })
   on('session.root', () => ({ value: '/proj' }))
   on('session.id', () => ({ value: 'session-1' }))
   on('command.register', ($e, e) => ({ value: { command: e.name } }))
@@ -133,13 +157,20 @@ export const world = ($: Engine, on: On, given: Partial<Machine> = {}) => {
     return { value: [...names].map(([name, kind]) => ({ name, kind, size: 100, mtimeMs: 0, isLink: false })) } as never
   })
   on('process.run', ($e, e) => {
+    runs.push(e.argv[0]!)
     const isMac = w.system === 'mac'
-    const missing = ran('', 127)
+    // The engine refuses a command that is not installed.
+    const missing = { deny: 'not installed' }
+    const reader = w.system === 'linux' ? w.readers?.[e.argv[0]!] : undefined
     switch (e.argv[0]) {
       case 'powershell.exe':
-        return isMac ? missing : ran(`${w.clip}\r\n`)
+        return w.system === 'wsl' ? ran(`${w.clip}\r\n`) : missing
       case 'pbpaste':
         return isMac ? ran(w.clip) : missing
+      case 'wl-paste':
+      case 'xclip':
+      case 'xsel':
+        return reader === undefined ? missing : ran(reader === 0 ? w.clip : '', reader)
       case 'git':
         return ran(`${w.branch}\n`)
       case 'grep':
@@ -190,6 +221,9 @@ export const world = ($: Engine, on: On, given: Partial<Machine> = {}) => {
   const savePlan = (steps: unknown, unclear?: unknown) =>
     $.tool.call({ tool: 'mcp__aside__plan', steps, ...(unclear === undefined ? {} : { unclear }) } as never)
 
+  // Claude pausing the plan from a step with the wait tool.
+  const wait = (reason: string) => $.tool.call({ tool: 'mcp__aside__wait', reason } as never)
+
   const startTurn = (text: string, turnId: string) => $.turn.start({ text, turnId })
 
   // The end of a turn: how it ended, Claude's answer and how long it ran.
@@ -237,6 +271,7 @@ export const world = ($: Engine, on: On, given: Partial<Machine> = {}) => {
     filled,
     asked,
     panes,
+    runs,
     clock,
     idle,
     type,
@@ -245,6 +280,7 @@ export const world = ($: Engine, on: On, given: Partial<Machine> = {}) => {
     shown,
     write,
     savePlan,
+    wait,
     startTurn,
     endTurn,
     answer,

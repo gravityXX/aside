@@ -8,9 +8,9 @@ import type { Order, TypedEntry } from '../core/entries'
 import { formatPlace } from '../core/listing'
 import { findFragment, findHeading, fragmentWords, MARKDOWN_PATH, MIN_FRAGMENT_WORDS } from '../core/markdown'
 import { readTidyReply, TIDY_SYSTEM, tidyPrompt } from '../core/prompts'
-import { relativePath, shortenText } from '../core/text'
+import { describeError, relativePath, shortenText } from '../core/text'
 import { readClipboard, readGitBranch, resolveFile, searchMarkdown, tryReadFile } from '../io/host'
-import { loadEntries, projectKeys, refreshBand, readTrackedFiles, trackFile, saveEntries, takeEditing } from '../io/store'
+import { forgetEditing, loadEditing, loadEntries, projectKeys, refreshBand, readTrackedFiles, trackFile, saveEntries } from '../io/store'
 
 // The tools whose output a comment may be about when nothing else says so; any error counts.
 const OUTPUT_TOOLS = new Set(['Bash', 'Edit', 'Write', 'NotebookEdit'])
@@ -200,7 +200,7 @@ export async function addEntries(
   const sources = commentSources($, ctx, output, options.selection)
   // An entry taken out with /aside edit comes back where it was, keeping what it pointed at,
   // unless the reworked text names a place of its own.
-  const editing = await takeEditing($, keys.editing)
+  const editing = await loadEditing($, keys.editing)
   const isRework = editing !== undefined && typed.length === 1 && typed[0]!.kind === editing.idea.kind && Object.keys(typed[0]!.anchor).length === 0
   const sourceCache = new Map<string, Promise<string | undefined>>()
   const readSource: ReadSource = file => {
@@ -225,6 +225,7 @@ export async function addEntries(
   const stored = await loadEntries($, keys.queue)
   const all = isRework ? putBack(stored, added, editing!.index, ctx.settings.order) : [...stored, ...added]
   await saveEntries($, keys.queue, all)
+  if (editing) await forgetEditing($, keys.editing)
   await refreshBand($)
   if (ctx.settings.tidy) for (const entry of added) void tidyEntry($, ctx, entry)
   if (images > 0) notes.push('the image was not kept')
@@ -241,6 +242,8 @@ export async function addEntries(
 function emptyBoxLater($: Engine, ctx: Context, typed: string) {
   ctx.session.justQueued = typed
   $.clock.after(30, async () => {
+    // Emptied already, or given back because it could not be stored.
+    if (ctx.session.justQueued !== typed) return
     const box = await $.prompt.read().catch(() => undefined)
     if (box && box.text.trim() === typed) await $.prompt.fill({ text: '', mode: 'replace' }).catch(() => undefined)
   })
@@ -273,7 +276,8 @@ export async function queueTyped(ctx: Context, $: Engine, e: Submit[1], next: Su
     chainWrite(
       ctx,
       () => addEntries($, ctx, text, task, output, { images, selection, report: 'log' }),
-      error => $.ui.log(`queue: could not store "${shortenText(text, 40)}": ${String(error)}`),
+      // Caught too, so a failure here never stops the writes chained after it.
+      error => storeFailed($, ctx, text, error).catch(() => undefined),
     ),
   )
   emptyBoxLater($, ctx, e.text.trim())
@@ -281,11 +285,25 @@ export async function queueTyped(ctx: Context, $: Engine, e: Submit[1], next: Su
   return { drop: 'queued' }
 }
 
+// A typed entry that could not be stored goes back into the prompt box when the box is empty,
+// so nothing typed is lost; with a new draft there, the transcript line gives it whole.
+async function storeFailed($: Engine, ctx: Context, text: string, error: unknown) {
+  if (ctx.session.justQueued === text.trim()) ctx.session.justQueued = undefined
+  const why = describeError(error)
+  const box = await $.prompt.read().catch(() => undefined)
+  const filled = box?.text.trim() === '' ? await $.prompt.fill({ text, mode: 'replace' }).catch(() => undefined) : undefined
+  $.ui.log(
+    filled?.isFilled
+      ? `aside could not queue "${shortenText(text, 40)}" (${why}); it is back in the prompt box.`
+      : `aside could not queue this entry (${why}); here it is to queue again:\n${text}`,
+  )
+}
+
 type SubmitFailed = Parameters<CatchHandler<Hook<'prompt.submit'>>>
 
 // A queued entry that failed to store is dropped, not sent: it was meant to wait.
 export function dropFailedEntry($: Engine, e: SubmitFailed[1], next: SubmitFailed[2]) {
-  return next.called || !(isTypedMessage(e) && parseEntries(e.text)) ? next(e) : { drop: 'queue: could not store this entry; nothing was sent' }
+  return next.called || !(isTypedMessage(e) && parseEntries(e.text)) ? next(e) : { drop: 'aside could not queue this entry; nothing was sent to Claude' }
 }
 
 type Change = Parameters<Hook<'prompt.change'>>

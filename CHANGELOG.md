@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- On Linux, a clipboard reader that runs but fails, such as `wl-paste` with no Wayland session, no longer leaves comments without the clipboard: aside tries the next reader, and asks the first one again next time.
+- A typed entry the store cannot take is not lost. It goes back into the prompt box when the box is empty; otherwise the transcript line gives it whole, with the reason. An entry taken out with `/aside edit` stays taken until it is stored again.
+- When `/aside`, the end of a turn or the plan and wait tools fail, aside says so in a sentence of its own, with the reason, in place of the engine's words. A hand-over the store refuses leaves the queue as it was, and a plan it refuses saves nothing, so Claude can save it again.
+- The list pane's `plan` button says why when the hand-over fails, and the old `queue:` prefix is gone from the transcript.
+
 ## 0.18.0 - 2026-10-18
 
 - A run that a step pauses with `wait` is kept. The line above the prompt says `plan paused after step N` with a `continue` button, and `/aside` gives the reason in the plan's title. `/aside continue`, `/aside run` and the button go on with that run as it was to go: `/aside run 3 1 2` paused after step 3 runs steps 1 and 2 next, where it used to start the whole plan over from step 1. `/aside stop` drops the pause, and `/aside run N` starts a new run.
