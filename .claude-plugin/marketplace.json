@@ -4,11 +4,11 @@
     "name": "gravityXX",
     "url": "https://github.com/gravityXX"
   },
-  "description": "aside: note ideas and comments while Claude works, then hand them over as a plan",
+  "description": "aside: A prompt queue for Claude Code. Note ideas and comments while Claude works, without interrupting it, and hand them over when you are ready.",
   "plugins": [
     {
       "name": "aside",
-      "description": "Note ideas and comments while Claude works, without interrupting it, then hand them over as a plan",
+      "description": "A prompt queue for Claude Code. Note ideas and comments while Claude works, without interrupting it, and hand them over when you are ready.",
       "author": {
         "name": "gravityXX"
       },
