@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.16.0 - 2026-10-18
 
 - The plan Claude saves shows in the transcript in the frame `/aside` draws, with each step's state in colour, in place of the plan tool's raw input. Claude is asked not to list the steps again in its reply.
 - `/aside plan` with steps still to do gives Claude those steps whole, where it used to cut each to 300 characters, so a long step no longer loses its end when the queue is planned again. The steps already done stay at the top of the new plan instead of disappearing.
