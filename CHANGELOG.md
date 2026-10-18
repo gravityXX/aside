@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.17.1 - 2026-10-18
 
 - The `stop` and `run plan` buttons sit on the line above the prompt, beside `list`, where they used to drop to the line below it.
 
