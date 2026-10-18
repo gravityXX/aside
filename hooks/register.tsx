@@ -13,6 +13,7 @@ import {
   locate,
   entryPrompt,
   plan as planPrompt,
+  popText,
   quoteWords,
   relative,
   send as sendPrompt,
@@ -40,21 +41,20 @@ const HELP = [
   '  +? question   +! change   +- drop   ++ dig deeper',
   '  pin it yourself with @file, @file:42, @file#heading or #heading after the mark.',
   'In the editor, <!-- ? ... --> tags (? ! - +) in a markdown file count as comments too.',
-  '',
   'With nothing new copied, a comment takes the text selected in Claude\'s reply, or the last tool output.',
   '',
-  '/queue TEXT - queue TEXT, as "+ TEXT" would ("/queue +? TEXT" for a comment, "/queue + run 3" for text that looks like a command)',
-  '/queue - organize everything into a plan of prompts',
-  '/queue send - hand everything over as it is, to be done now',
-  '/queue each - run every entry as its own prompt, one after another',
-  '/queue list - show the queue      /queue remove N - remove entry N',
-  '/queue edit N - put entry N back in the prompt box to rework it',
-  '/queue move N M - move entry N to place M',
-  '/queue pop - put the last entry back in the prompt box',
-  '/queue clear - empty the queue    /queue undo - bring back what /queue, send, each or clear took',
-  '/queue scan FILE - read the tags of a file the agents did not write here',
-  '/queue plan - show the saved plan /queue run [N] - run all steps in order, or step N',
-  '/queue stop - stop the plan after the current step',
+  '/queue - show the queue and the plan',
+  '/queue plan - have Claude organize the queue into steps (related entries merged)',
+  '/queue run - run the plan step by step; with no plan, each entry as its own step',
+  '/queue run N - run step N alone       /queue run all - send everything at once, no plan',
+  '/queue stop - stop after the current step',
+  '',
+  '/queue TEXT - queue TEXT, as "+ TEXT" would ("/queue + run 3" for text that looks like a command)',
+  '/queue pop [N] - put the last entry (or entry N) in the prompt box, ready to send',
+  '/queue edit N - put entry N in the prompt box to rework it and queue it again',
+  '/queue move N M - move entry N to place M     /queue remove N - remove entry N',
+  '/queue clear - empty the queue                /queue undo - bring back what plan, run or clear took',
+  '/queue scan FILE - read the tags of a file Claude did not write in this session',
 ].join('\n')
 
 // Everything belongs to the project: each root keeps its own queue and plan.
@@ -345,7 +345,18 @@ const pin = async ($: Engine, entry: Entry, root: string, seen: readonly string[
 
 // Stores what a message (or /queue TEXT) holds and says what was queued and where it
 // points, or returns null when the text is no entry at all.
-const enqueue = async ($: Engine, text: string, task: string | undefined, output: string | undefined, images = 0): Promise<string | null> => {
+// How enqueue reports what it queued: a line in the transcript (a typed "+", whose prompt has
+// long been answered by then), or nothing (a command, which answers with the text itself).
+type Report = 'log' | 'none'
+
+const enqueue = async (
+  $: Engine,
+  text: string,
+  task: string | undefined,
+  output: string | undefined,
+  options: { images?: number; selection?: string; report?: Report } = {},
+): Promise<string | null> => {
+  const { images = 0, report = 'none' } = options
   const entries = capture(text)
   if (entries === null) {
     return null
@@ -366,7 +377,7 @@ const enqueue = async ($: Engine, text: string, task: string | undefined, output
       })),
     // Only a selection inside one transcript row: one in the prompt box or a pane is not
     // about Claude's output.
-    selection: () => (sel ??= $.ui.selection().then(one => (one?.requestId ? one.text.trim() : ''), () => '')),
+    selection: () => (sel ??= options.selection !== undefined ? Promise.resolve(options.selection) : readSelection($)),
     ...(output ? { output } : {}),
   }
   // An entry taken out with /queue edit comes back where it was, keeping what it pointed at,
@@ -409,10 +420,15 @@ const enqueue = async ($: Engine, text: string, task: string | undefined, output
   await refresh($)
   if (images > 0) notes.push('the image was not kept')
   const said = queuedOf(added, notes, root, all.length)
-  $.ui.toast(said)
+  if (report === 'log') $.ui.log(said)
 
   return said
 }
+
+// The text selected in one transcript row: one in the prompt box or a pane is not about
+// Claude's output.
+const readSelection = ($: Engine): Promise<string> =>
+  $.ui.selection().then(one => (one?.requestId ? one.text.trim() : ''), () => '')
 
 // Hands the queue and the new file tags over: as one planning prompt ('plan'), or as it
 // is, to be done now ('send'). The prompt goes out from a timer, since a command's hook may
@@ -569,14 +585,18 @@ export const register: Register = (on, options) => {
   // it from its own turnId; /queue TEXT, which carries none, asks this.
   let isRunning = false
   const taskNow = () => (isRunning ? lastTask : undefined)
+  // The last message queued, until the box it went back into has been emptied.
+  let justQueued: string | undefined
+  // Typed entries are stored one after another, so two quick ones never overwrite each other.
+  let storing: Promise<unknown> = Promise.resolve()
   let output: { text: string; turnId: string | undefined; isError: boolean } | undefined
   const outputNow = () => (output && output.turnId === turn ? output.text : undefined)
 
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'queue',
-      description: 'Organize the ideas and comments queued with "+" into a plan of prompts',
-      argumentHint: '[TEXT | send | each | list | edit N | move N M | pop | remove N | clear | undo | scan FILE | plan | run [N] | stop | help]',
+      description: 'Show the ideas and comments queued with "+"; plan and run them',
+      argumentHint: '[plan | run [N | all] | stop | TEXT | pop [N] | edit N | move N M | remove N | clear | undo | scan FILE | help]',
       // Runs at once mid-turn, so a stop lands before the next step; the prompts it sends
       // still wait for the turn to end.
       immediate: true,
@@ -658,27 +678,62 @@ export const register: Register = (on, options) => {
     await refresh($)
 
     return {
-      result: `Saved ${steps.length} steps. Tell the user: /queue run runs them all in order, /queue run N runs one, /queue plan shows them.`,
+      result: `Saved ${steps.length} steps. Tell the user: /queue run runs them all in order, /queue run N runs one, /queue shows them.`,
     }
   })
 
   on('prompt.submit', async ($, e, next) => {
     const isTyped = e.origin.kind === 'composer' && e.command === undefined
-    const said = isTyped ? await enqueue($, e.text, e.turnId !== undefined ? lastTask : undefined, outputNow(), e.attachments?.length ?? 0) : null
-    if (said === null) {
+    const entries = isTyped ? capture(e.text) : null
+    if (entries === null) {
       if (isTyped && e.text.trim() !== '') lastTask = snippet(e.text, 200)
       void refresh($)
 
       return next(e)
     }
 
-    return { drop: said }
+    // Answered at once, as Enter on a plain prompt is: the slow part (the clipboard, the
+    // search, the store) runs right after, one message at a time, and says in a transcript
+    // line where each entry points. Only the selection is read now, before it goes away.
+    const text = e.text
+    const task = e.turnId !== undefined ? lastTask : undefined
+    const output = outputNow()
+    const images = e.attachments?.length ?? 0
+    const isComment = entries.some(entry => entry.kind !== 'idea' && Object.keys(entry.anchor).length === 0)
+    const selection = isComment ? await readSelection($) : ''
+    $.clock.after(1, () => {
+      storing = storing
+        .then(() => enqueue($, text, task, output, { images, selection, report: 'log' }))
+        .catch(error => $.ui.log(`queue: could not store "${snippet(text, 40)}": ${String(error)}`))
+    })
+
+    // A dropped prompt goes back into the box; once queued it should not wait there to be
+    // deleted by hand. The engine's put-back raises prompt.change, which empties the box at
+    // once; the timer is the fallback. Either empties it only while it still holds exactly
+    // that message, so a new draft typed meanwhile is left alone.
+    const typed = e.text.trim()
+    justQueued = typed
+    $.clock.after(30, async () => {
+      const box = await $.prompt.read().catch(() => undefined)
+      if (box && box.text.trim() === typed) await $.prompt.fill({ text: '', mode: 'replace' }).catch(() => undefined)
+    })
+
+    return { drop: 'queued' }
   }).catch(($, e, next) =>
     // A queued entry that failed to store is dropped, not sent: it was meant to wait.
     next.called || !(e.origin.kind === 'composer' && e.command === undefined && capture(e.text))
       ? next(e)
       : { drop: 'queue: could not store this entry; nothing was sent' },
   )
+
+  on('prompt.change', async ($, e, next) => {
+    if (justQueued !== undefined && e.origin.kind === 'engine' && e.text.trim() === justQueued) {
+      justQueued = undefined
+      await $.prompt.fill({ text: '', mode: 'replace' }).catch(() => undefined)
+    }
+
+    return next(e)
+  })
 
   on('turn.start', async ($, e, next) => {
     if (e.agentId === undefined) {
@@ -742,7 +797,7 @@ export const register: Register = (on, options) => {
       return done
     }
     if (!active && waiting > nudged) {
-      $.ui.toast(`Waiting in the queue: ${waiting} · /queue`)
+      $.ui.toast(`Waiting in the queue: ${waiting} · /queue plan or /queue run`)
     }
     nudged = waiting
 
@@ -760,9 +815,7 @@ export const register: Register = (on, options) => {
       help: args => args.length === 0,
       list: args => args.length === 0,
       ls: args => args.length === 0,
-      send: args => args.length === 0,
-      each: args => args.length === 0,
-      pop: args => args.length === 0,
+      pop: args => args.length === 0 || (args.length === 1 && isInt(args[0])),
       clear: args => args.length === 0,
       undo: args => args.length === 0,
       plan: args => args.length === 0,
@@ -772,7 +825,7 @@ export const register: Register = (on, options) => {
       rm: args => args.length === 1 && isInt(args[0]),
       move: args => args.length === 2 && isInt(args[0]) && isInt(args[1]),
       mv: args => args.length === 2 && isInt(args[0]) && isInt(args[1]),
-      run: args => args.length === 0 || (args.length === 1 && isInt(args[0])),
+      run: args => args.length === 0 || (args.length === 1 && (isInt(args[0]) || args[0] === 'all')),
       scan: args => args.length === 1 && MARKDOWN.test(args[0]!),
     }
     const shape = SHAPES[verb.toLowerCase()]
@@ -782,14 +835,21 @@ export const register: Register = (on, options) => {
       return { text: HELP }
     }
 
-    if (word === 'list' || word === 'ls') {
+    if (word === '' || word === 'list' || word === 'ls') {
+      const plan = await loadPlan($, planKey)
+      const steps = plan.steps.map((step, i) => {
+        const state = plan.active?.step === i ? 'running' : step.isDone ? 'done' : 'todo'
+
+        return `${i + 1}. [${state}] ${step.title}`
+      })
+      const planned = plan.steps.some(step => !step.isDone) ? `\n\nPlan (/queue run):\n${steps.join('\n')}` : ''
       const fresh = new Set((await fileTags($, true)).map(tagKey))
       const inFiles = await fileTags($)
       const own = list.length === 0 ? 'The queue is empty.' : listed(list, root)
       const shown = inFiles.map(tag => listed([tag], root).replace(/^\d+\. /, fresh.has(tagKey(tag)) ? '- ' : '- (handed over) '))
       const tagged = inFiles.length === 0 ? '' : `\n\nTags in files:\n${shown.join('\n')}`
 
-      return { text: `${own}${tagged}` }
+      return { text: `${own}${tagged}${planned}` }
     }
 
     if (word === 'edit') {
@@ -826,51 +886,26 @@ export const register: Register = (on, options) => {
       return { text: listed(list, root) }
     }
 
-    if (word === 'send') {
-      return { text: await handOver($, 'send') }
-    }
-
-    if (word === 'each') {
-      const plan = await loadPlan($, planKey)
-      if (plan.active && plan.active.sessionId === (await $.session.id())) {
-        return { text: `Step ${plan.active.step + 1} of the plan is running. /queue stop stops after it.` }
-      }
-      const inFiles = await fileTags($, true)
-      const all = [...list, ...inFiles]
-      if (all.length === 0) {
-        return { text: 'The queue is empty.' }
-      }
-      const steps = all.map(idea => ({ title: snippet(idea.text || where(idea, root) || KINDS[idea.kind].label, 50), prompt: entryPrompt(idea, root) }))
-      if (list.length > 0) {
-        await saveIdeas($, taken, list)
-        await saveIdeas($, queue, [])
-      }
-      const before = ((await $.store.get(handed)) as string[] | undefined) ?? []
-      await $.store.set(handed, [...new Set([...before, ...inFiles.map(tagKey)])].slice(-500))
-      // The entries join the saved plan as new steps: steps still to do are kept.
-      const first = plan.steps.length
-      await savePlan($, planKey, { steps: [...plan.steps, ...steps] })
-      await refresh($, 0)
-      await start($, first, true)
-      const kept = plan.steps.filter(step => !step.isDone).length
-      const note = kept > 0 ? ` The ${kept} steps of the plan still to do are kept before them; /queue run N runs one.` : ''
-
-      return { text: `Running ${steps.length} entries one by one, as steps ${first + 1}-${first + steps.length} of the plan (/queue plan shows it). /queue stop stops after the current one.${note}` }
-    }
-
     if (word === 'pop') {
-      const last = list.at(-1)
-      if (last === undefined) {
+      // The last entry, or entry N: taken out of the queue into the box, ready to send.
+      if (list.length === 0) {
         return { text: 'The queue is empty.' }
       }
-      const filled = await $.prompt.fill({ text: last.raw ?? `+ ${last.text}`, mode: 'insert' })
+      const n = rest[0] === undefined ? list.length : Number(rest[0])
+      if (n < 1 || n > list.length) {
+        return { text: `Give a number from 1 to ${list.length}, as /queue shows them.` }
+      }
+      const last = list[n - 1]!
+      // Ready to send: no "+" in front, a comment with what it is about.
+      const filled = await $.prompt.fill({ text: popText(last, root), mode: 'insert' })
       if (!filled.isFilled) {
         return { text: 'The prompt box cannot take it now; the entry stays in the queue.' }
       }
-      await saveIdeas($, queue, list.slice(0, -1))
+      list.splice(n - 1, 1)
+      await saveIdeas($, queue, list)
       await refresh($)
 
-      return { text: `Back in the prompt box: ${snippet(last.text, 60)}` }
+      return { text: `In the prompt box, ready to send: ${snippet(last.text, 60)}` }
     }
 
     if (word === 'clear') {
@@ -933,46 +968,54 @@ export const register: Register = (on, options) => {
     }
 
     if (word === 'plan') {
-      const plan = await loadPlan($, planKey)
-      if (plan.steps.length === 0) {
-        return { text: 'No plan saved. /queue organizes the queue into one.' }
-      }
-      const lines = plan.steps.map((step, i) => {
-        const state = plan.active?.step === i ? 'running' : step.isDone ? 'done' : 'todo'
-
-        return `${i + 1}. [${state}] ${step.title}`
-      })
-
-      return { text: lines.join('\n') }
+      return { text: await handOver($, 'plan') }
     }
 
     if (word === 'run') {
-      const plan = await loadPlan($, planKey)
-      if (plan.steps.length === 0) {
-        return { text: 'No plan saved. /queue organizes the queue into one.' }
+      if (rest[0] === 'all') {
+        return { text: await handOver($, 'send') }
       }
+      const plan = await loadPlan($, planKey)
       const isMine = plan.active?.sessionId === (await $.session.id())
       if (plan.active && isMine) {
         return { text: `Step ${plan.active.step + 1} is running. /queue stop stops after it.` }
       }
       const note = plan.active ? ` (another session had step ${plan.active.step + 1} running; this one takes over)` : ''
+      const first = plan.steps.findIndex(step => !step.isDone)
       if (rest[0] !== undefined) {
         const n = Number(rest[0])
-        if (!Number.isInteger(n) || n < 1 || n > plan.steps.length) {
-          return { text: `Give a step from 1 to ${plan.steps.length}, as /queue plan shows them.` }
+        if (plan.steps.length === 0 || n < 1 || n > plan.steps.length) {
+          return { text: plan.steps.length === 0 ? 'No plan: /queue run runs the queue entry by entry.' : `Give a step from 1 to ${plan.steps.length}, as /queue shows them.` }
         }
         await start($, n - 1, false)
 
         return { text: `Running step ${n}: ${plan.steps[n - 1]!.title}${note}` }
       }
-      const first = plan.steps.findIndex(step => !step.isDone)
-      if (first < 0) {
-        return { text: 'Every step of the plan is done.' }
-      }
-      await start($, first, true)
-      const left = plan.steps.filter(step => !step.isDone).length
+      if (first >= 0) {
+        await start($, first, true)
+        const left = plan.steps.filter(step => !step.isDone).length
 
-      return { text: `Running the plan: ${left} steps, from step ${first + 1}. /queue stop stops after the current one.${note}` }
+        return { text: `Running the plan: ${left === 1 ? '1 step' : `${left} steps`}, from step ${first + 1}. /queue stop stops after the current one.${note}` }
+      }
+
+      // No plan to run: every entry becomes a step of its own.
+      const inFiles = await fileTags($, true)
+      const all = [...list, ...inFiles]
+      if (all.length === 0) {
+        return { text: 'Nothing to run: the queue is empty and the plan is done.' }
+      }
+      const steps = all.map(idea => ({ title: snippet(idea.text || where(idea, root) || KINDS[idea.kind].label, 50), prompt: entryPrompt(idea, root) }))
+      if (list.length > 0) {
+        await saveIdeas($, taken, list)
+        await saveIdeas($, queue, [])
+      }
+      const before = ((await $.store.get(handed)) as string[] | undefined) ?? []
+      await $.store.set(handed, [...new Set([...before, ...inFiles.map(tagKey)])].slice(-500))
+      await savePlan($, planKey, { steps })
+      await refresh($, 0)
+      await start($, 0, true)
+
+      return { text: `Running ${steps.length === 1 ? '1 entry' : `${steps.length} entries`} one by one. /queue stop stops after the current one.${note}` }
     }
 
     if (word === 'stop') {
@@ -982,12 +1025,12 @@ export const register: Register = (on, options) => {
     // Anything else is an entry to queue: "/queue add tests" as "+ add tests" would.
     if (word === '+text') {
       const text = e.args.trim()
-      const said = await enqueue($, text.startsWith('+') ? text : `+ ${text}`, taskNow(), outputNow())
+      const said = await enqueue($, text.startsWith('+') ? text : `+ ${text}`, taskNow(), outputNow(), { report: 'none' })
 
       return { text: said ?? HELP }
     }
 
-    return { text: await handOver($, 'plan') }
+    return { text: HELP }
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
@@ -1007,7 +1050,7 @@ export const register: Register = (on, options) => {
     // A stop is applied here and now: $.command.run would wait for the turn to end.
     const press = async () => {
       if (action === 'stop') $.ui.toast(await stopPlan($))
-      else await $.command.run({ command: 'queue', args: action === 'run plan' ? 'run' : '' })
+      else await $.command.run({ command: 'queue', args: action === 'run plan' ? 'run' : 'plan' })
     }
 
     const { Box, Button, Text } = $.ui.resolve(e)

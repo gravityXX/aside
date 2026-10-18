@@ -63,35 +63,31 @@ In an editor you can also leave tags in the file. `/queue` reads them from the f
 
 ## Plan and run
 
-There are three ways to hand the queue over:
+Two words do the work:
 
-- `/queue` asks for a plan first (below).
-- `/queue send` hands everything over as it is, in one message, to be done now.
-- `/queue each` runs every entry as its own prompt, one after another, as new steps after those of the saved plan.
+- `/queue plan` hands everything over in one message. Claude answers the questions straight away, merges related items into one step, keeps unrelated ones apart, orders them, writes a self-contained prompt for each step and saves the steps with the plugin's `plan` tool. Nothing runs yet.
+- `/queue run` sends the steps one by one: each step starts when the one before has finished. With no plan, every entry is a step of its own. The band above the prompt shows `step 2/4 running` with a stop button. `/queue stop` lets the current step finish and stops there. An interrupted step stops the plan.
 
-`/queue` hands everything over in one message. Claude answers the questions straight away, merges related items, orders them, writes a self-contained prompt for each step and saves the steps with the plugin's `plan` tool. Nothing runs yet.
-
-`/queue run` sends the steps one by one: each step starts when the one before has finished. The band above the prompt shows `step 2/4 running` with a stop button. `/queue stop` lets the current step finish and stops there. An interrupted step stops the plan.
+For two or three small things a plan is a needless stop: `/queue run all` sends everything in one message, to be done at once.
 
 ## Commands
 
 | Command            | What it does                                                    |
 | ------------------ | --------------------------------------------------------------- |
-| `/queue TEXT`      | Queue TEXT, as `+ TEXT` would (`/queue +? TEXT` for a comment)  |
-| `/queue`           | Organize the queue into a plan of prompts                       |
-| `/queue send`      | Hand everything over as it is, to be done now                   |
-| `/queue each`      | Run every entry as its own prompt, one after another            |
-| `/queue list`      | Show the queue, and the tags found in files                     |
-| `/queue edit N`    | Put entry N back in the prompt box to rework it                 |
+| `/queue`           | Show the queue, the tags found in files and the plan            |
+| `/queue plan`      | Have Claude organize the queue into steps                       |
+| `/queue run`       | Run the plan step by step; with no plan, entry by entry         |
+| `/queue run N`     | Run step N of the plan alone                                    |
+| `/queue run all`   | Send everything in one message, no plan                         |
+| `/queue stop`      | Stop after the current step                                     |
+| `/queue TEXT`      | Queue TEXT, as `+ TEXT` would                                   |
+| `/queue pop [N]`   | Put the last entry, or entry N, in the prompt box, ready to send |
+| `/queue edit N`    | Put entry N in the prompt box to rework it and queue it again   |
 | `/queue move N M`  | Move entry N to place M                                         |
-| `/queue pop`       | Put the last entry back in the prompt box                       |
 | `/queue remove N`  | Remove entry N                                                  |
 | `/queue clear`     | Empty the queue                                                 |
-| `/queue undo`      | Bring back what `/queue`, `send`, `each` or `clear` last took   |
+| `/queue undo`      | Bring back what `plan`, `run` or `clear` last took              |
 | `/queue scan FILE` | Read the tags of a file Claude did not write in this session    |
-| `/queue plan`      | Show the saved plan                                             |
-| `/queue run [N]`   | Run every step in order, or step N alone                        |
-| `/queue stop`      | Stop the plan after the current step                            |
 | `/queue help`      | Show this list                                                  |
 
 `/queue` runs at once even while Claude works, so `stop` lands in time. The prompts it sends wait for the turn to end.
@@ -100,7 +96,7 @@ There are three ways to hand the queue over:
 
 `/config` lists one setting, `whenTurnEnds`: what happens to the queue when Claude finishes a turn.
 
-- `wait` (default) - keep it until you run `/queue`; a toast says what waits.
+- `wait` (default) - keep it until you run `/queue plan` or `/queue run`; a toast says what waits.
 - `plan` - hand it over as a plan at once.
 - `send` - hand it over to be done at once.
 
@@ -123,7 +119,7 @@ Where GNU grep is missing, the plugin walks the project itself, skipping dot fol
 
 - The clipboard is read only for a comment (`+?`, `+!`, `+-`, `++`) that names no place of its own, never for a plain `+` idea.
 - The queue is stored on your machine, in the plugin's own store under the Claude Code configuration folder.
-- Nothing reaches the model until you run `/queue`, which sends the entries as one message.
+- Nothing reaches the model until you run `/queue plan` or `/queue run`.
 
 ## Development
 
