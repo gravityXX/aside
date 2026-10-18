@@ -52,7 +52,7 @@ const HELP = [
   '/aside stop - stop after the current step',
   '',
   '/aside TEXT - queue TEXT, as "+ TEXT" would ("/aside + run 3" for text that looks like a command)',
-  '/aside pop [N] - put the last entry (or entry N) in the prompt box, ready to send',
+  '/aside pop [N] - put the newest entry (or entry N) in the prompt box, ready to send',
   '/aside edit N - put entry N in the prompt box to rework it and queue it again',
   '/aside move N M - move entry N to place M     /aside remove N - remove entry N',
   '/aside clear - empty the queue                /aside undo - bring back what plan, run or clear took',
@@ -62,6 +62,11 @@ const HELP = [
 // The plan tool's full name as the engine registered it: its prefix comes from where the
 // plugin was loaded from (a marketplace install, a --plugin-dir folder), so it is never assumed.
 let planTool = 'mcp__aside__plan'
+
+// Which entry runs first, from the order setting. The store keeps the oldest first either way,
+// so the setting can change at any time; only what /aside shows, numbers and runs follows it.
+let order: 'oldest' | 'newest' = 'oldest'
+const inOrder = (list: readonly Idea[]): Idea[] => (order === 'newest' ? [...list].reverse() : [...list])
 
 // What Tab offers after "/aside ", with the dim line beside each.
 const SUBCOMMANDS: readonly (readonly [string, string])[] = [
@@ -436,8 +441,14 @@ const enqueue = async (
     })
   }
 
-  const all = await loadIdeas($, queue)
-  all.splice(isRework ? Math.min(editing!.index, all.length) : all.length, 0, ...added)
+  const stored = await loadIdeas($, queue)
+  let all = [...stored, ...added]
+  if (isRework) {
+    // Back to its place as /aside showed it.
+    const shown = inOrder(stored)
+    shown.splice(Math.min(editing!.index, shown.length), 0, ...added)
+    all = inOrder(shown)
+  }
   await saveIdeas($, queue, all)
   await refresh($)
   if (images > 0) notes.push('the image was not kept')
@@ -461,7 +472,7 @@ const handOver = async ($: Engine, mode: 'plan' | 'send'): Promise<string> => {
   // Tags already handed over stay in their files until a step removes them; they are
   // not handed over again.
   const inFiles = await fileTags($, true)
-  const all = [...list, ...inFiles]
+  const all = [...inOrder(list), ...inFiles]
   if (all.length === 0) {
     return 'The queue is empty. Start a message with "+" to add an idea, or "+?" to comment on a copied fragment.'
   }
@@ -595,6 +606,7 @@ export const register: Register = (on, options) => {
   // What happens to the queue when Claude finishes a turn: wait for /aside (the default),
   // or hand it over at once as a plan or as it is.
   const whenTurnEnds = options.whenTurnEnds === 'plan' || options.whenTurnEnds === 'send' ? options.whenTurnEnds : 'wait'
+  order = options.order === 'newest' ? 'newest' : 'oldest'
   // Module variables start over on a reload; nothing in them has to last.
   let lastTask: string | undefined
   let nudged = 0
@@ -773,7 +785,7 @@ export const register: Register = (on, options) => {
     const items =
       verb === 'run'
         ? (await loadPlan($, planKey)).steps.map((step, i) => ({ n: i + 1, label: step.title, isDone: step.isDone === true }))
-        : (await loadIdeas($, queue)).map((idea, i) => ({ n: i + 1, label: idea.kind === 'idea' ? idea.text : `${KINDS[idea.kind].label}: ${idea.text}`, isDone: false }))
+        : inOrder(await loadIdeas($, queue)).map((idea, i) => ({ n: i + 1, label: idea.kind === 'idea' ? idea.text : `${KINDS[idea.kind].label}: ${idea.text}`, isDone: false }))
     const rows = items
       .filter(item => !item.isDone && String(item.n).startsWith(digits!))
       .map(item => ({ text: String(item.n), description: snippet(item.label, 60) }))
@@ -861,7 +873,9 @@ export const register: Register = (on, options) => {
 
   on('command.run', { command: 'aside' }, async ($, e) => {
     const { root, queue, taken, plan: planKey, handed, editing } = await keys($)
-    const list = await loadIdeas($, queue)
+    const stored = await loadIdeas($, queue)
+    // As /aside shows it: every number below is a place in this list.
+    const list = inOrder(stored)
     const [verb = '', ...rest] = e.args.trim().split(/\s+/)
     // A command only when the words after it have its exact shape; anything else is text to
     // queue, so "/aside send a summary to the team" queues that sentence.
@@ -923,7 +937,7 @@ export const register: Register = (on, options) => {
         return { text: 'The prompt box cannot take it now; the entry stays in the queue.' }
       }
       list.splice(n - 1, 1)
-      await saveIdeas($, queue, list)
+      await saveIdeas($, queue, inOrder(list))
       await $.store.set(editing, { index: n - 1, idea: entry })
       await refresh($)
 
@@ -938,17 +952,17 @@ export const register: Register = (on, options) => {
       }
       const [entry] = list.splice(from - 1, 1)
       list.splice(to - 1, 0, entry!)
-      await saveIdeas($, queue, list)
+      await saveIdeas($, queue, inOrder(list))
 
       return { text: `${summary(list)}\n\n${listed(list, root)}` }
     }
 
     if (word === 'pop') {
-      // The last entry, or entry N: taken out of the queue into the box, ready to send.
+      // The newest entry, or entry N: taken out of the queue into the box, ready to send.
       if (list.length === 0) {
         return { text: 'The queue is empty.' }
       }
-      const n = rest[0] === undefined ? list.length : Number(rest[0])
+      const n = rest[0] !== undefined ? Number(rest[0]) : order === 'newest' ? 1 : list.length
       if (n < 1 || n > list.length) {
         return { text: `Give a number from 1 to ${list.length}, as /aside shows them.` }
       }
@@ -959,7 +973,7 @@ export const register: Register = (on, options) => {
         return { text: 'The prompt box cannot take it now; the entry stays in the queue.' }
       }
       list.splice(n - 1, 1)
-      await saveIdeas($, queue, list)
+      await saveIdeas($, queue, inOrder(list))
       await refresh($)
 
       return { text: `In the prompt box, ready to send: ${snippet(last.text, 60)}` }
@@ -969,7 +983,7 @@ export const register: Register = (on, options) => {
       if (list.length === 0) {
         return { text: 'The queue is already empty.' }
       }
-      await saveIdeas($, taken, list)
+      await saveIdeas($, taken, stored)
       await saveIdeas($, queue, [])
       await refresh($)
 
@@ -985,7 +999,7 @@ export const register: Register = (on, options) => {
         return { text: `Give a number from 1 to ${list.length}, as /aside list shows them.` }
       }
       const [gone] = list.splice(n - 1, 1)
-      await saveIdeas($, queue, list)
+      await saveIdeas($, queue, inOrder(list))
       await refresh($)
 
       return { text: `Removed: ${gone!.text}` }
@@ -1000,7 +1014,7 @@ export const register: Register = (on, options) => {
       if (back.length === 0) {
         return { text: 'Nothing to bring back.' }
       }
-      await saveIdeas($, queue, [...back, ...list])
+      await saveIdeas($, queue, [...back, ...stored])
       await saveIdeas($, taken, [])
       const now = await refresh($)
 
@@ -1063,7 +1077,7 @@ export const register: Register = (on, options) => {
       }
       const steps = all.map(idea => ({ title: snippet(idea.text || where(idea, root) || KINDS[idea.kind].label, 50), prompt: entryPrompt(idea, root) }))
       if (list.length > 0) {
-        await saveIdeas($, taken, list)
+        await saveIdeas($, taken, stored)
         await saveIdeas($, queue, [])
       }
       const before = ((await $.store.get(handed)) as string[] | undefined) ?? []

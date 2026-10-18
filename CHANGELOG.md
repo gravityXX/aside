@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.0 - 2026-10-18
+
+- A new setting, `order`: `oldest` (default) keeps the queue first in, first out; `newest` makes it last in, first out. `/aside` lists, numbers and runs the queue in that order, and `pop` alone always takes the newest entry. The setting can change at any time without losing the order you set with `move`.
+
 ## 0.7.1 - 2026-10-18
 
 - `/aside` lists the queue in columns: a count of what waits, then number, kind and text, with a comment's file, line and quote on the line below. The plan and the file tags read the same way.

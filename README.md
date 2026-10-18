@@ -60,7 +60,7 @@ Requires <kbd>Claude Code</kbd> 2.1.301 or newer. The plugin API <kbd>aside</kbd
   </tr>
   <tr>
     <td><code>/aside</code></td><td>Show the queue and the plan</td>
-    <td><code>/aside pop [N]</code></td><td>Put the last one (or N) in the box</td>
+    <td><code>/aside pop [N]</code></td><td>Put the newest one (or N) in the box</td>
   </tr>
   <tr>
     <td><code>/aside plan</code></td><td>Turn the queue into steps</td>
@@ -123,7 +123,7 @@ Requires <kbd>Claude Code</kbd> 2.1.301 or newer. The plugin API <kbd>aside</kbd
 
 <br>
 
-**One setting.** `/config` has `whenTurnEnds`: what happens to the queue when Claude finishes a turn. `wait` (default) keeps it until you run `/aside plan` or `/aside run`, `plan` turns it into a plan at once, `send` sends it to be done at once. Neither hands it over while a saved plan still has steps to do.
+**Settings.** `/config` has two. `whenTurnEnds`: what happens to the queue when Claude finishes a turn. `wait` (default) keeps it until you run `/aside plan` or `/aside run`, `plan` turns it into a plan at once, `send` sends it to be done at once. Neither hands it over while a saved plan still has steps to do. `order`: which entry comes first in the list and in a run, `oldest` (default, first in, first out) or `newest` (last in, first out).
 
 **Clipboard.** Read with `powershell.exe` on WSL, `pbpaste` on macOS, `wl-paste`, `xclip` or `xsel` on Linux and `powershell` on Windows. Only for a comment that names no line or heading, never for a plain `+` idea.
 

@@ -1,6 +1,6 @@
 {
   "name": "aside",
-  "version": "0.7.1",
+  "version": "0.8.0",
   "description": "A prompt queue for Claude Code. Queue prompts, ideas and comments while Claude works, without interrupting it, and send them once it finishes or whenever you are ready.",
   "author": {
     "name": "gravityXX",
@@ -32,6 +32,16 @@
         "wait",
         "plan",
         "send"
+      ]
+    },
+    "order": {
+      "type": "string",
+      "title": "Which entry comes first",
+      "description": "oldest: first in, first out. newest: last in, first out. /aside lists, numbers and runs the queue in this order.",
+      "default": "oldest",
+      "options": [
+        "oldest",
+        "newest"
       ]
     }
   }
