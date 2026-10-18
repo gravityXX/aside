@@ -58,8 +58,45 @@ export async function currentListing($: Engine, ctx: Context): Promise<ListingSe
   ]
 }
 
-export async function showListing($: Engine, ctx: Context) {
-  return listingText(await currentListing($, ctx))
+// The pane the band's list button opens; register.tsx names the same id in its matcher.
+export const LIST_PANE = 'aside'
+
+async function isListPaneOpen($: Engine): Promise<boolean> {
+  return (await $.ui.panes()).some(pane => pane.id === LIST_PANE)
+}
+
+// Opens the list pane unless it is open already; false when the terminal has no room for it.
+async function openListPane($: Engine): Promise<boolean> {
+  if (await isListPaneOpen($)) {
+    return true
+  }
+
+  return (await $.ui.open({ id: LIST_PANE, title: 'aside', focus: true, closeOnEscape: true })).isPlaced
+}
+
+// Opens the list pane, or closes it when it is open: the band's list button.
+export async function toggleListPane($: Engine) {
+  if (await isListPaneOpen($)) {
+    await $.ui.close({ id: LIST_PANE })
+    return
+  }
+  if (!(await openListPane($))) $.ui.toast('/aside shows the list')
+}
+
+// /aside alone. While Claude works, what a command prints shows only once the turn ends, so
+// the list opens in the pane, which shows at once and keeps up to date; where the terminal has
+// no room for it, the list goes into the transcript as a line, which shows at once too.
+export async function showListing($: Engine, ctx: Context): Promise<string> {
+  const text = listingText(await currentListing($, ctx))
+  if (!ctx.session.isRunning) {
+    return text
+  }
+  if (await openListPane($)) {
+    return 'Opened the list in the pane while Claude was working.'
+  }
+  $.ui.log(text)
+
+  return 'Wrote the list above while Claude was working.'
 }
 
 // The queue as /aside shows it: every number a command takes is a place in this list.

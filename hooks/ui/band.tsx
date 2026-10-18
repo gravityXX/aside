@@ -3,8 +3,8 @@ import type { EngineInterface as Engine, MatchedHook } from 'claude-code'
 import type { Context } from '../context'
 import { formatCount } from '../core/text'
 import { runPlan, stopPlan } from '../features/plan'
+import { toggleListPane } from '../features/queue'
 import { readBand } from '../io/store'
-import { toggleListPane } from './pane'
 
 type Action = 'stop' | 'run plan'
 
