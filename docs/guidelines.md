@@ -80,6 +80,7 @@ The plugin runs on the Claude Code plugin API: hooks `($, e, next)` added with `
 12. Handlers outside `register.tsx` take their types from the engine's: `type Submit = Parameters<Hook<'prompt.submit'>>`, then `e: Submit[1]` and `next: Submit[2]`; `MatchedHook<...>` for a matched hook, `CatchHandler<...>` for `.catch`.
 13. Claude Code writes the types to `.claude-plugin/types/` when a session loads the plugin. Load it once after a Claude Code update before type-checking.
 14. `<>` draws a column Box around its children, so a fragment inside a row starts a new line. Elements that stand side by side go into the row directly, each one conditional on its own.
+15. A pane opens at any width only while the person's press, command or prompt that asked for it lasts. A button that opens a pane returns its promise from `onPress` rather than voiding it, or the open comes after the press has ended and waits undrawn below 144 columns (seen on a 125-column terminal).
 
 ## 4. TypeScript
 
@@ -96,7 +97,7 @@ The plugin runs on the Claude Code plugin API: hooks `($, e, next)` added with `
 
 ### Async and errors
 
-9. Every promise is awaited, returned or handed to `chainWrite`. A deliberate fire-and-forget is written `void f()`, as the buttons do.
+9. Every promise is awaited, returned or handed to `chainWrite`. A deliberate fire-and-forget is written `void f()`, as most buttons do; one that opens a pane returns it (3.15).
 10. An engine call that may fail is caught where it is made and turned into `undefined`, `false` or a sentence for the person (`tryReadFile`, `.catch(() => undefined)`). No error reaches the person as a stack.
 11. Time comes from `$.clock` (`now`, `after`), never `Date` or `setTimeout`, so tests can drive it.
 

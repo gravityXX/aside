@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- The band's `list` button opens the list pane on a terminal narrower than 144 columns too, during a task or not. It opened only on a wider one, since the pane was opened after the press had ended and the engine took the open for the plugin's own. A pane already open but out of sight is brought back rather than closed, and a toast says why when the pane cannot be shown.
+- Toasts and transcript lines no longer repeat "aside" after the plugin's own name.
+
 ## 0.18.1 - 2026-10-18
 
 - On Linux, a clipboard reader that runs but fails, such as `wl-paste` with no Wayland session, no longer leaves comments without the clipboard: aside tries the next reader, and asks the first one again next time.

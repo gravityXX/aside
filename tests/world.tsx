@@ -47,6 +47,8 @@ export type Machine = {
   selection?: string
   // The terminal is too narrow to seat a pane.
   isNarrow?: boolean
+  // The open panes are out of sight, tabs behind another pane.
+  isPaneHidden?: boolean
   // The next prompt the plugin submits is dropped beneath it, as a settings hook would.
   isDropping?: boolean
   // The small model's reply to each note it is asked to tidy; a note with none fails.
@@ -119,7 +121,7 @@ export const world = ($: Engine, on: On, given: Partial<Machine> = {}) => {
     if (panes.includes(e.id)) panes.splice(panes.indexOf(e.id), 1)
     return { value: undefined }
   })
-  on('ui.panes', () => ({ value: panes.map(id => ({ id, title: id, isShown: true, isFocused: false, isPlaced: true })) }) as never)
+  on('ui.panes', () => ({ value: panes.map(id => ({ id, title: id, isShown: !w.isPaneHidden, isFocused: false, isPlaced: true })) }) as never)
 
   on('prompt.submit', ($e, e) => {
     if (w.isDropping && e.origin.kind === 'plugin') {

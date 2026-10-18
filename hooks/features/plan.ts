@@ -40,7 +40,7 @@ function submitLater($: Engine, compose: () => Promise<string | undefined>, onFa
       why = describeError(error)
     }
     if (why !== undefined) {
-      await onFail(why).catch(error => $.ui.toast(`aside could not send its prompt (${why}), nor set things back: ${describeError(error)}`))
+      await onFail(why).catch(error => $.ui.toast(`Could not send its prompt (${why}), nor set things back: ${describeError(error)}`))
     }
   })
 }
@@ -576,7 +576,7 @@ export function waitToolFailed($: Engine, e: PlanToolFailed[1], next: PlanToolFa
 type TurnStartFailed = Parameters<CatchHandler<Hook<'turn.start'>>>
 
 export function turnStartFailed($: Engine, e: TurnStartFailed[1], next: TurnStartFailed[2]) {
-  $.ui.toast(`aside could not note the start of this turn (${describeFailure(next.error)}); a running plan may not go on by itself`)
+  $.ui.toast(`Could not note the start of this turn (${describeFailure(next.error)}); a running plan may not go on by itself`)
 
   return next(e)
 }
@@ -585,7 +585,7 @@ type TurnEndFailed = Parameters<CatchHandler<Hook<'turn.complete'>>>
 
 export async function turnEndFailed($: Engine, e: TurnEndFailed[1], next: TurnEndFailed[2]) {
   const done = await next(e)
-  $.ui.toast(`aside could not finish its work at the end of this turn (${describeFailure(next.error)}); /aside shows where the queue and the plan stand`)
+  $.ui.toast(`Could not finish its work at the end of this turn (${describeFailure(next.error)}); /aside shows where the queue and the plan stand`)
 
   return done
 }

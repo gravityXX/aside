@@ -73,7 +73,7 @@ describe('the band above the prompt', () => {
     w.isStoreFull = true
 
     await pressBand('action')
-    expect(toasts.at(-1)).toBe('aside could not run the plan (the store is full).')
+    expect(toasts.at(-1)).toBe('Could not run the plan (the store is full).')
   })
 
   test('its list button opens the list pane, and closes it on a second press', async ($, on) => {
@@ -84,6 +84,26 @@ describe('the band above the prompt', () => {
     expect(panes).toEqual(['aside'])
     await pressBand()
     expect(panes).toEqual([])
+  })
+
+  test('its list button brings the pane back when it is open out of sight, rather than closing it', async ($, on) => {
+    const { w, panes, toasts, type, pressBand } = world($, on)
+    await type('+ x')
+    await pressBand()
+    w.isPaneHidden = true
+
+    await pressBand()
+    expect(panes).toEqual(['aside'])
+    expect(toasts).toEqual([])
+  })
+
+  test('when the terminal cannot seat the pane, its list button says why', async ($, on) => {
+    const { panes, toasts, type, pressBand } = world($, on, { isNarrow: true })
+    await type('+ x')
+
+    await pressBand()
+    expect(panes).toEqual([])
+    expect(toasts).toEqual(['Could not show the list pane (the terminal is too narrow); /aside shows the list'])
   })
 
   test('its run plan and stop buttons run and stop the plan by themselves', async ($, on) => {
@@ -125,7 +145,7 @@ describe('the list pane', () => {
     await ui.press({ key: 'plan' })
     await ui.unmount()
     await idle()
-    expect(toasts.at(-1)).toBe('aside could not organize the queue (the store is full).')
+    expect(toasts.at(-1)).toBe('Could not organize the queue (the store is full).')
     expect(panes).toEqual([])
     expect(sent).toEqual([])
   })
