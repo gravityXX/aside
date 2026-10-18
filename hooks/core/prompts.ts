@@ -10,6 +10,11 @@ export const STEP_MARKER = 'sent by the aside plugin'
 
 export const isOwnPrompt = (text: string) => text.includes(STEP_MARKER) || text.includes(COMPOSED_BY)
 
+// The line that makes a prompt from the queue a planning prompt, and not one to work through now.
+const ORGANIZE_ONLY = 'Organize all of it, and only organize it'
+
+export const isPlanningPrompt = (text: string) => text.includes(ORGANIZE_ONLY) && text.includes(COMPOSED_BY)
+
 const describeWorkContext = (entry: Entry) => {
   const parts = [entry.task ? `while you worked on "${shortenText(entry.task, 70)}"` : '', entry.branch ? `branch ${entry.branch}` : '']
 
@@ -60,32 +65,39 @@ const describeQueue = (entries: readonly Entry[], root: string): string[] => {
   return sections
 }
 
-// The queue handed over to be organized into steps, saved through the plan tool `tool`.
+// The queue handed over to be organized into steps, saved through the plan tool `tool`. The
+// steps still to do come whole and numbered S1, S2, apart from the items, so Claude keeps
+// their prompts as they are and never takes a step for an item.
 export const planningPrompt = (entries: readonly Entry[], root: string, pending: readonly Step[], tool: string): string => {
   const sections = describeQueue(entries, root)
   if (pending.length > 0) {
     sections.push(
       [
-        'The saved plan still has these steps to do. Keep them: merge them with the new items into one plan.',
-        ...pending.map((step, i) => `${i + 1}. ${step.title}: ${shortenText(step.prompt, 300)}`),
+        'The saved plan still has these steps to do. Keep them: merge them with the new items into one plan, and keep the prompt of each step word for word unless you merge an item into it. The steps already done stay at the top of the plan by themselves, so save only the steps to do.',
+        ...pending.map((step, i) => `S${i + 1}. ${step.title}\n   ${step.prompt.replace(/\n/g, '\n   ')}`),
       ].join('\n'),
     )
   }
   sections.push(
     [
-      `Organize all of it, and only organize it: do none of it and answer none of it yet. Use no tool but the ${tool} tool, so read nothing, run nothing and change nothing.`,
+      `${ORGANIZE_ONLY}: do none of it and answer none of it yet. Use no tool but the ${tool} tool, so read nothing, run nothing and change nothing.`,
       '- merge related items into one step and keep unrelated ones apart; a question is an item like any other, answered when its step runs;',
       '- order the steps so whatever the rest depends on comes first, and say why in a few words;',
       '- for each step, write a prompt I could send you as it is; it must stand on its own, file paths included;',
-      '- list items that look done, contradictory or unclear separately, each with a question;',
+      '- leave items that look done, contradictory or unclear out of the steps: pass each to the tool as unclear, with its number and your question, and they go back to my queue;',
       '- when a step handles a comment that is a <!-- --> tag in a file, the step removes that tag.',
-      `Then save the steps with the ${tool} tool and stop: I run them with /aside run (all, in order) or /aside run N.`,
+      `Then save the steps with the ${tool} tool and stop: I see the saved plan in a frame and run it with /aside run (all, in order) or /aside run N.`,
     ].join('\n'),
   )
   sections.push(COMPOSED_MARKER)
 
   return sections.join('\n\n')
 }
+
+// What Claude reads under the plan it saved, which the user sees drawn in a frame.
+export const PLAN_SAVED_NOTE =
+  'The user sees this plan drawn in a frame, so do not list its steps again. Say in a line or two why they come in this order, ' +
+  'and ask your question about each item left out, if any. /aside run runs the steps in order; /aside run N runs one.'
 
 // The queue handed over as it is, to be worked through now, with no plan in between.
 export const sendPrompt = (entries: readonly Entry[], root: string): string =>

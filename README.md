@@ -66,7 +66,7 @@ Requires <kbd>Claude Code</kbd> 2.1.301 or newer. The plugin API <kbd>aside</kbd
     <td><code>/aside pop [N]</code></td><td>Put the newest one (or N) in the box</td>
   </tr>
   <tr>
-    <td><code>/aside plan</code></td><td>Turn the queue into steps</td>
+    <td><code>/aside plan</code></td><td>Turn the queue into steps, merged with the steps still to do; what Claude finds unclear stays in the queue</td>
     <td><code>/aside edit N</code></td><td>Rework one and queue it again</td>
   </tr>
   <tr>

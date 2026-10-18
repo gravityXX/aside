@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- The plan Claude saves shows in the transcript in the frame `/aside` draws, with each step's state in colour, in place of the plan tool's raw input. Claude is asked not to list the steps again in its reply.
+- `/aside plan` with steps still to do gives Claude those steps whole, where it used to cut each to 300 characters, so a long step no longer loses its end when the queue is planned again. The steps already done stay at the top of the new plan instead of disappearing.
+- Items Claude leaves out of the plan because they look done, contradictory or unclear go back to the queue, and the frame lists them with Claude's question.
+- A planning turn that ends with no plan saved, answered or interrupted, puts the queue back. Before, the entries were gone, with nothing for `/aside undo` to bring back.
+- `/aside plan` and `/aside run all` wait while a step of the plan runs, as the pane's `plan` button already did, so no prompt lands in the middle of the step.
+
 ## 0.15.0 - 2026-10-18
 
 - `/aside` typed while Claude is working opens the list in the pane, which shows at once and keeps up to date. Before, the list only showed once Claude finished, since Claude Code prints a command's output after the turn. Where the terminal has no room for the pane, the list goes into the transcript right away.

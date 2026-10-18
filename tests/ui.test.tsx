@@ -133,3 +133,61 @@ describe('the /aside output', () => {
     await ui.unmount()
   })
 })
+
+describe('the plan tool in the transcript', () => {
+  const row = (output: unknown, more: object = {}) => ({
+    tool_use_id: 'u1',
+    tool: 'mcp__aside__plan',
+    input: {},
+    isRunning: false,
+    isErrored: false,
+    isInterrupted: false,
+    output,
+    ...more,
+  })
+
+  test('the row of a saved plan is drawn in the frame /aside draws, and nothing is printed under it', async ($, on) => {
+    const { sent, type, aside, savePlan, startTurn, idle, mount } = world($, on)
+    await type('+ a\n+ b')
+    await aside('plan')
+    await idle()
+    await startTurn(sent.at(-1)!, 'p1')
+    const { result } = await savePlan([{ title: 'A', prompt: 'Do a.' }], [{ item: 2, question: 'What is b for?' }])
+
+    const ui = await mount('ToolUse', row(result))
+    expect(await ui.drawn()).toMatchObject({ type: 'Box', props: { borderStyle: 'round' } })
+    expect((await ui.find({ type: 'Text', text: 'Plan: 1 of 1 step to do (/aside run)' }))?.props.bold).toBe(true)
+    expect((await ui.find({ type: 'Text', text: /^to do$/ }))?.text).toBe('to do')
+    expect((await ui.find({ type: 'Text', text: /^idea$/ }))?.props.color).toBe('suggestion')
+    expect((await ui.find({ type: 'Text', text: '↳ What is b for?' }))?.props.dimColor).toBe(true)
+    await ui.unmount()
+
+    const under = await mount('ToolResult', { tool_use_id: 'u1', tool: 'mcp__aside__plan', output: result, isErrored: false })
+    expect(await under.drawn()).toMatchObject({ type: 'Box' })
+    expect(await under.find({ type: 'Text' })).toBeUndefined()
+    await under.unmount()
+  })
+
+  test('a plan tool call that runs or was refused, and any other tool, is drawn as the engine draws it', async ($, on) => {
+    // The engine's own drawing, which the test kit does not make.
+    on('ui.render', { component: 'ToolUse' }, () => ({ type: 'Text', props: {}, children: ['as drawn'] }) as never)
+    on('ui.render', { component: 'ToolResult' }, () => ({ type: 'Text', props: {}, children: ['as drawn'] }) as never)
+    const { savePlan, mount } = world($, on)
+    const { result } = await savePlan([{ title: 'A', prompt: 'Do a.' }])
+
+    for (const props of [
+      row(undefined, { isRunning: true }),
+      row('steps must be a non-empty list', { isErrored: true }),
+      row(result, { isInterrupted: true }),
+      row(result, { tool: 'Bash' }),
+      row('Saved 3 steps. Tell the user: /aside run runs them all in order.'),
+    ]) {
+      const ui = await mount('ToolUse', props)
+      expect(await ui.drawn()).toMatchObject({ type: 'Text', children: ['as drawn'] })
+      await ui.unmount()
+    }
+    const under = await mount('ToolResult', { tool_use_id: 'u1', tool: 'Bash', output: result, isErrored: false })
+    expect(await under.drawn()).toMatchObject({ type: 'Text', children: ['as drawn'] })
+    await under.unmount()
+  })
+})
