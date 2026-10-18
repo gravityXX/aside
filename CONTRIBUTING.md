@@ -19,5 +19,6 @@ For a type check, start a session with the plugin loaded once, so Claude Code wr
 - `hooks/queue.ts` - the pure logic: parsing `+` messages, finding a copied fragment in a file, the prompts.
 - `hooks/register.tsx` - the hooks: capture, the `/aside` command, plan and run, the band above the prompt.
 - `tests/queue.test.tsx` - the tests, one `describe` per area.
+- `assets/make_svgs.py` - draws the step pictures in the README, light and dark: `python3 assets/make_svgs.py`.
 
 Note a change under a new version in `CHANGELOG.md` and bump the version in `.claude-plugin/plugin.json`.

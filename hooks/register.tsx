@@ -7,6 +7,7 @@ import {
   KINDS,
   capture,
   commentsOf,
+  entryLines,
   headingLine,
   ideasOf,
   listed,
@@ -19,6 +20,7 @@ import {
   send as sendPrompt,
   snippet,
   stepPrompt,
+  summary,
   tags,
   where,
 } from './queue'
@@ -771,7 +773,7 @@ export const register: Register = (on, options) => {
     const items =
       verb === 'run'
         ? (await loadPlan($, planKey)).steps.map((step, i) => ({ n: i + 1, label: step.title, isDone: step.isDone === true }))
-        : (await loadIdeas($, queue)).map((idea, i) => ({ n: i + 1, label: listed([idea], root).replace(/^\d+\. /, ''), isDone: false }))
+        : (await loadIdeas($, queue)).map((idea, i) => ({ n: i + 1, label: idea.kind === 'idea' ? idea.text : `${KINDS[idea.kind].label}: ${idea.text}`, isDone: false }))
     const rows = items
       .filter(item => !item.isDone && String(item.n).startsWith(digits!))
       .map(item => ({ text: String(item.n), description: snippet(item.label, 60) }))
@@ -891,16 +893,18 @@ export const register: Register = (on, options) => {
     if (word === '' || word === 'list' || word === 'ls') {
       const plan = await loadPlan($, planKey)
       const steps = plan.steps.map((step, i) => {
-        const state = plan.active?.step === i ? 'running' : step.isDone ? 'done' : 'todo'
+        const state = plan.active?.step === i ? 'running' : step.isDone ? 'done' : 'to do'
 
-        return `${i + 1}. [${state}] ${step.title}`
+        return `${String(i + 1).padStart(3)}  ${state.padEnd(10)}  ${step.title}`
       })
-      const planned = plan.steps.some(step => !step.isDone) ? `\n\nPlan (/aside run):\n${steps.join('\n')}` : ''
+      const left = plan.steps.filter(step => !step.isDone).length
+      const total = plan.steps.length
+      const planned = left > 0 ? `\n\nPlan: ${left} of ${total} ${total === 1 ? 'step' : 'steps'} to do (/aside run)\n\n${steps.join('\n')}` : ''
       const fresh = new Set((await fileTags($, true)).map(tagKey))
       const inFiles = await fileTags($)
-      const own = list.length === 0 ? 'The queue is empty.' : listed(list, root)
-      const shown = inFiles.map(tag => listed([tag], root).replace(/^\d+\. /, fresh.has(tagKey(tag)) ? '- ' : '- (handed over) '))
-      const tagged = inFiles.length === 0 ? '' : `\n\nTags in files:\n${shown.join('\n')}`
+      const own = list.length === 0 ? 'The queue is empty.' : `${summary(list)}\n\n${listed(list, root)}`
+      const shown = inFiles.map(tag => entryLines(tag, root, '\u00b7', fresh.has(tagKey(tag)) ? '' : '(handed over)'))
+      const tagged = inFiles.length === 0 ? '' : `\n\nTags in files\n\n${shown.join('\n')}`
 
       return { text: `${own}${tagged}${planned}` }
     }
@@ -936,7 +940,7 @@ export const register: Register = (on, options) => {
       list.splice(to - 1, 0, entry!)
       await saveIdeas($, queue, list)
 
-      return { text: listed(list, root) }
+      return { text: `${summary(list)}\n\n${listed(list, root)}` }
     }
 
     if (word === 'pop') {

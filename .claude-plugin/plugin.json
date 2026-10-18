@@ -1,7 +1,7 @@
 {
   "name": "aside",
-  "version": "0.7.0",
-  "description": "A prompt queue for Claude Code. Note ideas and comments while Claude works, without interrupting it, and hand them over when you are ready.",
+  "version": "0.7.1",
+  "description": "A prompt queue for Claude Code. Queue prompts, ideas and comments while Claude works, without interrupting it, and send them once it finishes or whenever you are ready.",
   "author": {
     "name": "gravityXX",
     "url": "https://github.com/gravityXX"

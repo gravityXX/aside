@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" width="880" height="203" viewBox="0 0 880 203" role="img" aria-label="Copy a sentence from a markdown preview with Ctrl+C, then type +? and a question in Claude Code: the comment is queued, pinned to docs/report.md line 42 with the copied sentence. The marks: + idea, +? question, +! change, +- drop, ++ dig deeper.">
+  <style>
+    .m { font: 400 13.5px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fill: #f0f6fc; }
+    .f { fill: #656c76; }
+    .a { fill: #d4a72c; font-weight: 700; }
+    .k { fill: #3fb950; }
+    .t { font: 600 12.5px -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #9198a1; }
+    .s { font: 400 13px -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #9198a1; }
+    .doc { font: 400 15px -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #656c76; }
+    .sel { font: 400 15px -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #f0f6fc; }
+    .key { font: 700 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fill: #f0f6fc; }
+  </style>
+  <rect x="0.5" y="0.5" width="399" height="149" rx="10" fill="#151b23" stroke="#3d444d"/>
+  <path d="M0.5 32 V10.5 a10 10 0 0 1 10 -10 H389.5 a10 10 0 0 1 10 10 V32 Z" fill="#1c232c"/>
+  <line x1="0.5" y1="32" x2="399.5" y2="32" stroke="#3d444d"/>
+  <text x="200.0" y="21" class="t" text-anchor="middle">report.md · preview</text>
+  <text x="24" y="66" class="doc">Sales held steady across regions.</text>
+  <rect x="18" y="80" width="214" height="28" rx="4" fill="#2b2100" stroke="#bb8009"/>
+  <text x="24" y="99" class="sel">Revenue grew by 12% in Q3.</text>
+  <rect x="312" y="81" width="64" height="26" rx="5" fill="#0d1117" stroke="#3d444d" stroke-width="1.5"/>
+  <rect x="313" y="102" width="62" height="4" rx="2" fill="#3d444d"/>
+  <text x="344" y="98" class="key" text-anchor="middle">Ctrl+C</text>
+  <text x="24" y="132" class="doc">Costs stayed flat.</text>
+  <path d="M416 94 H464" stroke="#656c76" stroke-width="2" fill="none"/>
+  <path d="M456 87 L465 94 L456 101" stroke="#656c76" stroke-width="2" fill="none" stroke-linejoin="round"/>
+  <rect x="480.5" y="0.5" width="399" height="149" rx="10" fill="#151b23" stroke="#3d444d"/>
+  <path d="M480.5 32 V10.5 a10 10 0 0 1 10 -10 H869.5 a10 10 0 0 1 10 10 V32 Z" fill="#1c232c"/>
+  <line x1="480.5" y1="32" x2="879.5" y2="32" stroke="#3d444d"/>
+  <text x="680.0" y="21" class="t" text-anchor="middle">Claude Code</text>
+  <text x="504" y="66" class="m"><tspan class="f">❯ </tspan><tspan class="a">+?</tspan> where is this from</text>
+  <text x="504" y="99" class="m k">queued ? docs/report.md:42</text>
+  <text x="504" y="123" class="m k">"Revenue grew by 12% in Q3."</text>
+  <rect x="0.5" y="172" width="159" height="30" rx="15" fill="#151b23" stroke="#3d444d"/>
+  <text x="80.0" y="192" text-anchor="middle"><tspan class="m a">+</tspan><tspan class="s"> idea</tspan></text>
+  <rect x="180.5" y="172" width="159" height="30" rx="15" fill="#151b23" stroke="#3d444d"/>
+  <text x="260.0" y="192" text-anchor="middle"><tspan class="m a">+?</tspan><tspan class="s"> question</tspan></text>
+  <rect x="360.5" y="172" width="159" height="30" rx="15" fill="#151b23" stroke="#3d444d"/>
+  <text x="440.0" y="192" text-anchor="middle"><tspan class="m a">+!</tspan><tspan class="s"> change</tspan></text>
+  <rect x="540.5" y="172" width="159" height="30" rx="15" fill="#151b23" stroke="#3d444d"/>
+  <text x="620.0" y="192" text-anchor="middle"><tspan class="m a">+-</tspan><tspan class="s"> drop</tspan></text>
+  <rect x="720.5" y="172" width="159" height="30" rx="15" fill="#151b23" stroke="#3d444d"/>
+  <text x="800.0" y="192" text-anchor="middle"><tspan class="m a">++</tspan><tspan class="s"> dig deeper</tspan></text>
+</svg>
