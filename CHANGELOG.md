@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.15.0 - 2026-10-18
 
 - `/aside` typed while Claude is working opens the list in the pane, which shows at once and keeps up to date. Before, the list only showed once Claude finished, since Claude Code prints a command's output after the turn. Where the terminal has no room for the pane, the list goes into the transcript right away.
 
