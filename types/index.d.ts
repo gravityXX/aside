@@ -1,9 +1,9 @@
 // What a queued entry is: a plain idea, or a comment on something the agents wrote.
 export type Kind = 'idea' | 'question' | 'change' | 'drop' | 'deeper'
 
-export type Idea = {
+export type Entry = {
   text: string
-  // The line as typed, "+" included: what /aside pop puts back in the prompt box.
+  // The line as typed, "+" included: what /aside edit puts back in the prompt box.
   raw?: string
   at: number
   kind: Kind
@@ -16,7 +16,7 @@ export type Idea = {
   from?: 'terminal' | 'clipboard'
   // What the last tool printed when the comment came (an error first), for context.
   output?: string
-  // The task that was running, and the branch, when the idea came.
+  // The task that was running, and the branch, when the entry came.
   task?: string
   branch?: string
   // Read from a <!-- ? --> tag in a file, not typed at the prompt.

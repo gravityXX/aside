@@ -1,0 +1,134 @@
+import { atom, read, update } from 'claude-code'
+import type { EngineInterface as Engine } from 'claude-code'
+
+import type { Band, Entry, Plan } from '../../types'
+
+const EMPTY_BAND: Band = { ideas: 0, comments: 0, tags: 0, steps: 0, done: 0 }
+
+// What the line above the prompt shows, kept up to date by refreshBand.
+const band = atom({ plugin: 'aside', key: 'band' } as const, EMPTY_BAND)
+
+// The markdown files /aside reads tags from, newest last: those written or edited in this
+// session, agents' included, and those /aside scan added.
+const trackedFiles = atom({ plugin: 'aside', key: 'files' } as const, [])
+
+// The atoms are read here, where they are made: the engine reads only an atom of the reading file.
+// A drawing that reads one through these is drawn again when it changes.
+export function readBand($: Engine): Promise<Band> {
+  return read($, band)
+}
+
+export function readTrackedFiles($: Engine): Promise<string[]> {
+  return read($, trackedFiles)
+}
+
+export function trackFile($: Engine, path: string) {
+  return update($, trackedFiles, list => [...list.filter(file => file !== path), path].slice(-100))
+}
+
+// Everything belongs to the project: each root keeps its own queue and plan.
+export type Keys = { root: string; queue: string; taken: string; plan: string; handed: string; editing: string }
+
+export async function projectKeys($: Engine): Promise<Keys> {
+  const root = await $.session.root()
+
+  return {
+    root,
+    queue: `queue:${root}`,
+    taken: `taken:${root}`,
+    plan: `plan:${root}`,
+    handed: `handed:${root}`,
+    editing: `editing:${root}`,
+  }
+}
+
+export async function loadEntries($: Engine, key: string): Promise<Entry[]> {
+  const value = await $.store.get(key)
+
+  return Array.isArray(value) ? (value as Entry[]).map(entry => ({ ...entry, kind: entry.kind ?? 'idea' })) : []
+}
+
+export async function saveEntries($: Engine, key: string, list: readonly Entry[]) {
+  if (list.length === 0) {
+    await $.store.delete(key)
+  } else {
+    await $.store.set(key, list)
+  }
+}
+
+export async function loadPlan($: Engine, key: string): Promise<Plan> {
+  const value = (await $.store.get(key)) as Plan | undefined
+
+  return value && Array.isArray(value.steps) ? value : { steps: [] }
+}
+
+export async function savePlan($: Engine, key: string, plan: Plan) {
+  if (plan.steps.length === 0) {
+    await $.store.delete(key)
+  } else {
+    await $.store.set(key, plan)
+  }
+}
+
+// A tag is known by its file and text: lines move as the file is edited.
+export const tagId = (tag: Entry) => `${tag.file}\u0000${tag.text}`
+
+// The tags an earlier /aside already handed over, by tagId.
+export async function loadHanded($: Engine, key: string): Promise<string[]> {
+  return ((await $.store.get(key)) as string[] | undefined) ?? []
+}
+
+// An entry taken out with /aside edit, and the place it goes back to. The field keeps the
+// name `idea` that stored records already have.
+export type Editing = { index: number; idea: Entry }
+
+export function saveEditing($: Engine, key: string, editing: Editing) {
+  return $.store.set(key, editing)
+}
+
+// The entry being edited, if any; it is taken, so the next message is the only one that gets it.
+export async function takeEditing($: Engine, key: string): Promise<Editing | undefined> {
+  const editing = (await $.store.get(key)) as Editing | undefined
+  await $.store.delete(key)
+
+  return editing
+}
+
+// Takes the queue (`stored`, oldest first) and the new tags out to hand them over: the
+// entries go where /aside undo finds them, the tags are marked so they are not handed over
+// again. `giveBack` undoes both when the hand-over fails.
+export async function takeForHandOver($: Engine, keys: Keys, stored: readonly Entry[], tags: readonly Entry[]) {
+  if (stored.length > 0) {
+    await saveEntries($, keys.taken, stored)
+    await saveEntries($, keys.queue, [])
+  }
+  const before = await loadHanded($, keys.handed)
+  await $.store.set(keys.handed, [...new Set([...before, ...tags.map(tagId)])].slice(-500))
+
+  return {
+    giveBack: async () => {
+      await saveEntries($, keys.queue, [...stored, ...(await loadEntries($, keys.queue))])
+      await $.store.set(keys.handed, before)
+    },
+  }
+}
+
+// Counts what waits and where the plan is, for the line above the prompt. The tags are
+// counted only when `tagCount` is given, since that takes reading the files.
+export async function refreshBand($: Engine, tagCount?: number): Promise<Band> {
+  const keys = await projectKeys($)
+  const list = await loadEntries($, keys.queue)
+  const plan = await loadPlan($, keys.plan)
+  const ideas = list.filter(entry => entry.kind === 'idea').length
+  const next: Band = {
+    ideas,
+    comments: list.length - ideas,
+    tags: tagCount ?? (await read($, band)).tags,
+    steps: plan.steps.length,
+    done: plan.steps.filter(step => step.isDone).length,
+    ...(plan.active ? { running: plan.active.step + 1 } : {}),
+  }
+  await update($, band, () => next)
+
+  return next
+}

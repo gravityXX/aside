@@ -1,0 +1,151 @@
+import type { EngineInterface as Engine } from 'claude-code'
+
+import { MARKDOWN_PATH, MIN_FRAGMENT_WORDS } from '../core/markdown'
+
+// A UTF-8 locale, so grep -P matches letters with \p{L} and ignores case beyond ASCII.
+const GREP_ENV = { LC_ALL: 'C.UTF-8' }
+
+export async function tryReadFile($: Engine, path: string): Promise<string | undefined> {
+  try {
+    return await $.fs.read(path)
+  } catch {
+    return undefined
+  }
+}
+
+const POWERSHELL_ARGS = ['-NoProfile', '-NonInteractive', '-Command', '[Console]::OutputEncoding=[Text.Encoding]::UTF8; Get-Clipboard -Raw']
+
+// The clipboard readers to try, in order: Windows' own under WSL, then macOS, Wayland,
+// X11 and native Windows.
+const CLIPBOARD_READERS: readonly (readonly string[])[] = [
+  ['powershell.exe', ...POWERSHELL_ARGS],
+  ['pbpaste'],
+  ['wl-paste', '--no-newline', '--type', 'text'],
+  ['xclip', '-selection', 'clipboard', '-out'],
+  ['xsel', '--clipboard', '--output'],
+  ['powershell', ...POWERSHELL_ARGS],
+]
+
+// The clipboard reader that ran first, kept for the rest of the session, and the text the
+// last read saw: an unchanged clipboard is likely stale.
+export type ClipboardState = { reader?: readonly string[]; last?: string }
+
+async function readClipboardText($: Engine, state: ClipboardState): Promise<string> {
+  const isWsl = (await $.env.get('WSL_DISTRO_NAME')) !== undefined
+  const candidates = state.reader ? [state.reader] : CLIPBOARD_READERS.filter(argv => isWsl || argv[0] !== 'powershell.exe')
+  for (const argv of candidates) {
+    try {
+      const ran = await $.process.run([...argv], { timeoutMs: 5000, stdin: '' })
+      // 126 and 127: the shell could not find or run it; any other exit means it is there.
+      if (ran.exitCode === 126 || ran.exitCode === 127) continue
+      state.reader = argv
+      const text = ran.exitCode === 0 ? ran.stdout.replace(/\r\n/g, '\n').trim() : ''
+
+      return text.length > 20_000 ? '' : text
+    } catch {
+      continue
+    }
+  }
+
+  return ''
+}
+
+// The clipboard's text, and whether it changed since the last read.
+export async function readClipboard($: Engine, state: ClipboardState): Promise<{ text: string; isNew: boolean }> {
+  const text = await readClipboardText($, state)
+  const isNew = text !== state.last
+  state.last = text
+
+  return { text, isNew }
+}
+
+export async function readGitBranch($: Engine, root: string): Promise<string | undefined> {
+  try {
+    const ran = await $.process.run(['git', '-C', root, 'rev-parse', '--abbrev-ref', 'HEAD'], { timeoutMs: 3000 })
+    const name = ran.stdout.trim()
+
+    return ran.exitCode === 0 && name !== '' && name !== 'HEAD' ? name : undefined
+  } catch {
+    return undefined
+  }
+}
+
+// The files under `root` that `accept` takes, walked through $.fs: no .git, node_modules or
+// other dot folders, and a bound on how much is listed, so a huge tree stays cheap.
+async function walkFiles($: Engine, root: string, accept: (path: string, size: number) => boolean, limit = 400): Promise<string[]> {
+  const found: string[] = []
+  const dirs = [root]
+  let listed = 0
+  while (dirs.length > 0 && found.length < limit && listed < 20_000) {
+    const dir = dirs.shift()!
+    let entries: Awaited<ReturnType<Engine['fs']['list']>>
+    try {
+      entries = await $.fs.list(dir)
+    } catch {
+      continue
+    }
+    for (const entry of entries) {
+      listed += 1
+      if (entry.name.startsWith('.') || entry.name === 'node_modules') continue
+      const path = `${dir.replace(/[\\/]$/, '')}/${entry.name}`
+      if (entry.kind === 'dir') dirs.push(path)
+      else if (entry.kind === 'file' && accept(path, entry.size)) found.push(path)
+    }
+  }
+
+  return found
+}
+
+// The markdown files under the root holding a few words of the fragment in a row, across
+// line breaks and markup. GNU grep with PCRE is the fast way; where it is missing (macOS,
+// Windows) the walk through $.fs does the same, more slowly. rg is not used: in a Claude
+// Code session it may be a shell function no child process can run.
+export async function searchMarkdown($: Engine, quote: string, root: string): Promise<string[]> {
+  const raw = quote.split(/[^\p{L}\p{N}]+/u).filter(Boolean)
+  if (raw.length < MIN_FRAGMENT_WORDS) {
+    return []
+  }
+  const at = [0, Math.max(0, Math.floor(raw.length / 2) - 2), Math.max(0, raw.length - 4)]
+  const parts = [...new Set(at.map(i => raw.slice(i, i + 4).join('[^\\p{L}\\p{N}]+')))]
+  const pattern = parts.map(p => `(?:${p})`).join('|')
+  try {
+    const ran = await $.process.run(
+      [
+        'grep', '-rlizP', '--include=*.md', '--include=*.markdown', '--include=*.mdx',
+        '--exclude-dir=node_modules', '--exclude-dir=.?*', '-e', pattern, root,
+      ],
+      { timeoutMs: 8000, env: GREP_ENV, stdin: '' },
+    )
+    // 0: found, 1: nothing found; anything else is a grep that cannot do this.
+    if (ran.exitCode === 0 || ran.exitCode === 1) {
+      return ran.stdout.split('\n').filter(Boolean).slice(0, 20)
+    }
+  } catch {
+    // No grep here: walk instead.
+  }
+  const regex = new RegExp(pattern, 'iu')
+  const hits: string[] = []
+  for (const file of await walkFiles($, root, (path, size) => MARKDOWN_PATH.test(path) && size <= 2_000_000)) {
+    const text = await tryReadFile($, file)
+    if (text !== undefined && regex.test(text)) hits.push(file)
+    if (hits.length >= 20) break
+  }
+
+  return hits
+}
+
+// A file named after "@": as written from the root, else a session file ending with it,
+// else the first one under the root at that path.
+export async function resolveFile($: Engine, name: string, root: string, seen: readonly string[]): Promise<string> {
+  const direct = name.startsWith('/') ? name : `${root}/${name}`
+  if (await $.fs.exists(direct).catch(() => false)) {
+    return direct
+  }
+  const own = [...seen].reverse().find(file => file.endsWith(`/${name}`))
+  if (own) {
+    return own
+  }
+  const [first] = await walkFiles($, root, path => path.endsWith(`/${name}`), 1)
+
+  return first ?? direct
+}
