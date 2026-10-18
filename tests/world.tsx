@@ -240,10 +240,14 @@ export const world = ($: Engine, on: On, given: Partial<Machine> = {}) => {
     await idle()
   }
 
-  const mount = (component: 'AbovePrompt' | 'Pane' | 'CommandOutput' | 'ToolUse' | 'ToolResult', props: unknown) =>
+  const mount = (
+    component: 'AbovePrompt' | 'Pane' | 'CommandOutput' | 'ToolUse' | 'ToolResult',
+    props: unknown,
+    surface: 'terminal' | 'desktop' | 'vscode' | 'mobile' = 'terminal',
+  ) =>
     $.ui.mount({
       plugin: 'aside',
-      surface: 'terminal',
+      surface,
       component,
       props: props as never,
       ...(component === 'Pane' ? { requestId: 'aside' } : {}),

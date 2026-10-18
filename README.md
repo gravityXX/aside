@@ -65,6 +65,8 @@ Nothing reaches Claude until you say so. `/aside` shows the queue in a frame, an
 
 Requires <kbd>Claude Code</kbd> 2.1.301 or newer. The plugin API <kbd>aside</kbd> builds on is in early access and may change between releases.
 
+<kbd>aside</kbd> works in <kbd>Claude Code</kbd> in a terminal, on Linux, macOS, Windows and WSL, and in <kbd>Claude Code Desktop</kbd> in a local or SSH session, with its line above the prompt, the list pane and the frames. Through Remote Control from a phone or the web, entries you start with `+` are queued, and what aside draws shows in the terminal of the machine the session runs on. Claude Code loads no plugins like it in cloud sessions or in Desktop sessions inside WSL, and in VS Code draws none of its parts yet.
+
 ## Commands
 
 ```text

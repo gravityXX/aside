@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- aside draws in Claude Code Desktop too: the line above the prompt, the list pane, the framed `/aside` listing and the saved plan. Before, Desktop showed the line, but the pane its `list` button opened stayed empty.
+- The README says where aside works: the terminal on every system, Desktop's local and SSH sessions, and Remote Control for `+` entries; and where Claude Code does not load it.
+
 ## 0.18.2 - 2026-10-18
 
 - The band's `list` button opens the list pane on a terminal narrower than 144 columns too, during a task or not. It opened only on a wider one, since the pane was opened after the press had ended and the engine took the open for the plugin's own. A pane already open but out of sight is brought back rather than closed, and a toast says why when the pane cannot be shown.

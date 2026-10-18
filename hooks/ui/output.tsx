@@ -1,12 +1,13 @@
-import type { Elements, EngineInterface as Engine, MatchedHook } from 'claude-code'
+import type { EngineInterface as Engine, MatchedHook } from 'claude-code'
 
 import type { Context } from '../context'
 import { parseListingText } from '../core/listing'
 import type { ListingSection } from '../core/listing'
-import { listingRows } from './rows'
+import { isDrawnOn, listingRows } from './rows'
+import type { Drawing } from './rows'
 
 // A listing in the rounded frame /aside output is drawn in.
-const frame = (ui: Elements['terminal'], sections: readonly ListingSection[]) => {
+const frame = (ui: Drawing, sections: readonly ListingSection[]) => {
   const { Box } = ui
 
   return (
@@ -22,7 +23,7 @@ type OutputRender = Parameters<MatchedHook<'ui.render', { readonly component: 'C
 
 export async function drawListingFrame($: Engine, e: OutputRender[1], next: OutputRender[2]) {
   const sections = e.props.command === 'aside' && !e.props.isErrored ? parseListingText(e.props.text.replace(/^aside: /, '')) : null
-  if (e.surface !== 'terminal' || sections === null) {
+  if (!isDrawnOn(e.surface) || sections === null) {
     return next(e)
   }
 
@@ -53,7 +54,7 @@ type ToolRender = Parameters<MatchedHook<'ui.render', { readonly component: 'Too
 export async function drawPlanTool(ctx: Context, $: Engine, e: ToolRender[1], next: ToolRender[2]) {
   const { tool, output, isRunning, isErrored, isInterrupted } = e.props
   const sections = savedPlan(ctx, tool, output, !isRunning && !isErrored && !isInterrupted)
-  if (e.surface !== 'terminal' || sections === null) {
+  if (!isDrawnOn(e.surface) || sections === null) {
     return next(e)
   }
 
@@ -65,7 +66,7 @@ type ResultRender = Parameters<MatchedHook<'ui.render', { readonly component: 'T
 
 export async function hidePlanToolResult(ctx: Context, $: Engine, e: ResultRender[1], next: ResultRender[2]) {
   const { tool, output, isErrored } = e.props
-  if (e.surface !== 'terminal' || savedPlan(ctx, tool, output, !isErrored) === null) {
+  if (!isDrawnOn(e.surface) || savedPlan(ctx, tool, output, !isErrored) === null) {
     return next(e)
   }
   const { Box } = $.ui.resolve(e)

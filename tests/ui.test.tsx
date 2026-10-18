@@ -272,3 +272,39 @@ describe('the plan tool in the transcript', () => {
     await under.unmount()
   })
 })
+
+describe('where aside draws', () => {
+  for (const surface of ['terminal', 'desktop'] as const) {
+    test(`on ${surface}, the band, the list pane, the /aside frame and the plan tool's row are drawn by aside`, async ($, on) => {
+      const { type, aside, savePlan, mount } = world($, on)
+      await type('+ x')
+      const { result } = await savePlan(STEPS)
+
+      const band = await mount('AbovePrompt', { hasSurvey: false, isWorking: false }, surface)
+      expect(await band.find({ key: 'list' })).toBeDefined()
+      await band.unmount()
+      const pane = await mount('Pane', { title: 'aside', isFocused: true, bodyColumns: 100, placement: 'dock' }, surface)
+      expect((await pane.find({ type: 'Text', text: /^x$/ }))?.text).toBe('x')
+      await pane.unmount()
+      const frame = await mount('CommandOutput', { command: 'aside', args: '', text: await aside(), isErrored: false }, surface)
+      expect(await frame.drawn()).toMatchObject({ type: 'Box', props: { borderStyle: 'round' } })
+      await frame.unmount()
+      const row = await mount('ToolUse', { tool_use_id: 'u1', tool: 'mcp__aside__plan', input: {}, isRunning: false, isErrored: false, isInterrupted: false, output: result }, surface)
+      expect(await row.drawn()).toMatchObject({ type: 'Box', props: { borderStyle: 'round' } })
+      await row.unmount()
+    })
+  }
+
+  for (const surface of ['vscode', 'mobile'] as const) {
+    test(`on ${surface}, the engine draws its own`, async ($, on) => {
+      // The engine's own drawing, which the test kit does not make.
+      on('ui.render', { component: 'Pane' }, () => ({ type: 'Text', props: {}, children: ['as drawn'] }) as never)
+      const { type, mount } = world($, on)
+      await type('+ x')
+
+      const pane = await mount('Pane', { title: 'aside', isFocused: true, bodyColumns: 100, placement: 'dock' }, surface)
+      expect(await pane.drawn()).toMatchObject({ type: 'Text', children: ['as drawn'] })
+      await pane.unmount()
+    })
+  }
+})

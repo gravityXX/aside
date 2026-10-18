@@ -5,13 +5,13 @@ import { describeError } from '../core/text'
 import { handOverQueue } from '../features/plan'
 import { currentListing, LIST_PANE } from '../features/queue'
 import { readBand } from '../io/store'
-import { listingRows } from './rows'
+import { isDrawnOn, listingRows } from './rows'
 
 // The list the band's button opens: drawn again whenever the queue or the plan changes.
 type PaneRender = Parameters<MatchedHook<'ui.render', { readonly component: 'Pane'; readonly requestId: 'aside' }>>
 
 export async function drawPane(ctx: Context, $: Engine, e: PaneRender[1], next: PaneRender[2]) {
-  if (e.surface !== 'terminal') {
+  if (!isDrawnOn(e.surface)) {
     return next(e)
   }
   const now = await readBand($)

@@ -76,7 +76,7 @@ The plugin runs on the Claude Code plugin API: hooks `($, e, next)` added with `
 8. A hook that holds the turn (a command, a turn's end) cannot submit a prompt. Submit from a timer, as `submitLater` does.
 9. Claude Code prints a command's text only after the running turn ends. What must show mid-turn goes to `$.ui.log` or a pane, which both show at once.
 10. A tool's full name depends on where the plugin was loaded from. Use the name `$.tool.register` returns, never a hard-coded `mcp__aside__...`.
-11. A `ui.render` hook draws only the surfaces it knows (`e.surface === 'terminal'`) and returns `next(e)` for the rest.
+11. A `ui.render` hook draws only the surfaces aside supports (`isDrawnOn(e.surface)` in `hooks/ui/rows.tsx`: the terminal and Desktop) and returns `next(e)` for the rest. A drawing test loops over those surfaces, and checks one the engine keeps.
 12. Handlers outside `register.tsx` take their types from the engine's: `type Submit = Parameters<Hook<'prompt.submit'>>`, then `e: Submit[1]` and `next: Submit[2]`; `MatchedHook<...>` for a matched hook, `CatchHandler<...>` for `.catch`.
 13. Claude Code writes the types to `.claude-plugin/types/` when a session loads the plugin. Load it once after a Claude Code update before type-checking.
 14. `<>` draws a column Box around its children, so a fragment inside a row starts a new line. Elements that stand side by side go into the row directly, each one conditional on its own.

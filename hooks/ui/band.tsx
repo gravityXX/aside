@@ -5,6 +5,7 @@ import { describeError, formatCount } from '../core/text'
 import { runPlan, stopPlan } from '../features/plan'
 import { toggleListPane } from '../features/queue'
 import { readBand } from '../io/store'
+import { isDrawnOn } from './rows'
 
 type Action = 'stop' | 'continue' | 'run plan'
 
@@ -29,7 +30,7 @@ export async function drawBand(ctx: Context, $: Engine, e: BandRender[1], next: 
   const now = await readBand($)
   const waiting = now.ideas + now.comments + now.tags
   const left = now.steps - now.done
-  if (e.props.hasSurvey || (waiting === 0 && left === 0 && now.running === undefined)) {
+  if (!isDrawnOn(e.surface) || e.props.hasSurvey || (waiting === 0 && left === 0 && now.running === undefined)) {
     return next(e)
   }
 
