@@ -232,7 +232,7 @@ export const where = (idea: Idea, root: string): string => {
   return `${relative(idea.file, root)}${at}`
 }
 
-// One line per entry, as /queue list shows the queue.
+// One line per entry, as /aside list shows the queue.
 export const listed = (ideas: readonly Idea[], root: string): string =>
   ideas
     .map((idea, i) => {
@@ -247,7 +247,7 @@ export const listed = (ideas: readonly Idea[], root: string): string =>
     })
     .join('\n')
 
-const MARKER = '(Composed by the idea-queue plugin from my queued notes, not typed by me as a message.)'
+const MARKER = '(Composed by the aside plugin from my queued notes, not typed by me as a message.)'
 
 const context = (idea: Idea) => {
   const parts = [idea.task ? `while you worked on "${snippet(idea.task, 70)}"` : '', idea.branch ? `branch ${idea.branch}` : '']
@@ -298,7 +298,7 @@ const body = (ideas: readonly Idea[], root: string): string[] => {
   return sections
 }
 
-export const plan = (ideas: readonly Idea[], root: string, pending: readonly Step[] = []): string => {
+export const plan = (ideas: readonly Idea[], root: string, pending: readonly Step[] = [], tool = 'mcp__aside__plan'): string => {
   const sections = body(ideas, root)
   if (pending.length > 0) {
     sections.push(
@@ -317,7 +317,7 @@ export const plan = (ideas: readonly Idea[], root: string, pending: readonly Ste
       '- for each step, write a prompt I could send you as it is; it must stand on its own, file paths included;',
       '- list items that are already done, contradictory or unclear separately, each with a question;',
       '- when a step handles a comment that is a <!-- --> tag in a file, the step removes that tag.',
-      'Then save the steps with the mcp__idea-queue__plan tool and stop: I run them with /queue run (all, in order) or /queue run N.',
+      `Then save the steps with the ${tool} tool and stop: I run them with /aside run (all, in order) or /aside run N.`,
     ].join('\n'),
   )
   sections.push(MARKER)
@@ -339,7 +339,7 @@ export const send = (ideas: readonly Idea[], root: string): string =>
     MARKER,
   ].join('\n\n')
 
-// One entry as a prompt of its own, for /queue each: what it says and what it is about.
+// One entry as a prompt of its own, for /aside each: what it says and what it is about.
 export const entryPrompt = (idea: Idea, root: string, withContext = true): string => {
   const file = idea.file ? `In ${relative(idea.file, root)}: ` : ''
   const spot = spotOf(idea)
@@ -350,10 +350,10 @@ export const entryPrompt = (idea: Idea, root: string, withContext = true): strin
   return `${head ? `${head}:\n` : ''}${idea.text || '(no text)'}${withContext ? context(idea) : ''}${tag}`
 }
 
-// An entry as a prompt to send right away (/queue pop): an idea as typed, without its "+";
+// An entry as a prompt to send right away (/aside pop): an idea as typed, without its "+";
 // a comment with what it is about.
 export const popText = (idea: Idea, root: string): string =>
   idea.kind === 'idea' ? idea.text : entryPrompt(idea, root, false)
 
 export const stepPrompt = (step: Step, n: number, total: number): string =>
-  `${step.prompt}\n\n(Step ${n} of ${total} of the queue plan, "${step.title}", sent by the idea-queue plugin.)`
+  `${step.prompt}\n\n(Step ${n} of ${total} of the queue plan, "${step.title}", sent by the aside plugin.)`

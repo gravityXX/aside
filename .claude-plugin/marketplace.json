@@ -1,18 +1,20 @@
 {
-  "name": "idea-queue",
+  "name": "aside",
   "owner": {
     "name": "gravityXX",
     "url": "https://github.com/gravityXX"
   },
-  "description": "idea-queue: park ideas and comments while Claude works, then run them as a plan",
+  "description": "aside: note ideas and comments while Claude works, then hand them over as a plan",
   "plugins": [
     {
-      "name": "idea-queue",
-      "description": "Park ideas and comments on what Claude wrote while it works, then turn them into an ordered plan of prompts and run it step by step",
-      "author": { "name": "gravityXX" },
+      "name": "aside",
+      "description": "Note ideas and comments while Claude works, without interrupting it, then hand them over as a plan",
+      "author": {
+        "name": "gravityXX"
+      },
       "category": "productivity",
       "source": "./",
-      "homepage": "https://github.com/gravityXX/idea-queue"
+      "homepage": "https://github.com/gravityXX/aside"
     }
   ]
 }

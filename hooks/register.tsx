@@ -24,14 +24,14 @@ import {
 } from './queue'
 
 const EMPTY: Band = { ideas: 0, comments: 0, tags: 0, steps: 0, done: 0 }
-const band = atom({ plugin: 'idea-queue', key: 'band' } as const, EMPTY)
+const band = atom({ plugin: 'aside', key: 'band' } as const, EMPTY)
 // The markdown files written in this session, agents' included, newest last.
-const files = atom({ plugin: 'idea-queue', key: 'files' } as const, [])
+const files = atom({ plugin: 'aside', key: 'files' } as const, [])
 
 const MARKDOWN = /\.(md|markdown|mdx)$/i
 // The tools whose output a comment may be about when nothing else says so; any error counts.
 const OUTPUT_TOOLS = new Set(['Bash', 'Edit', 'Write', 'NotebookEdit'])
-const OWN = 'sent by the idea-queue plugin'
+const OWN = 'sent by the aside plugin'
 // The system's own tools: a session's PATH may hold shell functions (rg) a child cannot run.
 const ENV = { LC_ALL: 'C.UTF-8' }
 
@@ -43,21 +43,25 @@ const HELP = [
   'In the editor, <!-- ? ... --> tags (? ! - +) in a markdown file count as comments too.',
   'With nothing new copied, a comment takes the text selected in Claude\'s reply, or the last tool output.',
   '',
-  '/queue - show the queue and the plan',
-  '/queue plan - have Claude organize the queue into steps (related entries merged)',
-  '/queue run - run the plan step by step; with no plan, each entry as its own step',
-  '/queue run N - run step N alone       /queue run all - send everything at once, no plan',
-  '/queue stop - stop after the current step',
+  '/aside - show the queue and the plan',
+  '/aside plan - have Claude organize the queue into steps (related entries merged)',
+  '/aside run - run the plan step by step; with no plan, each entry as its own step',
+  '/aside run N - run step N alone       /aside run all - send everything at once, no plan',
+  '/aside stop - stop after the current step',
   '',
-  '/queue TEXT - queue TEXT, as "+ TEXT" would ("/queue + run 3" for text that looks like a command)',
-  '/queue pop [N] - put the last entry (or entry N) in the prompt box, ready to send',
-  '/queue edit N - put entry N in the prompt box to rework it and queue it again',
-  '/queue move N M - move entry N to place M     /queue remove N - remove entry N',
-  '/queue clear - empty the queue                /queue undo - bring back what plan, run or clear took',
-  '/queue scan FILE - read the tags of a file Claude did not write in this session',
+  '/aside TEXT - queue TEXT, as "+ TEXT" would ("/aside + run 3" for text that looks like a command)',
+  '/aside pop [N] - put the last entry (or entry N) in the prompt box, ready to send',
+  '/aside edit N - put entry N in the prompt box to rework it and queue it again',
+  '/aside move N M - move entry N to place M     /aside remove N - remove entry N',
+  '/aside clear - empty the queue                /aside undo - bring back what plan, run or clear took',
+  '/aside scan FILE - read the tags of a file Claude did not write in this session',
 ].join('\n')
 
-// What Tab offers after "/queue ", with the dim line beside each.
+// The plan tool's full name as the engine registered it: its prefix comes from where the
+// plugin was loaded from (a marketplace install, a --plugin-dir folder), so it is never assumed.
+let planTool = 'mcp__aside__plan'
+
+// What Tab offers after "/aside ", with the dim line beside each.
 const SUBCOMMANDS: readonly (readonly [string, string])[] = [
   ['plan', 'organize the queue into steps'],
   ['run', 'run the plan, or the queue entry by entry'],
@@ -127,7 +131,7 @@ const readFile = async ($: Engine, path: string): Promise<string | undefined> =>
 const tagKey = (idea: Idea) => `${idea.file}\u0000${idea.text}`
 
 // The <!-- ? --> tags in the session's markdown files, as entries of their own; `isNew`
-// leaves out those an earlier /queue already handed over.
+// leaves out those an earlier /aside already handed over.
 const fileTags = async ($: Engine, isNew = false): Promise<Idea[]> => {
   const { handed } = await keys($)
   const old = new Set(isNew ? ((await $.store.get(handed)) as string[] | undefined) ?? [] : [])
@@ -302,7 +306,7 @@ let lastClipboard: string | undefined
 // else the text selected in a transcript row (Claude's reply); else an older clipboard.
 // Each is looked for in the session's files and the project's. Text no file holds is kept as
 // a loose quote and said so, since the person sees it and can take the entry back with
-// /queue pop. With nothing on the clipboard, or nothing found, the last tool output rides along.
+// /aside pop. With nothing on the clipboard, or nothing found, the last tool output rides along.
 const pin = async ($: Engine, entry: Entry, root: string, seen: readonly string[], about: About, source: (file: string) => Promise<string | undefined>): Promise<Pin> => {
   const { anchor } = entry
   const named = anchor.file ? await resolve($, anchor.file, root, seen) : undefined
@@ -359,7 +363,7 @@ const pin = async ($: Engine, entry: Entry, root: string, seen: readonly string[
   return { ...base, quote: snippet(quote, 300), isLoose: true, from: 'clipboard', ...output, note: `${why}${withOutput}` }
 }
 
-// Stores what a message (or /queue TEXT) holds and says what was queued and where it
+// Stores what a message (or /aside TEXT) holds and says what was queued and where it
 // points, or returns null when the text is no entry at all.
 // How enqueue reports what it queued: a line in the transcript (a typed "+", whose prompt has
 // long been answered by then), or nothing (a command, which answers with the text itself).
@@ -396,7 +400,7 @@ const enqueue = async (
     selection: () => (sel ??= options.selection !== undefined ? Promise.resolve(options.selection) : readSelection($)),
     ...(output ? { output } : {}),
   }
-  // An entry taken out with /queue edit comes back where it was, keeping what it pointed at,
+  // An entry taken out with /aside edit comes back where it was, keeping what it pointed at,
   // unless the reworked text names a place of its own.
   const { editing: editKey } = await keys($)
   const editing = (await $.store.get(editKey)) as { index: number; idea: Idea } | undefined
@@ -460,7 +464,7 @@ const handOver = async ($: Engine, mode: 'plan' | 'send'): Promise<string> => {
     return 'The queue is empty. Start a message with "+" to add an idea, or "+?" to comment on a copied fragment.'
   }
 
-  // The entries leave the queue as they are handed over; /queue undo brings them back.
+  // The entries leave the queue as they are handed over; /aside undo brings them back.
   if (list.length > 0) {
     await saveIdeas($, taken, list)
     await saveIdeas($, queue, [])
@@ -476,7 +480,7 @@ const handOver = async ($: Engine, mode: 'plan' | 'send'): Promise<string> => {
   }
   const { plan: planKey } = await keys($)
   const pending = (await loadPlan($, planKey)).steps.filter(step => !step.isDone)
-  const text = mode === 'plan' ? planPrompt(all, root, pending) : sendPrompt(all, root)
+  const text = mode === 'plan' ? planPrompt(all, root, pending, planTool) : sendPrompt(all, root)
   $.clock.after(50, async () => {
     try {
       const sent = await $.prompt.submit({ text, asUser: true })
@@ -586,7 +590,7 @@ const stopPlan = async ($: Engine): Promise<string> => {
 }
 
 export const register: Register = (on, options) => {
-  // What happens to the queue when Claude finishes a turn: wait for /queue (the default),
+  // What happens to the queue when Claude finishes a turn: wait for /aside (the default),
   // or hand it over at once as a plan or as it is.
   const whenTurnEnds = options.whenTurnEnds === 'plan' || options.whenTurnEnds === 'send' ? options.whenTurnEnds : 'wait'
   // Module variables start over on a reload; nothing in them has to last.
@@ -598,7 +602,7 @@ export const register: Register = (on, options) => {
   let isOwnTurn = false
   // Whether a main-loop turn is in flight: only an entry queued then was made "while Claude
   // worked on" the last prompt; one queued at an idle prompt names no task. A typed "+" knows
-  // it from its own turnId; /queue TEXT, which carries none, asks this.
+  // it from its own turnId; /aside TEXT, which carries none, asks this.
   let isRunning = false
   const taskNow = () => (isRunning ? lastTask : undefined)
   // The last message queued, until the box it went back into has been emptied.
@@ -610,18 +614,18 @@ export const register: Register = (on, options) => {
 
   on('session.start', async ($, e, next) => {
     await $.command.register({
-      name: 'queue',
+      name: 'aside',
       description: 'Show the ideas and comments queued with "+"; plan and run them',
       argumentHint: '[plan | run [N | all] | stop | TEXT | pop [N] | edit N | move N M | remove N | clear | undo | scan FILE | help]',
       // Runs at once mid-turn, so a stop lands before the next step; the prompts it sends
       // still wait for the turn to end.
       immediate: true,
     })
-    await $.tool.register({
+    const registered = await $.tool.register({
       name: 'plan',
       description:
-        "Saves the step plan you just proposed for the user's queue (the idea-queue plugin), so the user can run it with /queue run. " +
-        'Call it only when the idea-queue plugin asked you to organize the queue. Each step: a short title and a prompt that stands on its own.',
+        "Saves the step plan you just proposed for the user's queue (the aside plugin), so the user can run it with /aside run. " +
+        'Call it only when the aside plugin asked you to organize the queue. Each step: a short title and a prompt that stands on its own.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -639,6 +643,7 @@ export const register: Register = (on, options) => {
       },
       isDeferred: false,
     })
+    planTool = registered.tool
     await refresh($)
 
     return next(e)
@@ -679,8 +684,12 @@ export const register: Register = (on, options) => {
     return ran
   })
 
-  // A RegExp matcher: the laid types know only the tools connected when they were written.
-  on('tool.call', { tool: /^mcp__idea-queue__plan$/ }, async ($, e) => {
+  // A RegExp matcher: the laid types know only the tools connected when they were written,
+  // and the full name is known only once registered.
+  on('tool.call', { tool: /__plan$/ }, async ($, e, next) => {
+    if (e.tool !== planTool) {
+      return next(e)
+    }
     const steps = parseSteps((e as unknown as { steps?: unknown }).steps)
     if (steps === null) {
       return { deny: 'steps must be a non-empty list of { title, prompt }, each prompt non-empty' }
@@ -688,13 +697,13 @@ export const register: Register = (on, options) => {
     const { plan: planKey } = await keys($)
     const old = await loadPlan($, planKey)
     if (old.active && old.active.sessionId === (await $.session.id())) {
-      return { deny: `step ${old.active.step + 1} of the current plan is running; the user stops it with /queue stop first` }
+      return { deny: `step ${old.active.step + 1} of the current plan is running; the user stops it with /aside stop first` }
     }
     await savePlan($, planKey, { steps })
     await refresh($)
 
     return {
-      result: `Saved ${steps.length} steps. Tell the user: /queue run runs them all in order, /queue run N runs one, /queue shows them.`,
+      result: `Saved ${steps.length} steps. Tell the user: /aside run runs them all in order, /aside run N runs one, /aside shows them.`,
     }
   })
 
@@ -742,11 +751,11 @@ export const register: Register = (on, options) => {
       : { drop: 'queue: could not store this entry; nothing was sent' },
   )
 
-  // Tab completion after "/queue ": the subcommands, then the entry or step numbers.
+  // Tab completion after "/aside ": the subcommands, then the entry or step numbers.
   on('prompt.autocomplete', async ($, e, next) => {
     const typed = e.text.slice(0, e.cursor)
-    const first = /^\/queue\s+(\S*)$/.exec(typed)
-    const second = /^\/queue\s+(pop|edit|remove|rm|run|move|mv)\s+(\d*)$/.exec(typed)
+    const first = /^\/aside\s+(\S*)$/.exec(typed)
+    const second = /^\/aside\s+(pop|edit|remove|rm|run|move|mv)\s+(\d*)$/.exec(typed)
     if (!first && !second) {
       return next(e)
     }
@@ -783,7 +792,7 @@ export const register: Register = (on, options) => {
     if (e.agentId === undefined) {
       turn = e.turnId
       isRunning = true
-      isOwnTurn = e.text.includes(OWN) || e.text.includes('Composed by the idea-queue plugin')
+      isOwnTurn = e.text.includes(OWN) || e.text.includes('Composed by the aside plugin')
     }
     if (e.agentId === undefined && e.text.includes(OWN)) {
       // The turn of a plan step: remember which, so its end runs the next one.
@@ -841,19 +850,19 @@ export const register: Register = (on, options) => {
       return done
     }
     if (!active && waiting > nudged) {
-      $.ui.toast(`Waiting in the queue: ${waiting} · /queue plan or /queue run`)
+      $.ui.toast(`Waiting in the queue: ${waiting} · /aside plan or /aside run`)
     }
     nudged = waiting
 
     return done
   })
 
-  on('command.run', { command: 'queue' }, async ($, e) => {
+  on('command.run', { command: 'aside' }, async ($, e) => {
     const { root, queue, taken, plan: planKey, handed, editing } = await keys($)
     const list = await loadIdeas($, queue)
     const [verb = '', ...rest] = e.args.trim().split(/\s+/)
     // A command only when the words after it have its exact shape; anything else is text to
-    // queue, so "/queue send a summary to the team" queues that sentence.
+    // queue, so "/aside send a summary to the team" queues that sentence.
     const isInt = (one: string | undefined) => one !== undefined && /^\d+$/.test(one)
     const SHAPES: Record<string, (args: readonly string[]) => boolean> = {
       help: args => args.length === 0,
@@ -886,7 +895,7 @@ export const register: Register = (on, options) => {
 
         return `${i + 1}. [${state}] ${step.title}`
       })
-      const planned = plan.steps.some(step => !step.isDone) ? `\n\nPlan (/queue run):\n${steps.join('\n')}` : ''
+      const planned = plan.steps.some(step => !step.isDone) ? `\n\nPlan (/aside run):\n${steps.join('\n')}` : ''
       const fresh = new Set((await fileTags($, true)).map(tagKey))
       const inFiles = await fileTags($)
       const own = list.length === 0 ? 'The queue is empty.' : listed(list, root)
@@ -902,7 +911,7 @@ export const register: Register = (on, options) => {
         return { text: 'The queue is empty.' }
       }
       if (!Number.isInteger(n) || n < 1 || n > list.length) {
-        return { text: `Give a number from 1 to ${list.length}, as /queue list shows them.` }
+        return { text: `Give a number from 1 to ${list.length}, as /aside list shows them.` }
       }
       const entry = list[n - 1]!
       const filled = await $.prompt.fill({ text: entry.raw ?? `+ ${entry.text}`, mode: 'insert' })
@@ -921,7 +930,7 @@ export const register: Register = (on, options) => {
       const [from, to] = [Number(rest[0]), Number(rest[1])]
       const isPlace = (n: number) => Number.isInteger(n) && n >= 1 && n <= list.length
       if (list.length < 2 || !isPlace(from) || !isPlace(to)) {
-        return { text: list.length < 2 ? 'Nothing to move.' : `Give two places from 1 to ${list.length}: /queue move 3 1` }
+        return { text: list.length < 2 ? 'Nothing to move.' : `Give two places from 1 to ${list.length}: /aside move 3 1` }
       }
       const [entry] = list.splice(from - 1, 1)
       list.splice(to - 1, 0, entry!)
@@ -937,7 +946,7 @@ export const register: Register = (on, options) => {
       }
       const n = rest[0] === undefined ? list.length : Number(rest[0])
       if (n < 1 || n > list.length) {
-        return { text: `Give a number from 1 to ${list.length}, as /queue shows them.` }
+        return { text: `Give a number from 1 to ${list.length}, as /aside shows them.` }
       }
       const last = list[n - 1]!
       // Ready to send: no "+" in front, a comment with what it is about.
@@ -960,7 +969,7 @@ export const register: Register = (on, options) => {
       await saveIdeas($, queue, [])
       await refresh($)
 
-      return { text: `Cleared ${list.length} entries. /queue undo brings them back.` }
+      return { text: `Cleared ${list.length} entries. /aside undo brings them back.` }
     }
 
     if (word === 'remove' || word === 'rm') {
@@ -969,7 +978,7 @@ export const register: Register = (on, options) => {
       }
       const n = Number(rest[0])
       if (!Number.isInteger(n) || n < 1 || n > list.length) {
-        return { text: `Give a number from 1 to ${list.length}, as /queue list shows them.` }
+        return { text: `Give a number from 1 to ${list.length}, as /aside list shows them.` }
       }
       const [gone] = list.splice(n - 1, 1)
       await saveIdeas($, queue, list)
@@ -981,7 +990,7 @@ export const register: Register = (on, options) => {
     if (word === 'undo') {
       const running = (await loadPlan($, planKey)).active
       if (running && running.sessionId === (await $.session.id())) {
-        return { text: `Step ${running.step + 1} of the plan is running; /queue stop first, so nothing is done twice.` }
+        return { text: `Step ${running.step + 1} of the plan is running; /aside stop first, so nothing is done twice.` }
       }
       const back = await loadIdeas($, taken)
       if (back.length === 0) {
@@ -997,7 +1006,7 @@ export const register: Register = (on, options) => {
     if (word === 'scan') {
       const name = rest.join(' ')
       if (name === '') {
-        return { text: 'Name a file: /queue scan docs/report.md' }
+        return { text: 'Name a file: /aside scan docs/report.md' }
       }
       const file = await resolve($, name, root, await read($, files))
       const source = await readFile($, file)
@@ -1008,7 +1017,7 @@ export const register: Register = (on, options) => {
       const found = tags(source).length
       await refresh($, (await fileTags($, true)).length)
 
-      return { text: `${relative(file, root)}: ${found === 1 ? '1 tag' : `${found} tags`}; /queue includes the file from now on.` }
+      return { text: `${relative(file, root)}: ${found === 1 ? '1 tag' : `${found} tags`}; /aside includes the file from now on.` }
     }
 
     if (word === 'plan') {
@@ -1022,14 +1031,14 @@ export const register: Register = (on, options) => {
       const plan = await loadPlan($, planKey)
       const isMine = plan.active?.sessionId === (await $.session.id())
       if (plan.active && isMine) {
-        return { text: `Step ${plan.active.step + 1} is running. /queue stop stops after it.` }
+        return { text: `Step ${plan.active.step + 1} is running. /aside stop stops after it.` }
       }
       const note = plan.active ? ` (another session had step ${plan.active.step + 1} running; this one takes over)` : ''
       const first = plan.steps.findIndex(step => !step.isDone)
       if (rest[0] !== undefined) {
         const n = Number(rest[0])
         if (plan.steps.length === 0 || n < 1 || n > plan.steps.length) {
-          return { text: plan.steps.length === 0 ? 'No plan: /queue run runs the queue entry by entry.' : `Give a step from 1 to ${plan.steps.length}, as /queue shows them.` }
+          return { text: plan.steps.length === 0 ? 'No plan: /aside run runs the queue entry by entry.' : `Give a step from 1 to ${plan.steps.length}, as /aside shows them.` }
         }
         await start($, n - 1, false)
 
@@ -1039,7 +1048,7 @@ export const register: Register = (on, options) => {
         await start($, first, true)
         const left = plan.steps.filter(step => !step.isDone).length
 
-        return { text: `Running the plan: ${left === 1 ? '1 step' : `${left} steps`}, from step ${first + 1}. /queue stop stops after the current one.${note}` }
+        return { text: `Running the plan: ${left === 1 ? '1 step' : `${left} steps`}, from step ${first + 1}. /aside stop stops after the current one.${note}` }
       }
 
       // No plan to run: every entry becomes a step of its own.
@@ -1059,14 +1068,14 @@ export const register: Register = (on, options) => {
       await refresh($, 0)
       await start($, 0, true)
 
-      return { text: `Running ${steps.length === 1 ? '1 entry' : `${steps.length} entries`} one by one. /queue stop stops after the current one.${note}` }
+      return { text: `Running ${steps.length === 1 ? '1 entry' : `${steps.length} entries`} one by one. /aside stop stops after the current one.${note}` }
     }
 
     if (word === 'stop') {
       return { text: await stopPlan($) }
     }
 
-    // Anything else is an entry to queue: "/queue add tests" as "+ add tests" would.
+    // Anything else is an entry to queue: "/aside add tests" as "+ add tests" would.
     if (word === '+text') {
       const text = e.args.trim()
       const said = await enqueue($, text.startsWith('+') ? text : `+ ${text}`, taskNow(), outputNow(), { report: 'none' })
@@ -1094,7 +1103,7 @@ export const register: Register = (on, options) => {
     // A stop is applied here and now: $.command.run would wait for the turn to end.
     const press = async () => {
       if (action === 'stop') $.ui.toast(await stopPlan($))
-      else await $.command.run({ command: 'queue', args: action === 'run plan' ? 'run' : 'plan' })
+      else await $.command.run({ command: 'aside', args: action === 'run plan' ? 'run' : 'plan' })
     }
 
     const { Box, Button, Text } = $.ui.resolve(e)

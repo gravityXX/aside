@@ -3,7 +3,7 @@ export type Kind = 'idea' | 'question' | 'change' | 'drop' | 'deeper'
 
 export type Idea = {
   text: string
-  // The line as typed, "+" included: what /queue pop puts back in the prompt box.
+  // The line as typed, "+" included: what /aside pop puts back in the prompt box.
   raw?: string
   at: number
   kind: Kind
@@ -36,6 +36,6 @@ export type Band = { ideas: number; comments: number; tags: number; steps: numbe
 
 declare module 'claude-code' {
   interface PluginState {
-    'idea-queue': { band: Band; files: string[] }
+    'aside': { band: Band; files: string[] }
   }
 }

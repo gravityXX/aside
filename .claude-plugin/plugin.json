@@ -1,20 +1,20 @@
 {
-  "name": "idea-queue",
-  "version": "0.6.1",
-  "description": "Park ideas and comments on what Claude wrote while it works, then turn them into an ordered plan of prompts and run it step by step",
+  "name": "aside",
+  "version": "0.7.0",
+  "description": "Note ideas and comments while Claude works, without interrupting it, then hand them over as a plan",
   "author": {
     "name": "gravityXX",
     "url": "https://github.com/gravityXX"
   },
-  "homepage": "https://github.com/gravityXX/idea-queue",
-  "repository": "https://github.com/gravityXX/idea-queue",
+  "homepage": "https://github.com/gravityXX/aside",
+  "repository": "https://github.com/gravityXX/aside",
   "license": "Apache-2.0",
   "keywords": [
+    "aside",
     "queue",
     "ideas",
-    "backlog",
-    "review",
     "comments",
+    "clipboard",
     "workflow",
     "productivity"
   ],
@@ -23,7 +23,7 @@
     "whenTurnEnds": {
       "type": "string",
       "title": "When Claude finishes a turn",
-      "description": "wait: keep the queue until you run /queue. plan: hand it over as a plan at once. send: hand it over to be done at once.",
+      "description": "wait: keep the queue until you run /aside. plan: hand it over as a plan at once. send: hand it over to be done at once.",
       "default": "wait",
       "options": [
         "wait",
