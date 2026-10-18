@@ -5,6 +5,13 @@
 - aside draws in Claude Code Desktop too: the line above the prompt, the list pane, the framed `/aside` listing and the saved plan. Before, Desktop showed the line, but the pane its `list` button opened stayed empty.
 - The README says where aside works: the terminal on every system, Desktop's local and SSH sessions, and Remote Control for `+` entries; and where Claude Code does not load it.
 
+## 0.18.3 - 2026-10-18
+
+- On WSL without `WSL_DISTRO_NAME`, as in an ssh login or a systemd service, comments read the clipboard again: `powershell.exe` is now tried on every system first, and a reader that is not installed is passed over at once.
+- A `+` sent from a phone or the web through Remote Control is queued, where it used to go to Claude, and a comment sent that way does not read this machine's clipboard.
+- A comment can name a Windows file by its drive, as in `+? @C:\docs\report.md:5`, and `/aside scan` takes an absolute Windows path or a file name with spaces.
+- A search where grep found the file but could not read some folder keeps what it found; a heading or tag on a file's first line is found behind a byte-order mark; and with no clipboard reader installed, a comment says so rather than that nothing was copied.
+
 ## 0.18.2 - 2026-10-18
 
 - The band's `list` button opens the list pane on a terminal narrower than 144 columns too, during a task or not. It opened only on a wider one, since the pane was opened after the press had ended and the engine took the open for the plugin's own. A pane already open but out of sight is brought back rather than closed, and a toast says why when the pane cannot be shown.

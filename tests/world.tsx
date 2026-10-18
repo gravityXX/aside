@@ -39,6 +39,10 @@ export type Machine = {
   // On Linux, how each clipboard reader there exits: 0 reads the clipboard, any other code fails
   // as wl-paste does with no Wayland. A reader left out is not installed.
   readers?: Record<string, number>
+  // The environment, in place of the system's own (WSL_DISTRO_NAME on WSL, HOME elsewhere).
+  env?: Record<string, string>
+  // How grep exits; 2 with output is a search that found files but could not read a folder.
+  grepExit?: number
   // The store refuses every write, as when it is full.
   isStoreFull?: boolean
   // The store refuses the n-th write from now, once, as a store that fills up half-way.
@@ -97,7 +101,7 @@ export const world = ($: Engine, on: On, given: Partial<Machine> = {}) => {
   })
   on('store.keys', () => ({ value: [...store.keys()] }))
   const clock = mock.clock(on, { now: 1000 })
-  mock.env(on, w.system === 'mac' ? { HOME: '/Users/me' } : w.system === 'linux' ? { HOME: '/home/me' } : { WSL_DISTRO_NAME: 'Ubuntu' })
+  mock.env(on, w.env ?? (w.system === 'mac' ? { HOME: '/Users/me' } : w.system === 'linux' ? { HOME: '/home/me' } : { WSL_DISTRO_NAME: 'Ubuntu' }))
   on('session.root', () => ({ value: '/proj' }))
   on('session.id', () => ({ value: 'session-1' }))
   on('command.register', ($e, e) => ({ value: { command: e.name } }))
@@ -146,8 +150,12 @@ export const world = ($: Engine, on: On, given: Partial<Machine> = {}) => {
     }
   })
 
-  on('fs.read', ($e, e) => (e.path in w.files ? { value: w.files[e.path]! } : { deny: 'ENOENT' }))
-  on('fs.exists', ($e, e) => ({ value: e.path in w.files }))
+  // The kit runs on Linux and resolves a Windows path ("C:\\x") against its own folder; a
+  // Windows machine would read it as it is, so the folder the kit put before it is taken off.
+  // A path the plugin built under the project is left alone.
+  const onDisk = (path: string) => (path.startsWith('/proj/') ? path : path.replace(/^.*\/(?=[A-Za-z]:[\\/])/, ''))
+  on('fs.read', ($e, e) => (onDisk(e.path) in w.files ? { value: w.files[onDisk(e.path)]! } : { deny: 'ENOENT' }))
+  on('fs.exists', ($e, e) => ({ value: onDisk(e.path) in w.files }))
   on('fs.list', ($e, e) => {
     const dir = e.path.replace(/\/$/, '')
     const names = new Map<string, 'file' | 'dir'>()
@@ -177,7 +185,7 @@ export const world = ($: Engine, on: On, given: Partial<Machine> = {}) => {
         return ran(`${w.branch}\n`)
       case 'grep':
         // BSD grep has no -P and fails with 2.
-        return isMac ? ran('', 2) : ran(w.grep)
+        return isMac ? ran('', 2) : ran(w.grep, w.grepExit ?? 0)
       default:
         return { deny: 'unknown command' }
     }
