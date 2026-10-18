@@ -79,6 +79,7 @@ The plugin runs on the Claude Code plugin API: hooks `($, e, next)` added with `
 11. A `ui.render` hook draws only the surfaces it knows (`e.surface === 'terminal'`) and returns `next(e)` for the rest.
 12. Handlers outside `register.tsx` take their types from the engine's: `type Submit = Parameters<Hook<'prompt.submit'>>`, then `e: Submit[1]` and `next: Submit[2]`; `MatchedHook<...>` for a matched hook, `CatchHandler<...>` for `.catch`.
 13. Claude Code writes the types to `.claude-plugin/types/` when a session loads the plugin. Load it once after a Claude Code update before type-checking.
+14. `<>` draws a column Box around its children, so a fragment inside a row starts a new line. Elements that stand side by side go into the row directly, each one conditional on its own.
 
 ## 4. TypeScript
 

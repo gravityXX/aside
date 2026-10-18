@@ -40,12 +40,9 @@ export async function drawBand(ctx: Context, $: Engine, e: BandRender[1], next: 
     <Box>
       <Text dimColor>aside: {parts.join(', ')} · </Text>
       <Button key="list" label="list" onPress={() => void toggleListPane($)} />
-      {action === undefined ? null : (
-        <>
-          <Text> </Text>
-          <Button key="action" label={action} onPress={() => void pressAction($, ctx, action)} />
-        </>
-      )}
+      {/* Siblings, not a fragment: the engine draws <> as a column, which put the button a line lower. */}
+      {action === undefined ? null : <Text> </Text>}
+      {action === undefined ? null : <Button key="action" label={action} onPress={() => void pressAction($, ctx, action)} />}
     </Box>
   )
 }

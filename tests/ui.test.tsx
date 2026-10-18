@@ -30,6 +30,25 @@ describe('the band above the prompt', () => {
     expect(await read()).toEqual(['aside: step 1/3 running · ', 'list', 'stop'])
   })
 
+  test('the band keeps its text and both buttons on one line, the plan running or not', async ($, on) => {
+    const { sent, savePlan, aside, startTurn, idle, band } = world($, on)
+    const row = async () => {
+      const ui = await band()
+      // A drawn element carries no props when it was given none.
+      type Drawn = { type: string; props?: { key?: string; flexDirection?: string }; children: Drawn[] }
+      const drawn = (await ui.drawn()) as Drawn
+      await ui.unmount()
+
+      return { direction: drawn.props?.flexDirection ?? 'row', children: drawn.children.map(child => child.props?.key ?? child.type) }
+    }
+    await savePlan(STEPS)
+    expect(await row()).toEqual({ direction: 'row', children: ['Text', 'list', 'Text', 'action'] })
+    await aside('run')
+    await idle()
+    await startTurn(sent.at(-1)!, 's1')
+    expect(await row()).toEqual({ direction: 'row', children: ['Text', 'list', 'Text', 'action'] })
+  })
+
   test('its list button opens the list pane, and closes it on a second press', async ($, on) => {
     const { panes, type, pressBand } = world($, on)
     await type('+ x')
