@@ -10,7 +10,7 @@
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/how-it-works-dark.svg">
-  <img alt="While Claude works on your task, your ideas and comments go to a queue instead of to Claude. When it is done you answer it as usual, and /aside plan hands the queue over as steps." src="assets/how-it-works-light.svg">
+  <img alt="While Claude works on your task, your ideas and comments go to a queue instead of to Claude. When it is done you answer it as usual, and /aside plan hands the queue over as steps, which Claude sums up after the last one." src="assets/how-it-works-light.svg">
 </picture>
 
 ## How it works
@@ -29,20 +29,31 @@
 
 ### 2. Answer Claude as usual
 
-Your reply goes to Claude. By default the queue just waits, in a line above the prompt. Its <kbd>list</kbd> button opens the entries, with <kbd>plan</kbd> to organize them.
+Your reply goes to Claude. By default the queue just waits, in a line above the prompt. Its <kbd>list</kbd> button opens a pane with the queue, the tags in files and the plan, and <kbd>plan</kbd> to organize them. Beside it, <kbd>run plan</kbd> shows while the plan has steps left, and <kbd>stop</kbd> while a step runs. `/aside` opens the same pane while Claude works.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/step-2-dark.svg">
   <img alt="Claude asks whether to update the docs. Above the prompt, the queue line shows 1 idea and 4 comments with a list button. You answer as usual; the queue keeps waiting." src="assets/step-2-light.svg">
 </picture>
 
-### 3. Plan or run when ready
+### 3. Look at it when ready
 
-Nothing reaches Claude until you say so: look at the list, then plan, run or pop.
+Nothing reaches Claude until you say so. `/aside` shows the queue in a frame, and `/aside pop N` puts one entry in the prompt box, ready to send.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/step-3-dark.svg">
-  <img alt="/aside shows the list, /aside plan has Claude turn it into steps, /aside run runs them, /aside pop 2 puts entry 2 in the prompt box." src="assets/step-3-light.svg">
+  <img alt="/aside shows the list in a frame, 1 idea and 1 comment with its file, line and quote; /aside pop 2 puts entry 2 in the prompt box." src="assets/step-3-light.svg">
+</picture>
+
+### 4. Plan and run
+
+`/aside plan` has Claude organize the queue into steps and save them. The plan shows in a frame, and what Claude finds done, contradictory or unclear goes back to the queue with its question. Plan again after adding more: the steps done and still to do are kept.
+
+`/aside run` sends the steps one after another, each once the one before ends. Each step knows where it stands in the plan, does only its own work and ends with a one-line result, shown under the step in `/aside`. A step that needs your answer pauses the plan: answer it, then `/aside run` goes on. After the last step, Claude sums the run up: what was done, what is still open and what comes next.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/step-4-dark.svg">
+  <img alt="/aside plan has Claude save the queue as steps and /aside run sends them one after another. Above the prompt: step 2 of 3 running, with list and stop buttons. The plan shows step 1 done with its result under it, step 2 running and step 3 to do; after the last step Claude ends with a summary of the run." src="assets/step-4-light.svg">
 </picture>
 
 ## Install
@@ -63,14 +74,18 @@ Requires <kbd>Claude Code</kbd> 2.1.301 or newer. The plugin API <kbd>aside</kbd
   </tr>
   <tr>
     <td><code>/aside</code></td><td>Show the queue and the plan; while Claude works, in the pane</td>
+    <td><code>/aside TEXT</code></td><td>Queue TEXT, as <code>+</code> would</td>
+  </tr>
+  <tr>
+    <td><code>/aside plan</code></td><td>Have Claude turn the queue into steps</td>
     <td><code>/aside pop [N]</code></td><td>Put the newest one (or N) in the box</td>
   </tr>
   <tr>
-    <td><code>/aside plan</code></td><td>Turn the queue into steps, merged with the steps still to do; what Claude finds unclear stays in the queue</td>
+    <td><code>/aside run</code></td><td>Run the plan step by step, or the queue entry by entry</td>
     <td><code>/aside edit N</code></td><td>Rework one and queue it again</td>
   </tr>
   <tr>
-    <td><code>/aside run [N ...]</code></td><td>Run the steps in turn (Claude can pause to ask you, and sums the run up after the last one), or only N ...: steps of the plan, or entries once no step is left to do</td>
+    <td><code>/aside run N [M ...]</code></td><td>Run only those steps, or those entries once no step is left to do</td>
     <td><code>/aside move N M</code></td><td>Move N to place M</td>
   </tr>
   <tr>
@@ -83,7 +98,7 @@ Requires <kbd>Claude Code</kbd> 2.1.301 or newer. The plugin API <kbd>aside</kbd
   </tr>
   <tr>
     <td><code>/aside help</code></td><td>List every command</td>
-    <td><code>/aside undo</code></td><td>Bring back what plan, run or clear took</td>
+    <td><code>/aside undo</code></td><td>Bring back what the last plan, run or clear took, before Claude answers it</td>
   </tr>
 </table>
 

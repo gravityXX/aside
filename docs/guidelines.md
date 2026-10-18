@@ -174,9 +174,9 @@ The plugin runs on the Claude Code plugin API: hooks `($, e, next)` added with `
 
 ## 8. The pictures script
 
-`assets/make_svgs.py` draws the README's step pictures, light and dark.
+`assets/make_svgs.py` draws every picture in the README, the timeline and the steps, light and dark.
 
-1. Python 3.12 or newer, the standard library only. It runs from the repository root: `python3 assets/make_svgs.py`.
+1. Python 3.12 or newer, the standard library only. It runs from the repository root: `uv run --no-project assets/make_svgs.py`.
 2. It is formatted with `uvx ruff format --line-length 120 assets`, linted with `uvx ruff check assets` and typed so that `uvx mypy --strict assets/make_svgs.py` passes.
 3. Colours live in `THEMES`: a light and a dark set with the same keys. Layout numbers are named constants (`W`, `ROW`, `PAD`).
 4. The SVGs are its output. Change the script, run it and commit both; never edit an SVG by hand.

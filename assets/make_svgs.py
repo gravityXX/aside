@@ -1,11 +1,14 @@
-"""Draws the README's step pictures, in a light and a dark version each.
+"""Draws the README's pictures, the timeline and the steps, in a light and a dark version each.
 
-Run from the repository root: python3 assets/make_svgs.py
+Run from the repository root: uv run --no-project assets/make_svgs.py
 """
 
 from pathlib import Path
 
-THEMES = {
+# A theme: each colour by the name the pictures use it under.
+Theme = dict[str, str]
+
+THEMES: dict[str, Theme] = {
     "light": {
         "fg": "#1f2328",
         "muted": "#59636e",
@@ -22,6 +25,11 @@ THEMES = {
         "claude": "#c15f3c",
         "kidea": "#5769f7",
         "kquestion": "#966c1e",
+        "pill": "#fff8c5",
+        "work": "#ddf4ff",
+        "workb": "#54aeff",
+        "go": "#dafbe1",
+        "gob": "#4ac26b",
     },
     "dark": {
         "fg": "#f0f6fc",
@@ -39,6 +47,11 @@ THEMES = {
         "claude": "#d77757",
         "kidea": "#b1b9f9",
         "kquestion": "#ffc107",
+        "pill": "#3b2e00",
+        "work": "#0c2d6b",
+        "workb": "#1f6feb",
+        "go": "#0f2d1a",
+        "gob": "#2ea043",
     },
 }
 
@@ -53,7 +66,7 @@ def esc(text: str) -> str:
     return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
 
 
-def window(c: dict, height: int, title: str, body: str, label: str) -> str:
+def window(c: Theme, height: int, title: str, body: str, label: str) -> str:
     return f'''<svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" width="{W}" height="{height}" viewBox="0 0 {W} {height}" role="img" aria-label="{esc(label)}">
   <style>
     .m {{ font: 400 13.5px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fill: {c["fg"]}; }}
@@ -89,7 +102,7 @@ def prompt(y: float, mark: str, text: str, gloss: str = "") -> str:
     return line(y, [("❯ ", "f"), (mark, "a"), (text, "")], gloss)
 
 
-def frame(c: dict, x: float, w: float, h: float, title: str) -> str:
+def frame(c: Theme, x: float, w: float, h: float, title: str) -> str:
     """A small window: border, title bar and title, at x on the top edge."""
     return (
         f'  <rect x="{x + 0.5}" y="0.5" width="{w - 1}" height="{h - 1}" rx="10" fill="{c["panel"]}" stroke="{c["line"]}"/>\n'
@@ -99,7 +112,89 @@ def frame(c: dict, x: float, w: float, h: float, title: str) -> str:
     )
 
 
-def step1(c: dict) -> str:
+def band(c: Theme, y: float, text: str, buttons: list[str]) -> str:
+    """The line above the prompt: what aside says, and its buttons at the right end."""
+    out = (
+        f'  <rect x="{PAD - 8}" y="{y}" width="{W - 2 * PAD + 16}" height="30" rx="6" fill="{c["band"]}" stroke="{c["bandb"]}"/>\n'
+        f'  <text x="{PAD}" y="{y + 20}" class="m d">{esc(text)}</text>\n'
+    )
+    for n, label in enumerate(reversed(buttons)):
+        x = W - PAD - 60 - n * 60
+        out += (
+            f'  <rect x="{x}" y="{y + 5}" width="52" height="20" rx="4" fill="{c["btn"]}" stroke="{c["line"]}"/>\n'
+            f'  <text x="{x + 26}" y="{y + 19}" class="m" text-anchor="middle">{esc(label)}</text>\n'
+        )
+    return out
+
+
+def arrow(d: str, colour: str) -> str:
+    return f'  <path d="{d}" stroke="{colour}" stroke-width="1.5" fill="none" marker-end="url(#a)"/>\n'
+
+
+def how_it_works(c: Theme) -> str:
+    """The timeline at the top of the README: Claude, you and the queue, side by side."""
+    sans = '-apple-system, "Segoe UI", Helvetica, Arial, sans-serif'
+    mono = "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+    pill = f'fill="{c["pill"]}" stroke="{c["bandb"]}"'
+    go = f'fill="{c["go"]}" stroke="{c["gob"]}"'
+    idle = f'fill="{c["panel"]}" stroke="{c["line"]}"'
+    steps = "".join(
+        f'  <rect x="{x}" y="56" width="{w}" height="28" rx="14" {go}/>'
+        f'<text x="{x + w // 2}" y="75" class="t" text-anchor="middle">{name}</text>\n'
+        for x, w, name in ((624, 72, "step 1"), (704, 72, "step 2"), (784, 96, "summary"))
+    )
+    label = (
+        "While Claude works on your task, you copy text with Ctrl+C and add ideas and comments; they go to a queue instead "
+        "of to Claude. When it is done you answer it as usual, and /aside plan hands the queue over as steps, which Claude "
+        "sums up after the last one."
+    )
+    return f'''<svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" width="{W}" height="280" viewBox="0 0 {W} 280" role="img" aria-label="{esc(label)}">
+  <style>
+    .lab {{ font: 600 13px {sans}; fill: {c["muted"]}; }}
+    .t {{ font: 500 13px {sans}; fill: {c["fg"]}; }}
+    .s {{ font: 400 12px {sans}; fill: {c["muted"]}; }}
+    .m {{ font: 500 12.5px {mono}; fill: {c["fg"]}; }}
+    .k {{ font: 700 12px {mono}; fill: {c["fg"]}; }}
+  </style>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="{c["faint"]}"/>
+    </marker>
+  </defs>
+
+  <text x="0" y="75" class="lab">Claude</text>
+  <text x="0" y="165" class="lab">You</text>
+  <text x="0" y="235" class="lab">Queue</text>
+  <line x1="92" y1="70" x2="{W}" y2="70" stroke="{c["line"]}" stroke-dasharray="2 4"/>
+  <line x1="92" y1="160" x2="{W}" y2="160" stroke="{c["line"]}" stroke-dasharray="2 4"/>
+
+  <rect x="92" y="56" width="420" height="28" rx="6" fill="{c["work"]}" stroke="{c["workb"]}"/>
+  <text x="106" y="75" class="t">works on your task, undisturbed</text>
+  <rect x="524" y="56" width="56" height="28" rx="14" {idle}/><text x="552" y="75" class="t" text-anchor="middle">done</text>
+
+  <rect x="96" y="146" width="96" height="28" rx="14" {pill}/><text x="144" y="165" class="m" text-anchor="middle">+ idea</text>
+  <text x="240" y="136" class="s" text-anchor="middle">copy first</text>
+  <rect x="208" y="147" width="64" height="26" rx="5" fill="{c["key"]}" stroke="{c["line"]}" stroke-width="1.5"/>
+  <rect x="209" y="168" width="62" height="4" rx="2" fill="{c["line"]}"/>
+  <text x="240" y="164" class="k" text-anchor="middle">Ctrl+C</text>
+{arrow("M274 160 H284", c["acc"])}  <rect x="288" y="146" width="112" height="28" rx="14" {pill}/><text x="344" y="165" class="m" text-anchor="middle">+? comment</text>
+  <rect x="416" y="146" width="104" height="28" rx="14" {pill}/><text x="468" y="165" class="m" text-anchor="middle">+! change</text>
+
+{arrow("M144 176 V212", c["bandb"])}{arrow("M344 176 V212", c["bandb"])}{arrow("M468 176 V212", c["bandb"])}  <rect x="92" y="216" width="440" height="28" rx="6" fill="{c["panel"]}" stroke="{c["bandb"]}" stroke-dasharray="4 3"/>
+  <text x="106" y="235" class="s">waits here with what you copied, Claude does not see it</text>
+
+  <rect x="548" y="146" width="52" height="28" rx="14" {idle}/><text x="574" y="165" class="t" text-anchor="middle">reply</text>
+{arrow("M574 144 V90", c["faint"])}
+  <rect x="616" y="146" width="112" height="28" rx="14" {go}/><text x="672" y="165" class="m" text-anchor="middle">/aside plan</text>
+{arrow("M536 230 H672 V180", c["gob"])}{arrow("M672 144 V90", c["gob"])}
+{steps}
+  <text x="574" y="272" class="s" text-anchor="middle">you answer as usual</text>
+  <text x="792" y="272" class="s" text-anchor="middle">then hand the queue over</text>
+</svg>
+'''
+
+
+def step1(c: Theme) -> str:
     pw, ph = 400, 150
     rx = W - pw
     marks = [("+", "idea"), ("+?", "question"), ("+!", "change"), ("+-", "drop"), ("++", "dig deeper")]
@@ -149,15 +244,12 @@ def step1(c: dict) -> str:
 '''
 
 
-def step2(c: dict) -> str:
+def step2(c: Theme) -> str:
     y0 = TOP
     band_y = y0 + 14
     body = (
         line(y0, [("● ", "a"), ("Done. Shall I update the docs too?", "")])
-        + f'  <rect x="{PAD - 8}" y="{band_y}" width="{W - 2 * PAD + 16}" height="30" rx="6" fill="{c["band"]}" stroke="{c["bandb"]}"/>\n'
-        + f'  <text x="{PAD}" y="{band_y + 20}" class="m d">aside: 1 idea, 4 comments</text>\n'
-        + f'  <rect x="{W - PAD - 60}" y="{band_y + 5}" width="52" height="20" rx="4" fill="{c["btn"]}" stroke="{c["line"]}"/>\n'
-        + f'  <text x="{W - PAD - 34}" y="{band_y + 19}" class="m" text-anchor="middle">list</text>\n'
+        + band(c, band_y, "aside: 1 idea, 4 comments", ["list"])
         + line(band_y + 30 + ROW, [("❯ ", "f"), ("yes, go ahead", "")], "your reply goes to Claude as usual")
     )
     label = (
@@ -167,7 +259,7 @@ def step2(c: dict) -> str:
     return window(c, int(band_y + 30 + ROW + 26), "Claude Code", body, label)
 
 
-def step3(c: dict) -> str:
+def step3(c: Theme) -> str:
     # The list as /aside draws it: a frame, the kinds in the theme's colours. Each column has
     # its own x, since a browser may collapse the runs of spaces that line columns up.
     box_x, box_w = PAD + 8, W - 2 * PAD - 8
@@ -177,7 +269,7 @@ def step3(c: dict) -> str:
         ("1", "idea", "cache the parsed config", "", "kidea"),
         ("2", "question", "where is this from", '↳ docs/report.md:42 · "Revenue grew by 12% in Q3."', "kquestion"),
     ]
-    y = TOP
+    y: float = TOP
     body = line(y, [("❯ ", "f"), ("/aside", "a")], "see the list")
     top = y + 12
     y = top + ROW
@@ -197,18 +289,58 @@ def step3(c: dict) -> str:
             body += f'  <text x="{text}" y="{y}" class="m d">{esc(about)}</text>\n'
     bottom = y + 14
     body += f'  <rect x="{box_x}" y="{top}" width="{box_w}" height="{bottom - top}" rx="8" fill="none" stroke="{c["line"]}" stroke-width="1.5"/>\n'
-    y = bottom
-    for command, gloss in (
-        ("/aside plan", "Claude turns it into steps"),
-        ("/aside run", "step 1 of 3 running"),
-        ("/aside pop 2", "entry 2, ready to send"),
-    ):
-        y += ROW * (1.25 if command == "/aside plan" else 1)
-        body += line(y, [("❯ ", "f"), (command, "a")], gloss)
+    y = bottom + ROW * 1.25
+    body += line(y, [("❯ ", "f"), ("/aside pop 2", "a")], "entry 2, ready to send")
     label = (
         "In Claude Code: /aside draws what waits in a frame, 1 idea and 1 comment, in columns: number, kind in its colour, "
-        "text, and under a comment its file, line and quote. /aside plan has Claude turn it into steps; /aside run runs them, "
-        "step 1 of 3 first; /aside pop 2 puts entry 2 in the prompt box, ready to send."
+        "text, and under a comment its file, line and quote. /aside pop 2 puts entry 2 in the prompt box, ready to send."
+    )
+    return window(c, int(y + 26), "Claude Code", body, label)
+
+
+def step4(c: Theme) -> str:
+    # The plan as the list shows it while step 2 runs: a step done with its result under it,
+    # the running one, one to do; the states in the colours /aside gives them.
+    box_x, box_w = PAD + 8, W - 2 * PAD - 8
+    out = box_x + 16
+    number, state, text = out + 16, out + 36, out + 120
+    rows = [
+        ("1", "done", "cache the parsed config", "↳ cached once at start-up; the tests pass", "k"),
+        ("2", "running", "where is this from", "", "kquestion"),
+        ("3", "to do", "a shorter results section", "", ""),
+    ]
+    y: float = TOP
+    body = line(y, [("❯ ", "f"), ("/aside plan", "a")], "Claude saves the queue as steps")
+    y += ROW
+    body += line(y, [("❯ ", "f"), ("/aside run", "a")], "they go one after another")
+    band_y = y + 14
+    body += band(c, band_y, "aside: step 2/3 running, 1 idea", ["list", "stop"])
+    top = band_y + 30 + 14
+    y = top + ROW
+    body += (
+        f'  <text x="{out}" y="{y}" class="m claude">aside</text>'
+        f'<text x="{out + 60}" y="{y}" class="m b">Plan: 2 of 3 steps to do (/aside run)</text>\n'
+    )
+    y += ROW * 0.5
+    for n, word, t, about, colour in rows:
+        y += ROW
+        dim = " d" if word == "done" else ""
+        body += (
+            f'  <text x="{number}" y="{y}" class="m d" text-anchor="end">{n}</text>'
+            f'<text x="{state}" y="{y}" class="m {colour}">{esc(word)}</text><text x="{text}" y="{y}" class="m{dim}">{esc(t)}</text>\n'
+        )
+        if about:
+            y += ROW
+            body += f'  <text x="{text}" y="{y}" class="m d">{esc(about)}</text>\n'
+    bottom = y + 14
+    body += f'  <rect x="{box_x}" y="{top}" width="{box_w}" height="{bottom - top}" rx="8" fill="none" stroke="{c["line"]}" stroke-width="1.5"/>\n'
+    y = bottom + ROW * 1.25
+    body += line(y, [("● ", "a"), ("Summary of the run", "b")], "after the last step: done, open, next")
+    label = (
+        "In Claude Code: /aside plan has Claude save the queue as steps, and /aside run sends them one after another. "
+        "Above the prompt, aside: step 2/3 running, 1 idea, with list and stop buttons. The list shows the plan: step 1 done "
+        "with its result under it, cached once at start-up; the tests pass, step 2 running, step 3 to do. After the last "
+        "step, Claude ends with a summary of the run: what was done, what is open and what comes next."
     )
     return window(c, int(y + 26), "Claude Code", body, label)
 
@@ -216,7 +348,8 @@ def step3(c: dict) -> str:
 def main() -> None:
     out = Path(__file__).parent
     for name, colours in THEMES.items():
-        for number, draw in ((1, step1), (2, step2), (3, step3)):
+        (out / f"how-it-works-{name}.svg").write_text(how_it_works(colours), encoding="utf-8")
+        for number, draw in ((1, step1), (2, step2), (3, step3), (4, step4)):
             (out / f"step-{number}-{name}.svg").write_text(draw(colours), encoding="utf-8")
 
 
