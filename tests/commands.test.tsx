@@ -123,6 +123,15 @@ describe('taking entries out', () => {
     expect(await aside('clear')).toBe('The queue is already empty.')
   })
 
+  test('/aside remove takes several entries out at once, or none when a number is out of range', async ($, on) => {
+    const { type, aside, shown } = world($, on)
+    await type('+ a\n+ b\n+ c\n+ d')
+
+    expect(await aside('remove 1 9')).toBe('Give numbers from 1 to 4, as /aside list shows them.')
+    expect(await aside('remove 3 1 3')).toBe('Removed 2 entries: a; c')
+    expect(await shown()).toEqual(['2 ideas waiting', '1 idea b', '2 idea d'])
+  })
+
   test('/aside undo brings back what clear took, even after clearing an empty queue', async ($, on) => {
     const { type, aside, shown } = world($, on)
     await type('+ a\n+ b')
@@ -243,6 +252,8 @@ describe('tab completion', () => {
     expect(await complete($, '/aside cl')).toEqual(['clear: empty the queue'])
     expect(await complete($, '/aside p')).toEqual(['plan: organize the queue into steps', 'pop: put an entry in the box, ready to send'])
     expect(await complete($, '/aside pop ')).toEqual(['1: dark mode', '2: question: why so slow'])
+    expect(await complete($, '/aside remove 1 ')).toEqual(['1: dark mode', '2: question: why so slow'])
+    expect(await complete($, '/aside pop 1 ')).toEqual([])
     expect(await complete($, 'just text')).toEqual([])
   })
 })

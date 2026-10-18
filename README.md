@@ -75,7 +75,7 @@ Requires <kbd>Claude Code</kbd> 2.1.301 or newer. The plugin API <kbd>aside</kbd
   </tr>
   <tr>
     <td><code>/aside run all</code></td><td>Send the queue as is, no plan</td>
-    <td><code>/aside remove N</code></td><td>Remove one</td>
+    <td><code>/aside remove N [M ...]</code></td><td>Remove one, or several at once</td>
   </tr>
   <tr>
     <td><code>/aside stop</code></td><td>Stop after the current step</td>
