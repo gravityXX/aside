@@ -8,7 +8,7 @@ import { shortenText } from '../core/text'
 import { loadEntries, loadPlan, projectKeys, refreshBand } from '../io/store'
 import { addEntries } from './capture'
 import { handOverQueue, registerPlanTool, runEntries, runPlan, stopPlan } from './plan'
-import { clearQueue, editEntry, moveEntry, popEntry, removeEntry, restoreTaken, scanFile, showListing } from './queue'
+import { clearQueue, editEntry, moveEntry, popEntry, removeEntries, restoreTaken, scanFile, showListing } from './queue'
 
 type Name = 'list' | 'plan' | 'run' | 'stop' | 'pop' | 'edit' | 'move' | 'remove' | 'clear' | 'undo' | 'scan' | 'help'
 
@@ -92,10 +92,10 @@ const COMMANDS: readonly Command[] = [
   {
     name: 'remove',
     aliases: ['rm'],
-    takes: oneNumber,
-    usage: 'remove N',
-    help: ['/aside remove N - remove entry N'],
-    about: 'remove an entry',
+    takes: args => args.length > 0 && args.every(isNumber),
+    usage: 'remove N [M ...]',
+    help: ['/aside remove N [M ...] - remove entry N, or several at once'],
+    about: 'remove entries',
     completes: 'entries',
   },
   {
@@ -173,7 +173,7 @@ async function runCommand($: Engine, ctx: Context, name: Name, args: readonly st
     case 'move':
       return moveEntry($, ctx, Number(first), Number(second))
     case 'remove':
-      return removeEntry($, ctx, Number(first))
+      return removeEntries($, ctx, args.map(Number))
     case 'clear':
       return clearQueue($)
     case 'undo':
@@ -226,8 +226,12 @@ type Autocomplete = Parameters<Hook<'prompt.autocomplete'>>
 export async function completeAside(ctx: Context, $: Engine, e: Autocomplete[1], next: Autocomplete[2]) {
   const typed = e.text.slice(0, e.cursor)
   const first = /^\/aside\s+(\S*)$/.exec(typed)
-  const second = /^\/aside\s+(\S+)\s+(\d*)$/.exec(typed)
-  const completes = second ? commandNamed(second[1]!)?.completes : undefined
+  // A number after a command, with the numbers already typed before it: offered only where
+  // one more number keeps the command's shape, so "/aside pop 2 " offers nothing.
+  const later = /^\/aside\s+(\S+)\s+((?:\d+\s+)*)(\d*)$/.exec(typed)
+  const command = later ? commandNamed(later[1]!) : undefined
+  const typedNumbers = later ? later[2]!.split(/\s+/).filter(Boolean) : []
+  const completes = command?.takes([...typedNumbers, '1']) ? command.completes : undefined
   if (!first && completes === undefined) {
     return next(e)
   }
@@ -239,7 +243,7 @@ export async function completeAside(ctx: Context, $: Engine, e: Autocomplete[1],
     return { suggestions: [...own, ...rows] }
   }
 
-  return { suggestions: [...own, ...(await numberRows($, ctx, completes!, second![2]!))] }
+  return { suggestions: [...own, ...(await numberRows($, ctx, completes!, later![3]!))] }
 }
 
 type SessionStart = Parameters<Hook<'session.start'>>

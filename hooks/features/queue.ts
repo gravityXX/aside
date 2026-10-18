@@ -135,19 +135,21 @@ export async function popEntry($: Engine, ctx: Context, n?: number): Promise<str
   return `In the prompt box, ready to send: ${shortenText(entry.text, 60)}`
 }
 
-export async function removeEntry($: Engine, ctx: Context, n: number): Promise<string> {
+// Removes the entries at places `numbers`, all of them or none when one is out of range.
+export async function removeEntries($: Engine, ctx: Context, numbers: readonly number[]): Promise<string> {
   const { keys, list } = await shownQueue($, ctx)
   if (list.length === 0) {
     return 'The queue is empty.'
   }
-  if (!isPlace(n, list.length)) {
-    return `Give a number from 1 to ${list.length}, as /aside list shows them.`
+  if (!numbers.every(n => isPlace(n, list.length))) {
+    return `Give ${numbers.length === 1 ? 'a number' : 'numbers'} from 1 to ${list.length}, as /aside list shows them.`
   }
-  const [gone] = list.splice(n - 1, 1)
-  await saveShownQueue($, ctx, keys, list)
+  const places = new Set(numbers)
+  const gone = list.filter((_entry, i) => places.has(i + 1))
+  await saveShownQueue($, ctx, keys, list.filter((_entry, i) => !places.has(i + 1)))
   await refreshBand($)
 
-  return `Removed: ${gone!.text}`
+  return gone.length === 1 ? `Removed: ${gone[0]!.text}` : `Removed ${formatCount(gone.length, 'entry')}: ${gone.map(entry => shortenText(entry.text, 40)).join('; ')}`
 }
 
 export async function clearQueue($: Engine): Promise<string> {
