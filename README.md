@@ -110,6 +110,28 @@ Requires <kbd>Claude Code</kbd> 2.1.301 or newer. The plugin API <kbd>aside</kbd
 > **The queue stays on your machine**, one per project. Nothing reaches Claude's conversation until you run `/aside plan` or `/aside run`, or `afterClaudeAnswers` does. With `tidy` on, the text you type goes to Haiku to be corrected. What you copied never does.
 
 <details>
+<summary>What aside reads, runs and sends</summary>
+
+<br>
+
+| | What | When |
+| --- | --- | --- |
+| **Keeps** | The queue, the plan and what `/aside undo` brings back, one set per project, in Claude Code's store for the plugin (a JSON file under `~/.claude/plugins/store/`). It writes no file of yours. | Always |
+| **Reads** | Markdown files Claude wrote or edited this session, and files you `/aside scan`, for `<!-- ? -->` tags | `/aside`, a plan or a run, and when Claude answers |
+| | The project's markdown files, to find the text you copied | A comment on copied text that names no file |
+| | The clipboard, the lines you selected in Claude's reply, the last tool output of the turn | A comment |
+| | The git branch of the project | Each entry |
+| **Runs** | `powershell.exe` with `Get-Clipboard` (WSL, Windows), `pbpaste` (macOS), `wl-paste`, `xclip` or `xsel` (Linux) | Reading the clipboard |
+| | `git rev-parse --abbrev-ref HEAD` | Each entry |
+| | `grep -rlizP` over the project's markdown files | A comment on copied text that names no file |
+| **Sends** | The entries, with what each points at, the task and branch it came with, and the tool output, as a prompt to Claude | `/aside plan`, `/aside run`, or `afterClaudeAnswers` |
+| | The text you typed, never what you copied, to Haiku through Claude Code, to be corrected | Each entry, while `tidy` is `on` |
+
+aside opens no network connection of its own and installs nothing.
+
+</details>
+
+<details>
 <summary>Other ways to comment</summary>
 
 <br>
