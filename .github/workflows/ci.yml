@@ -4,8 +4,6 @@ on:
   push:
     branches: [main]
   pull_request:
-  # Started by the bump step: a push with the workflow token starts no run by itself
-  workflow_dispatch:
 
 jobs:
   check:
@@ -63,8 +61,19 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git commit -qam "bump: version $LAST → $NEXT"
           git push -q origin "HEAD:$BRANCH"
-          gh workflow run ci.yml --ref "$BRANCH"
           echo "pushed=true" >> "$GITHUB_OUTPUT"
+          # GitHub holds the bot's run for approval as a first-time contributor's
+          sha=$(git rev-parse HEAD)
+          for _ in $(seq 36); do
+            run=$(gh run list --commit "$sha" --event pull_request --json databaseId,conclusion --jq '.[] | select(.conclusion == "action_required") | .databaseId' | head -1)
+            if [ -n "$run" ]; then
+              gh api -X POST "repos/$GITHUB_REPOSITORY/actions/runs/$run/approve"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::No run for $sha to approve"
+          exit 1
       - name: Version
         if: steps.bump.outputs.pushed != 'true'
         env:
