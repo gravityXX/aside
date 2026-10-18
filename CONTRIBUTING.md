@@ -21,4 +21,8 @@ For a type check, start a session with the plugin loaded once, so Claude Code wr
 - `tests/queue.test.tsx` - the tests, one `describe` per area.
 - `assets/make_svgs.py` - draws the step pictures in the README, light and dark: `python3 assets/make_svgs.py`.
 
-Note a change under a new version in `CHANGELOG.md` and bump the version in `.claude-plugin/plugin.json`.
+## Release
+
+Commit messages and pull request titles follow [Conventional Commits](https://www.conventionalcommits.org): `feat:`, `fix:`, `docs:` and so on. CI checks both.
+
+Before opening a pull request that changes what users get, run `uvx --from commitizen cz bump --files-only`. It bumps the version in `.claude-plugin/plugin.json` from the commits since the last tag. Then note the change under that version in `CHANGELOG.md`. Once the pull request is merged, the Release workflow tags `vX.Y.Z` and publishes a GitHub release with that section.

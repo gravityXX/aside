@@ -1,0 +1,30 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Release the version in plugin.json
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          name=$(jq -r .name .claude-plugin/plugin.json)
+          version=$(jq -r .version .claude-plugin/plugin.json)
+          if gh release view "v$version" > /dev/null 2>&1; then
+            echo "v$version is already released"
+            exit 0
+          fi
+          {
+            jq -r .description .claude-plugin/plugin.json
+            echo
+            awk -v v="$version" '/^## / { if (on) exit; on = index($0, "## " v " ") == 1 } on' CHANGELOG.md | sed '1s/^## \([^ ]*\) .*/### \1/'
+          } > "$RUNNER_TEMP/notes.md"
+          gh release create "v$version" --target "$GITHUB_SHA" --title "$name $version" --notes-file "$RUNNER_TEMP/notes.md"
