@@ -294,8 +294,8 @@ async function storeFailed($: Engine, ctx: Context, text: string, error: unknown
   const filled = box?.text.trim() === '' ? await $.prompt.fill({ text, mode: 'replace' }).catch(() => undefined) : undefined
   $.ui.log(
     filled?.isFilled
-      ? `aside could not queue "${shortenText(text, 40)}" (${why}); it is back in the prompt box.`
-      : `aside could not queue this entry (${why}); here it is to queue again:\n${text}`,
+      ? `Could not queue "${shortenText(text, 40)}" (${why}); it is back in the prompt box.`
+      : `Could not queue this entry (${why}); here it is to queue again:\n${text}`,
   )
 }
 

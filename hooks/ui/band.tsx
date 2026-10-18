@@ -16,7 +16,7 @@ async function pressAction($: Engine, ctx: Context, action: Action) {
     const said = action === 'stop' ? await stopPlan($) : await runPlan($, ctx)
     if (said !== undefined) $.ui.toast(said)
   } catch (error) {
-    $.ui.toast(`aside could not ${action === 'stop' ? 'stop' : 'run'} the plan (${describeError(error)}).`)
+    $.ui.toast(`Could not ${action === 'stop' ? 'stop' : 'run'} the plan (${describeError(error)}).`)
   }
 }
 
@@ -47,7 +47,8 @@ export async function drawBand(ctx: Context, $: Engine, e: BandRender[1], next: 
   return (
     <Box>
       <Text dimColor>aside: {parts.join(', ')} · </Text>
-      <Button key="list" label="list" onPress={() => void toggleListPane($)} />
+      {/* Returned, not voided: the press lasts until the pane opens, so the engine counts the open as asked. */}
+      <Button key="list" label="list" onPress={() => toggleListPane($)} />
       {/* Siblings, not a fragment: the engine draws <> as a column, which put the button a line lower. */}
       {action === undefined ? null : <Text> </Text>}
       {action === undefined ? null : <Button key="action" label={action} onPress={() => void pressAction($, ctx, action)} />}

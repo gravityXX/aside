@@ -59,26 +59,35 @@ export async function currentListing($: Engine, ctx: Context): Promise<ListingSe
 // The pane the band's list button opens; register.tsx names the same id in its matcher.
 export const LIST_PANE = 'aside'
 
-async function isListPaneOpen($: Engine): Promise<boolean> {
-  return (await $.ui.panes()).some(pane => pane.id === LIST_PANE)
+// The list pane as the person sees it: not open, open but out of sight (a tab behind another
+// pane, or waiting undrawn), or in sight.
+async function listPaneState($: Engine): Promise<'closed' | 'hidden' | 'shown'> {
+  const pane = (await $.ui.panes()).find(one => one.id === LIST_PANE)
+
+  return pane === undefined ? 'closed' : pane.isShown && pane.isPlaced ? 'shown' : 'hidden'
 }
 
-// Opens the list pane unless it is open already; false when the terminal has no room for it.
-async function openListPane($: Engine): Promise<boolean> {
-  if (await isListPaneOpen($)) {
-    return true
+// Shows the list pane: opens it, or brings it to the front when it is open out of sight. The
+// reason is the surface's when it cannot place the pane.
+async function openListPane($: Engine): Promise<{ isPlaced: true } | { isPlaced: false; reason: string }> {
+  if ((await listPaneState($)) === 'shown') {
+    return { isPlaced: true }
   }
 
-  return (await $.ui.open({ id: LIST_PANE, title: 'aside', focus: true, closeOnEscape: true })).isPlaced
+  return $.ui.open({ id: LIST_PANE, title: 'aside', focus: true, closeOnEscape: true })
 }
 
-// Opens the list pane, or closes it when it is open: the band's list button.
+// The band's list button: closes the list pane when it is in sight, shows it otherwise. A pane
+// open out of sight is shown, not closed, or the press would seem to do nothing.
 export async function toggleListPane($: Engine) {
-  if (await isListPaneOpen($)) {
+  const state = await listPaneState($)
+  if (state === 'shown') {
     await $.ui.close({ id: LIST_PANE })
     return
   }
-  if (!(await openListPane($))) $.ui.toast('/aside shows the list')
+  const opened = await openListPane($)
+  // The engine's reason runs long ("unasked below 144 columns (125 now): placed when ..."): its head says enough.
+  if (!opened.isPlaced) $.ui.toast(`Could not show the list pane (${opened.reason.split(':')[0]}); /aside shows the list`)
 }
 
 // /aside alone. While Claude works, what a command prints shows only once the turn ends, so
@@ -89,7 +98,7 @@ export async function showListing($: Engine, ctx: Context): Promise<string> {
   if (!ctx.session.isRunning) {
     return text
   }
-  if (await openListPane($)) {
+  if ((await openListPane($)).isPlaced) {
     return 'Opened the list in the pane while Claude was working.'
   }
   $.ui.log(text)

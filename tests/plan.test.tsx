@@ -591,13 +591,13 @@ describe('running the plan', () => {
     w.isStoreFull = true
 
     await startTurn(sent[0]!, 's1')
-    expect(toasts.at(-1)).toBe('aside could not note the start of this turn (the store is full); a running plan may not go on by itself')
+    expect(toasts.at(-1)).toBe('Could not note the start of this turn (the store is full); a running plan may not go on by itself')
     w.isStoreFull = false
     await startTurn(sent[0]!, 's1')
     w.isStoreFull = true
     await endTurn('s1')
     expect(toasts.at(-1)).toBe(
-      'aside could not finish its work at the end of this turn (the store is full); /aside shows where the queue and the plan stand',
+      'Could not finish its work at the end of this turn (the store is full); /aside shows where the queue and the plan stand',
     )
   })
 
@@ -609,7 +609,7 @@ describe('running the plan', () => {
     w.isStoreFull = true
     await idle()
 
-    expect(toasts).toEqual(['aside could not send its prompt (blocked by a hook), nor set things back: the store is full'])
+    expect(toasts).toEqual(['Could not send its prompt (blocked by a hook), nor set things back: the store is full'])
   })
 
   test('the wait tool is refused outside a step of the plan', async ($, on) => {

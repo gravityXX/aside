@@ -153,7 +153,7 @@ describe('when the store refuses an entry', () => {
     expect(await type('+ dark mode for the pane')).toEqual({ drop: 'queued' })
     await idle()
     expect(filled).toEqual(['+ dark mode for the pane'])
-    expect(logged.at(-1)).toBe('aside could not queue "+ dark mode for the pane" (the store is full); it is back in the prompt box.')
+    expect(logged.at(-1)).toBe('Could not queue "+ dark mode for the pane" (the store is full); it is back in the prompt box.')
     w.isStoreFull = false
     expect(await shown()).toEqual(['The queue is empty.'])
   })
@@ -164,7 +164,7 @@ describe('when the store refuses an entry', () => {
 
     await type('+ a long idea\nwith a second line')
     expect(filled.filter(text => text !== '')).toEqual([])
-    expect(logged.at(-1)).toBe('aside could not queue this entry (the store is full); here it is to queue again:\n+ a long idea\nwith a second line')
+    expect(logged.at(-1)).toBe('Could not queue this entry (the store is full); here it is to queue again:\n+ a long idea\nwith a second line')
   })
 
   test('an entry taken out with /aside edit stays taken until it is stored again', async ($, on) => {
