@@ -396,12 +396,11 @@ export const plan = (ideas: readonly Idea[], root: string, pending: readonly Ste
   }
   sections.push(
     [
-      'Organize all of it without doing any of it yet:',
-      '- answer the questions right away in this reply, unless an answer needs real work;',
-      '- merge related items into one task and keep unrelated ones apart;',
-      '- suggest an order (whatever the rest depends on comes first) and say why in a few words;',
+      `Organize all of it, and only organize it: do none of it and answer none of it yet. Use no tool but the ${tool} tool, so read nothing, run nothing and change nothing.`,
+      '- merge related items into one step and keep unrelated ones apart; a question is an item like any other, answered when its step runs;',
+      '- order the steps so whatever the rest depends on comes first, and say why in a few words;',
       '- for each step, write a prompt I could send you as it is; it must stand on its own, file paths included;',
-      '- list items that are already done, contradictory or unclear separately, each with a question;',
+      '- list items that look done, contradictory or unclear separately, each with a question;',
       '- when a step handles a comment that is a <!-- --> tag in a file, the step removes that tag.',
       `Then save the steps with the ${tool} tool and stop: I run them with /aside run (all, in order) or /aside run N.`,
     ].join('\n'),
