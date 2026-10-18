@@ -49,6 +49,24 @@ describe('the band above the prompt', () => {
     expect(await row()).toEqual({ direction: 'row', children: ['Text', 'list', 'Text', 'action'] })
   })
 
+  test('a paused plan shows on the band, and its continue button goes on with the run', async ($, on) => {
+    const { sent, toasts, aside, savePlan, startTurn, endTurn, idle, band, pressBand } = world($, on)
+    await savePlan(STEPS)
+    await aside('run')
+    await idle()
+    await startTurn(sent[0]!, 's1')
+    await $.tool.call({ tool: 'mcp__aside__wait', reason: 'x' } as never)
+    await endTurn('s1')
+
+    const ui = await band()
+    expect((await ui.find({ type: 'Text', text: /^aside: / }))?.text).toBe('aside: plan paused after step 1 · ')
+    expect((await ui.find({ key: 'action' }))?.props.label).toBe('continue')
+    await ui.unmount()
+    await pressBand('action')
+    expect(toasts.at(-1)).toBe('Going on with the plan from step 2. /aside stop stops after the current one.')
+    expect(sent.at(-1)).toContain('Do two.')
+  })
+
   test('its list button opens the list pane, and closes it on a second press', async ($, on) => {
     const { panes, type, pressBand } = world($, on)
     await type('+ x')

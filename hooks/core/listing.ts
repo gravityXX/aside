@@ -80,8 +80,16 @@ export const planSection = (plan: Plan): ListingSection | null => {
   const left = plan.steps.filter(step => !step.isDone).length
   const stateOf = (i: number) => (plan.active?.step === i ? 'running' : plan.steps[i]!.isDone ? 'done' : 'to do')
 
+  const paused = plan.paused && !plan.active ? plan.paused : undefined
+  const toDo = `${left} of ${formatCount(plan.steps.length, 'step')} to do`
+
   return {
-    title: left === 0 ? `Plan done: ${formatCount(plan.steps.length, 'step')}` : `Plan: ${left} of ${formatCount(plan.steps.length, 'step')} to do (/aside run)`,
+    title:
+      left === 0
+        ? `Plan done: ${formatCount(plan.steps.length, 'step')}`
+        : paused
+          ? `Plan paused after step ${paused.step + 1} (${paused.reason}), ${toDo} (/aside continue)`
+          : `Plan: ${toDo} (/aside run)`,
     rows: plan.steps.map((step, i) => ({ label: String(i + 1), word: stateOf(i), lines: [step.title], about: step.isDone && step.result ? [step.result] : [] })),
   }
 }

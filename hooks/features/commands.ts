@@ -49,10 +49,12 @@ const COMMANDS: readonly Command[] = [
   },
   {
     name: 'run',
+    aliases: ['continue'],
     takes: args => none(args) || (args.length === 1 && args[0] === 'all') || args.every(isNumber),
     usage: 'run [N ... | all]',
     help: [
       '/aside run - run the plan step by step; with no plan, each entry as its own step',
+      '/aside continue - go on with a run a step paused, as /aside run does',
       '/aside run N [M ...] - run those steps of the plan, or those entries once no step is left to do',
       '/aside run all - send everything at once, no plan',
     ],

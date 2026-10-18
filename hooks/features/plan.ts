@@ -112,6 +112,8 @@ function stepMode(steps: readonly Step[], index: number, isChain: boolean, then:
 async function startStep($: Engine, ctx: Context, index: number, isChain: boolean, then?: readonly number[]) {
   const keys = await projectKeys($)
   const plan = await loadPlan($, keys.plan)
+  // A step that starts, the run going on or a new one, ends any pause.
+  delete plan.paused
   plan.active = { step: index, isChain, sessionId: await $.session.id(), ...(then ? { then: [...then] } : {}) }
   await savePlan($, keys.plan, plan)
   await refreshBand($)
@@ -137,8 +139,20 @@ async function runningHere($: Engine, plan: Plan): Promise<string | undefined> {
     : undefined
 }
 
-// /aside run on the saved plan, from its first step not done. Undefined when every step is
-// done, so the queue runs entry by entry instead.
+// Where a paused run goes on: the next of its own steps still to do, or -1 with none left.
+function pausedNext(plan: Plan): { index: number; then: number[] | undefined } {
+  const paused = plan.paused!
+  const then = paused.then?.filter(i => plan.steps[i] !== undefined && !plan.steps[i].isDone)
+  if (then !== undefined) {
+    return { index: then[0] ?? -1, then: then.slice(1) }
+  }
+
+  return { index: paused.isChain ? plan.steps.findIndex((step, i) => i > paused.step && !step.isDone) : -1, then: undefined }
+}
+
+// /aside run on the saved plan: a paused run goes on as it was to, any other run starts from
+// the first step not done. Undefined when every step is done, so the queue runs entry by
+// entry instead.
 export async function runPlan($: Engine, ctx: Context): Promise<string | undefined> {
   const keys = await projectKeys($)
   const plan = await loadPlan($, keys.plan)
@@ -147,6 +161,16 @@ export async function runPlan($: Engine, ctx: Context): Promise<string | undefin
     return running
   }
   const note = takeOverNote(plan)
+  if (plan.paused) {
+    const { isChain } = plan.paused
+    const { index, then } = pausedNext(plan)
+    if (index >= 0) {
+      await startStep($, ctx, index, isChain, then)
+      const steps = then === undefined ? '' : `: steps ${[index, ...then].map(i => i + 1).join(', ')}`
+
+      return `Going on with the plan from step ${index + 1}${steps}. /aside stop stops after the current one.${note}`
+    }
+  }
   const first = plan.steps.findIndex(step => !step.isDone)
   if (first < 0) {
     return undefined
@@ -238,6 +262,13 @@ export async function stopPlan($: Engine): Promise<string> {
   const keys = await projectKeys($)
   const plan = await loadPlan($, keys.plan)
   const active = plan.active
+  if (!active && plan.paused) {
+    delete plan.paused
+    await savePlan($, keys.plan, plan)
+    await refreshBand($)
+
+    return 'Dropped the paused run. /aside run starts the plan again from its first step to do.'
+  }
   if (!active) {
     return 'Nothing is running.'
   }
@@ -447,11 +478,14 @@ async function finishStep($: Engine, ctx: Context, keys: Keys, plan: Plan, e: Tu
     const result = readStepResult(e.answer)
     plan.steps[active.step] = { ...step, isDone: true, ms: e.durationMs, ...(result ? { result } : {}) }
     const after = nextInRun(plan.steps, active.step, active.isChain, active.then)
+    if (after >= 0 && active.pausedFor !== undefined) {
+      plan.paused = { step: active.step, reason: active.pausedFor, isChain: active.isChain, ...(active.then ? { then: active.then } : {}) }
+    }
     await savePlan($, keys.plan, plan)
     if (after >= 0 && active.pausedFor === undefined) {
       await startStep($, ctx, after, active.isChain, active.then?.slice(1))
     } else if (after >= 0) {
-      $.ui.toast(`Plan paused after step ${active.step + 1}: ${active.pausedFor}. /aside run continues.`)
+      $.ui.toast(`Plan paused after step ${active.step + 1}: ${active.pausedFor}. /aside continue goes on.`)
     } else if (plan.steps.every(one => one.isDone)) {
       const ms = plan.steps.reduce((sum, one) => sum + (one.ms ?? 0), 0)
       $.ui.toast(`Plan done: ${formatCount(plan.steps.length, 'step')} in ${formatDuration(ms)}`)

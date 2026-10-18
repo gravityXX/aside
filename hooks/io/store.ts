@@ -211,6 +211,7 @@ export async function refreshBand($: Engine, tagCount?: number): Promise<Band> {
     steps: plan.steps.length,
     done: plan.steps.filter(step => step.isDone).length,
     ...(plan.active ? { running: plan.active.step + 1 } : {}),
+    ...(plan.paused && !plan.active ? { paused: plan.paused.step + 1 } : {}),
   }
   await update($, band, () => next)
 

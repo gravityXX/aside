@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- A run that a step pauses with `wait` is kept. The line above the prompt says `plan paused after step N` with a `continue` button, and `/aside` gives the reason in the plan's title. `/aside continue`, `/aside run` and the button go on with that run as it was to go: `/aside run 3 1 2` paused after step 3 runs steps 1 and 2 next, where it used to start the whole plan over from step 1. `/aside stop` drops the pause, and `/aside run N` starts a new run.
+
 ## 0.17.1 - 2026-10-18
 
 - The `stop` and `run plan` buttons sit on the line above the prompt, beside `list`, where they used to drop to the line below it.

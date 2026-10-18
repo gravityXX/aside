@@ -6,17 +6,19 @@ import { runPlan, stopPlan } from '../features/plan'
 import { toggleListPane } from '../features/queue'
 import { readBand } from '../io/store'
 
-type Action = 'stop' | 'run plan'
+type Action = 'stop' | 'continue' | 'run plan'
 
 // The press does the work itself: $.command.run from here skips this plugin's own command
-// hook, and a stop is applied at once rather than when the turn ends.
+// hook, and a stop is applied at once rather than when the turn ends. Continue and run plan
+// are both /aside run: it goes on with a paused run, or starts one.
 async function pressAction($: Engine, ctx: Context, action: Action) {
   const said = action === 'stop' ? await stopPlan($) : await runPlan($, ctx)
   if (said !== undefined) $.ui.toast(said)
 }
 
 // The line above the prompt: what waits and where the plan is, the list button, and beside it
-// the next move for the plan: stop while a step runs, run plan while steps are left.
+// the next move for the plan: stop while a step runs, continue while a run is paused, run plan
+// while steps are left.
 type BandRender = Parameters<MatchedHook<'ui.render', { readonly component: 'AbovePrompt' }>>
 
 export async function drawBand(ctx: Context, $: Engine, e: BandRender[1], next: BandRender[2]) {
@@ -29,10 +31,12 @@ export async function drawBand(ctx: Context, $: Engine, e: BandRender[1], next: 
 
   const parts: string[] = []
   if (now.running !== undefined) parts.push(`step ${now.running}/${now.steps} running`)
+  else if (now.paused !== undefined) parts.push(`plan paused after step ${now.paused}`)
   else if (left > 0) parts.push(`plan: ${left} of ${now.steps} steps left`)
   if (now.ideas) parts.push(formatCount(now.ideas, 'idea'))
   if (now.comments + now.tags) parts.push(formatCount(now.comments + now.tags, 'comment'))
-  const action: Action | undefined = now.running !== undefined ? 'stop' : left > 0 ? 'run plan' : undefined
+  const action: Action | undefined =
+    now.running !== undefined ? 'stop' : now.paused !== undefined ? 'continue' : left > 0 ? 'run plan' : undefined
 
   const { Box, Button, Text } = $.ui.resolve(e)
 
