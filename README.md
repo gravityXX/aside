@@ -13,6 +13,8 @@ A prompt queue for Claude Code. Note ideas and comments while Claude works, with
   <img alt="While Claude works on your task, your ideas and comments go to a queue instead of to Claude. When it is done you answer it as usual, and /aside plan hands the queue over as steps." src="assets/how-it-works-light.svg">
 </picture>
 
+Want to queue prompts without interrupting Claude, or send something only after it finishes? That is what aside is for.
+
 ## How it works
 
 ### 1. Note it while Claude works
