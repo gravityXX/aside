@@ -25,4 +25,4 @@ For a type check, start a session with the plugin loaded once, so Claude Code wr
 
 Commit messages and pull request titles follow [Conventional Commits](https://www.conventionalcommits.org): `feat:`, `fix:`, `docs:` and so on. CI checks both.
 
-Before opening a pull request that changes what users get, run `uvx --from commitizen cz bump --files-only`. It bumps the version in `.claude-plugin/plugin.json` from the commits since the last tag. Then note the change under that version in `CHANGELOG.md`. Once the pull request is merged, the Release workflow tags `vX.Y.Z` and publishes a GitHub release with that section.
+Note what changes for users under `## Unreleased` at the top of `CHANGELOG.md`. CI works out the version from the commits since the last tag (`fix:` bumps the patch version, `feat:` and breaking changes the minor one) and commits the bump to the pull request: the version in `.claude-plugin/plugin.json`, and the number and date in place of `Unreleased`. Pull your branch before pushing to it again. Once the pull request is merged, the Release workflow tags `vX.Y.Z` and publishes a GitHub release with that section.
