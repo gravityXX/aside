@@ -61,6 +61,16 @@ export const tagsSection = (tags: readonly Entry[], root: string, isHandedOver: 
   rows: tags.map(tag => entryRow(tag, root, '·', isHandedOver(tag) ? 'handed over' : '')),
 })
 
+// What Claude left out of the plan it saved, back in the queue: each item with its question.
+export const leftOutSection = (left: readonly { entry: Entry; question: string }[], root: string): ListingSection => ({
+  title: 'Not in the plan, back in the queue',
+  rows: left.map(({ entry, question }) => {
+    const row = entryRow(entry, root, '·')
+
+    return { ...row, about: [...row.about, shortenText(question, 200)] }
+  }),
+})
+
 // The plan while it has steps to do, null once every step is done.
 export const planSection = (plan: Plan): ListingSection | null => {
   const left = plan.steps.filter(step => !step.isDone).length

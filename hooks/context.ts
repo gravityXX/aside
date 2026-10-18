@@ -1,5 +1,6 @@
 import type { Register } from 'claude-code'
 
+import type { Entry } from '../types'
 import type { Order } from './core/entries'
 import type { ClipboardState } from './io/host'
 
@@ -31,6 +32,10 @@ export type Session = {
   lastOutput?: ToolOutput
   // The last message queued, until the box it went back into has been emptied.
   justQueued?: string
+  // What /aside plan handed over, until the turn that organizes it ends: the items as the
+  // planning prompt numbered them, that turn once it starts, and whether Claude saved a plan.
+  // A reload loses it, and the take then waits for /aside undo as it did before.
+  planning?: { items: Entry[]; turnId?: string; isSaved: boolean }
   // Writes of typed entries, one after another, so two quick ones never overwrite each other.
   writes: Promise<unknown>
   clipboard: ClipboardState

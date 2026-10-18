@@ -5,7 +5,7 @@ import { dropFailedEntry, emptyBoxAfterQueue, queueTyped, rememberMarkdownFile, 
 import { completeAside, runAside, startSession } from './features/commands'
 import { onTurnEnd, onTurnStart, pausePlanFromTool, savePlanFromTool } from './features/plan'
 import { drawBand } from './ui/band'
-import { drawListingFrame } from './ui/output'
+import { drawListingFrame, drawPlanTool, hidePlanToolResult } from './ui/output'
 import { drawPane } from './ui/pane'
 
 // Every hook the plugin has, each handing its event to the module that does the work.
@@ -35,4 +35,6 @@ export const register: Register = (on, options) => {
   // LIST_PANE in ui/pane.tsx, written out so the engine's scan of this file reads it.
   on('ui.render', { component: 'Pane', requestId: 'aside' }, ($, e, next) => drawPane(ctx, $, e, next))
   on('ui.render', { component: 'CommandOutput' }, drawListingFrame)
+  on('ui.render', { component: 'ToolUse' }, ($, e, next) => drawPlanTool(ctx, $, e, next))
+  on('ui.render', { component: 'ToolResult' }, ($, e, next) => hidePlanToolResult(ctx, $, e, next))
 }

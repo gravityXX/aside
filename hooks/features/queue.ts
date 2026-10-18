@@ -9,11 +9,10 @@ import { popPrompt } from '../core/prompts'
 import { formatCount, relativePath, shortenText } from '../core/text'
 import { resolveFile, tryReadFile } from '../io/host'
 import {
-  forgetTake,
+  bringBackTake,
   loadEntries,
   loadHanded,
   loadPlan,
-  loadTake,
   projectKeys,
   readTrackedFiles,
   refreshBand,
@@ -22,7 +21,6 @@ import {
   saveTake,
   tagId,
   trackFile,
-  unhandTags,
 } from '../io/store'
 import type { Keys } from '../io/store'
 
@@ -210,13 +208,10 @@ export async function restoreTaken($: Engine): Promise<string> {
   if (running && running.sessionId === (await $.session.id())) {
     return `Step ${running.step + 1} of the plan is running; /aside stop first, so nothing is done twice.`
   }
-  const { entries, tagIds } = await loadTake($, keys)
+  const { entries, tagIds } = await bringBackTake($, keys)
   if (entries.length === 0 && tagIds.length === 0) {
     return 'Nothing to bring back.'
   }
-  await saveEntries($, keys.queue, [...entries, ...(await loadEntries($, keys.queue))])
-  await unhandTags($, keys, tagIds)
-  await forgetTake($, keys)
   const now = await refreshBand($, (await tagsInFiles($, true)).length)
   const back = [entries.length > 0 ? formatCount(entries.length, 'entry') : '', tagIds.length > 0 ? formatCount(tagIds.length, 'tag') : '']
 

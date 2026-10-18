@@ -186,7 +186,9 @@ export const world = ($: Engine, on: On, given: Partial<Machine> = {}) => {
 
   const write = (path: string, content = 'x') => $.tool.call({ tool: 'Write', file_path: path, content } as never)
 
-  const savePlan = (steps: unknown) => $.tool.call({ tool: 'mcp__aside__plan', steps } as never)
+  // Claude saving a plan with the plan tool, and the items it leaves out, if any.
+  const savePlan = (steps: unknown, unclear?: unknown) =>
+    $.tool.call({ tool: 'mcp__aside__plan', steps, ...(unclear === undefined ? {} : { unclear }) } as never)
 
   const startTurn = (text: string, turnId: string) => $.turn.start({ text, turnId })
 
@@ -200,7 +202,7 @@ export const world = ($: Engine, on: On, given: Partial<Machine> = {}) => {
     await idle()
   }
 
-  const mount = (component: 'AbovePrompt' | 'Pane' | 'CommandOutput', props: unknown) =>
+  const mount = (component: 'AbovePrompt' | 'Pane' | 'CommandOutput' | 'ToolUse' | 'ToolResult', props: unknown) =>
     $.ui.mount({
       plugin: 'aside',
       surface: 'terminal',

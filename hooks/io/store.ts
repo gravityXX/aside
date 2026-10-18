@@ -141,6 +141,29 @@ export async function forgetAnsweredTake($: Engine, keys: Keys) {
   }
 }
 
+// Puts back all the last take took: its entries at the head of the queue, its tags in their
+// files for the next hand-over. Returns what it put back.
+export async function bringBackTake($: Engine, keys: Keys): Promise<Take> {
+  const take = await loadTake($, keys)
+  await saveEntries($, keys.queue, [...take.entries, ...(await loadEntries($, keys.queue))])
+  await unhandTags($, keys, take.tagIds)
+  await forgetTake($, keys)
+
+  return take
+}
+
+// Puts back some of what a hand-over took (`items`, entries and tags alike) and leaves them
+// out of the take, so /aside undo never brings them back a second time.
+export async function giveBackItems($: Engine, keys: Keys, items: readonly Entry[]) {
+  const isItem = (entry: Entry) => items.some(item => item.at === entry.at && item.text === entry.text)
+  const tagIds = items.filter(item => item.isTag).map(tagId)
+  const take = await loadTake($, keys)
+  const back = take.entries.filter(isItem)
+  await saveEntries($, keys.queue, [...back, ...(await loadEntries($, keys.queue))])
+  await unhandTags($, keys, tagIds)
+  await saveTake($, keys, { ...take, entries: take.entries.filter(entry => !isItem(entry)), tagIds: take.tagIds.filter(id => !tagIds.includes(id)) })
+}
+
 // Unmarks tags handed over, so the next hand-over takes them again.
 export async function unhandTags($: Engine, keys: Keys, tagIds: readonly string[]) {
   const handed = await loadHanded($, keys.handed)

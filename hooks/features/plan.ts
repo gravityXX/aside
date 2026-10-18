@@ -3,11 +3,22 @@ import type { Args, EngineInterface as Engine, Hook, MatchedHook } from 'claude-
 import type { Entry, Plan, Step } from '../../types'
 import type { Context } from '../context'
 import { inOrder, KINDS } from '../core/entries'
-import { describeCount, formatPlace } from '../core/listing'
-import { entryPrompt, isOwnPrompt, planningPrompt, sendPrompt, STEP_MARKER, stepPrompt } from '../core/prompts'
+import { describeCount, formatPlace, leftOutSection, listingText, planSection } from '../core/listing'
+import { entryPrompt, isOwnPrompt, isPlanningPrompt, PLAN_SAVED_NOTE, planningPrompt, sendPrompt, STEP_MARKER, stepPrompt } from '../core/prompts'
 import type { StepMode } from '../core/prompts'
 import { formatCount, shortenText } from '../core/text'
-import { forgetAnsweredTake, loadEntries, loadPlan, projectKeys, refreshBand, savePlan, takeChosen, takeForHandOver } from '../io/store'
+import {
+  bringBackTake,
+  forgetAnsweredTake,
+  giveBackItems,
+  loadEntries,
+  loadPlan,
+  projectKeys,
+  refreshBand,
+  savePlan,
+  takeChosen,
+  takeForHandOver,
+} from '../io/store'
 import type { Keys } from '../io/store'
 import { tagsInFiles } from './queue'
 
@@ -30,9 +41,14 @@ function submitLater($: Engine, compose: () => Promise<string | undefined>, onFa
 }
 
 // Hands the queue and the new file tags over: as one planning prompt ('plan'), or as it
-// is, to be done now ('send'). A prompt dropped beneath gives everything back.
+// is, to be done now ('send'). A prompt dropped beneath gives everything back. Nothing goes
+// while a step of the plan runs here, since the prompt would land in the middle of it.
 export async function handOverQueue($: Engine, ctx: Context, mode: 'plan' | 'send'): Promise<string> {
   const keys = await projectKeys($)
+  const running = await runningHere($, await loadPlan($, keys.plan))
+  if (running) {
+    return running
+  }
   const stored = await loadEntries($, keys.queue)
   // Tags already handed over stay in their files until a step removes them; they are
   // not handed over again.
@@ -47,7 +63,10 @@ export async function handOverQueue($: Engine, ctx: Context, mode: 'plan' | 'sen
   await refreshBand($, 0)
   const pending = (await loadPlan($, keys.plan)).steps.filter(step => !step.isDone)
   const text = mode === 'plan' ? planningPrompt(all, keys.root, pending, ctx.session.planTool) : sendPrompt(all, keys.root)
+  const planning = mode === 'plan' ? { items: all, isSaved: false } : undefined
+  if (planning) ctx.session.planning = planning
   submitLater($, async () => text, async why => {
+    if (planning && ctx.session.planning === planning) delete ctx.session.planning
     await giveBack()
     await refreshBand($, tags.length)
     $.ui.toast(`Could not hand the queue over (${why}); the entries are back in it`)
@@ -253,13 +272,39 @@ const parseSteps = (value: unknown): Step[] | null => {
   return steps.every(step => step !== null) ? (steps as Step[]) : null
 }
 
+type Unclear = { item: number; question: string }
+
+// The items Claude left out of the steps, by their number in the planning prompt (1 to
+// `count`), each with its question; an item named twice counts once. Null when malformed.
+const parseUnclear = (value: unknown, count: number): Unclear[] | null => {
+  if (value === undefined) {
+    return []
+  }
+  if (!Array.isArray(value)) {
+    return null
+  }
+  const unclear = value.map(one => {
+    const { item, question } = one as { item?: unknown; question?: unknown }
+
+    return Number.isInteger(item) && (item as number) >= 1 && (item as number) <= count && typeof question === 'string' && question.trim() !== ''
+      ? { item: item as number, question: question.trim() }
+      : null
+  })
+  if (!unclear.every(one => one !== null)) {
+    return null
+  }
+
+  return (unclear as Unclear[]).filter((one, i, all) => all.findIndex(other => other.item === one.item) === i)
+}
+
 // The tool the model saves a plan with; returns its full name as the engine registered it.
 export async function registerPlanTool($: Engine): Promise<string> {
   const registered = await $.tool.register({
     name: 'plan',
     description:
       "Saves the step plan you just proposed for the user's queue (the aside plugin), so the user can run it with /aside run. " +
-      'Call it only when the aside plugin asked you to organize the queue. Each step: a short title and a prompt that stands on its own.',
+      'Call it only when the aside plugin asked you to organize the queue. Each step: a short title and a prompt that stands on its own. ' +
+      'Items you left out of the steps go in unclear, and back to the queue.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -270,6 +315,15 @@ export async function registerPlanTool($: Engine): Promise<string> {
             type: 'object',
             properties: { title: { type: 'string' }, prompt: { type: 'string' } },
             required: ['title', 'prompt'],
+          },
+        },
+        unclear: {
+          type: 'array',
+          description: 'the items that look done, contradictory or unclear: each by its number in the queue, with your question',
+          items: {
+            type: 'object',
+            properties: { item: { type: 'integer' }, question: { type: 'string' } },
+            required: ['item', 'question'],
           },
         },
       },
@@ -287,21 +341,36 @@ export async function savePlanFromTool(ctx: Context, $: Engine, e: PlanToolCall[
   if (e.tool !== ctx.session.planTool) {
     return next(e)
   }
-  const steps = parseSteps((e as unknown as { steps?: unknown }).steps)
+  const input = e as unknown as { steps?: unknown; unclear?: unknown }
+  const steps = parseSteps(input.steps)
   if (steps === null) {
     return { deny: 'steps must be a non-empty list of { title, prompt }, each prompt non-empty' }
+  }
+  // The items are known by number only in the turn that organizes them; a plan saved
+  // in any other turn has none to leave out.
+  const planning = ctx.session.planning?.turnId === ctx.session.turnId ? ctx.session.planning : undefined
+  const items = planning?.items ?? []
+  const unclear = planning ? parseUnclear(input.unclear, items.length) : []
+  if (unclear === null) {
+    return { deny: `unclear must list items by their number in the queue, from 1 to ${items.length}, each with a question` }
   }
   const keys = await projectKeys($)
   const old = await loadPlan($, keys.plan)
   if (old.active && old.active.sessionId === (await $.session.id())) {
     return { deny: `step ${old.active.step + 1} of the current plan is running; the user stops it with /aside stop first` }
   }
-  await savePlan($, keys.plan, { steps })
-  await refreshBand($)
+  // A plan with steps still to do keeps those done, first, as the planning prompt told
+  // Claude; a plan run to its end makes way for the new one.
+  const done = old.steps.some(step => !step.isDone) ? old.steps.filter(step => step.isDone) : []
+  const plan: Plan = { steps: [...done, ...steps] }
+  await savePlan($, keys.plan, plan)
+  const left = unclear.map(({ item, question }) => ({ entry: items[item - 1]!, question }))
+  await giveBackItems($, keys, left.map(one => one.entry))
+  if (planning) planning.isSaved = true
+  await refreshBand($, left.some(one => one.entry.isTag) ? (await tagsInFiles($, true)).length : undefined)
+  const sections = [planSection(plan)!, ...(left.length > 0 ? [leftOutSection(left, keys.root)] : [])]
 
-  return {
-    result: `Saved ${steps.length} steps. Tell the user: /aside run runs them all in order, /aside run N runs one, /aside shows them.`,
-  }
+  return { result: listingText(sections), context: [PLAN_SAVED_NOTE] }
 }
 
 // The tool a step pauses the plan with when it needs the person's answer before the next one.
@@ -358,6 +427,8 @@ export async function onTurnStart(ctx: Context, $: Engine, e: TurnStart[1], next
     ctx.session.isRunning = true
     ctx.session.isOwnTurn = isOwnPrompt(e.text)
     if (e.text.includes(STEP_MARKER)) await bindStepTurn($, e.turnId)
+    const { planning } = ctx.session
+    if (planning && planning.turnId === undefined && isPlanningPrompt(e.text)) planning.turnId = e.turnId
   }
 
   return next(e)
@@ -388,6 +459,18 @@ async function finishStep($: Engine, ctx: Context, keys: Keys, plan: Plan, reaso
   await refreshBand($)
 }
 
+// The turn that was to organize the queue ended with no plan saved, answered or cut short:
+// what it was handed goes back to the queue, so nothing is lost.
+async function giveBackUnplanned($: Engine, keys: Keys) {
+  const { entries, tagIds } = await bringBackTake($, keys)
+  if (entries.length === 0 && tagIds.length === 0) {
+    return
+  }
+  await refreshBand($, (await tagsInFiles($, true)).length)
+  const back = [entries.length > 0 ? formatCount(entries.length, 'entry') : '', tagIds.length > 0 ? formatCount(tagIds.length, 'tag') : '']
+  $.ui.toast(`No plan was saved: ${back.filter(Boolean).join(' and ')} back in the queue.`)
+}
+
 // Files the agents wrote may hold new tags; then the queue goes out by itself when the
 // setting says so, never after the plugin's own turn. A plan running elsewhere, or a saved
 // plan with steps still to do, is the person's to finish first: the queue waits.
@@ -411,6 +494,11 @@ export async function onTurnEnd(ctx: Context, $: Engine, e: TurnComplete[1], nex
   ctx.session.isRunning = false
 
   const keys = await projectKeys($)
+  const { planning } = ctx.session
+  if (planning?.turnId === e.turnId) {
+    delete ctx.session.planning
+    if (!planning.isSaved) await giveBackUnplanned($, keys)
+  }
   // Claude has answered what the plugin handed over, so undo has nothing to bring back.
   if (ctx.session.isOwnTurn && e.reason === 'answer') {
     await forgetAnsweredTake($, keys)

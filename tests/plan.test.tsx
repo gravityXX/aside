@@ -42,9 +42,9 @@ describe('handing the queue over', () => {
         '- merge related items into one step and keep unrelated ones apart; a question is an item like any other, answered when its step runs;',
         '- order the steps so whatever the rest depends on comes first, and say why in a few words;',
         '- for each step, write a prompt I could send you as it is; it must stand on its own, file paths included;',
-        '- list items that look done, contradictory or unclear separately, each with a question;',
+        '- leave items that look done, contradictory or unclear out of the steps: pass each to the tool as unclear, with its number and your question, and they go back to my queue;',
         '- when a step handles a comment that is a <!-- --> tag in a file, the step removes that tag.',
-        'Then save the steps with the mcp__aside__plan tool and stop: I run them with /aside run (all, in order) or /aside run N.',
+        'Then save the steps with the mcp__aside__plan tool and stop: I see the saved plan in a frame and run it with /aside run (all, in order) or /aside run N.',
         '',
         MARKER,
       ].join('\n'),
@@ -159,26 +159,59 @@ describe('handing the queue over', () => {
     expect(await aside('undo')).toBe('Nothing to bring back.')
   })
 
-  test('once Claude has answered the planning prompt, undo has nothing to bring back', async ($, on) => {
-    const { sent, type, aside, startTurn, endTurn, idle } = world($, on)
+  test('once Claude has saved a plan and answered, undo has nothing to bring back', async ($, on) => {
+    const { sent, type, aside, savePlan, startTurn, endTurn, idle } = world($, on)
     await type('+ a')
     await aside('plan')
     await idle()
     await startTurn(sent.at(-1)!, 'p1')
+    await savePlan([{ title: 'A', prompt: 'Do a.' }])
     await endTurn('p1')
 
     expect(await aside('undo')).toBe('Nothing to bring back.')
   })
 
-  test('a planning turn that was interrupted leaves the hand-over for undo', async ($, on) => {
-    const { sent, type, aside, startTurn, endTurn, idle } = world($, on)
+  test('a planning turn that saved a plan but was interrupted leaves the hand-over for undo', async ($, on) => {
+    const { sent, type, aside, savePlan, startTurn, endTurn, idle } = world($, on)
     await type('+ a')
     await aside('plan')
     await idle()
     await startTurn(sent.at(-1)!, 'p1')
+    await savePlan([{ title: 'A', prompt: 'Do a.' }])
     await endTurn('p1', 'aborted')
 
     expect(await aside('undo')).toBe('Brought back 1 entry, 1 waiting.')
+  })
+
+  test('a planning turn that ends with no plan saved, answered or cut short, gives the queue back', async ($, on) => {
+    const { sent, toasts, type, aside, shown, startTurn, endTurn, idle } = world($, on)
+    await type('+ a\n+ b')
+
+    for (const [turnId, reason] of [['p1', 'answer'], ['p2', 'aborted']] as const) {
+      await aside('plan')
+      await idle()
+      await startTurn(sent.at(-1)!, turnId)
+      await endTurn(turnId, reason)
+      expect(toasts.at(-1)).toBe('No plan was saved: 2 entries back in the queue.')
+      expect(await shown()).toEqual(['2 ideas waiting', '1 idea a', '2 idea b'])
+    }
+    expect(await aside('undo')).toBe('Nothing to bring back.')
+  })
+
+  test('while a step runs, /aside plan and /aside run all are refused and send nothing', async ($, on) => {
+    const { sent, type, aside, shown, savePlan, startTurn, endTurn, idle } = world($, on)
+    await savePlan(STEPS)
+    await aside('run')
+    await idle()
+    await startTurn(sent[0]!, 's1')
+    await type('+ z', 's1')
+
+    expect(await aside('plan')).toBe('Step 1 is running. /aside stop stops after it.')
+    expect(await aside('run all')).toBe('Step 1 is running. /aside stop stops after it.')
+    await idle()
+    expect(sent).toHaveLength(1)
+    await endTurn('s1', 'aborted')
+    expect((await shown()).slice(0, 2)).toEqual(['1 idea waiting', '1 idea z'])
   })
 
   test('once the entries a run sent as steps are done, undo has nothing to bring back', async ($, on) => {
@@ -270,7 +303,12 @@ describe('running the plan', () => {
   test('the model saves the plan, and /aside run sends each step when the one before ends', async ($, on) => {
     const { sent, toasts, aside, shown, savePlan, answer, idle } = world($, on)
 
-    expect((await savePlan(STEPS)).result).toBe('Saved 3 steps. Tell the user: /aside run runs them all in order, /aside run N runs one, /aside shows them.')
+    const saved = await savePlan(STEPS)
+    expect(saved.result).toBe('Plan: 3 of 3 steps to do (/aside run)\n\n  1  to do  One\n  2  to do  Two\n  3  to do  Three')
+    expect(saved.context).toEqual([
+      'The user sees this plan drawn in a frame, so do not list its steps again. Say in a line or two why they come in this order, ' +
+        'and ask your question about each item left out, if any. /aside run runs the steps in order; /aside run N runs one.',
+    ])
     expect(await shown()).toEqual(['The queue is empty.', 'Plan: 3 of 3 steps to do (/aside run)', '1 to do One', '2 to do Two', '3 to do Three'])
 
     expect(await aside('run')).toBe('Running the plan: 3 steps, from step 1. /aside stop stops after the current one.')
@@ -525,6 +563,85 @@ describe('when Claude answers', () => {
 
     await aside('plan')
     await idle()
-    expect(sent[0]).toContain('The saved plan still has these steps to do. Keep them: merge them with the new items into one plan.\n1. One: Do one.')
+    expect(sent[0]).toContain('The saved plan still has these steps to do.')
+    expect(sent[0]).toContain('\nS1. One\n   Do one.')
+  })
+})
+
+describe('organizing the queue again', () => {
+  const LONG = ['Rework the planning flow.', '- keep every line of this step', '- and every word, however long it runs: ' + 'more detail, '.repeat(30) + 'the end.'].join('\n')
+
+  test('a replan gets the steps still to do whole, numbered apart from the items, and keeps the steps done first', async ($, on) => {
+    const { sent, type, aside, shown, savePlan, answer, startTurn, endTurn, idle } = world($, on)
+    await savePlan([
+      { title: 'One', prompt: 'Do one.' },
+      { title: 'Two', prompt: LONG },
+    ])
+    await aside('run 1')
+    await idle()
+    await answer('s1')
+    await type('+ a new task')
+
+    await aside('plan')
+    await idle()
+    expect(sent.at(-1)).toContain(`Ideas:\n1. a new task (branch main)`)
+    expect(sent.at(-1)).toContain(`\nS1. Two\n   ${LONG.replace(/\n/g, '\n   ')}\n\n`)
+    expect(sent.at(-1)).toContain('The steps already done stay at the top of the plan by themselves, so save only the steps to do.')
+    await startTurn(sent.at(-1)!, 'p1')
+    await savePlan([
+      { title: 'Two', prompt: LONG },
+      { title: 'New', prompt: 'Do the new task.' },
+    ])
+    await endTurn('p1')
+    expect(await shown()).toEqual(['The queue is empty.', 'Plan: 2 of 3 steps to do (/aside run)', '1 done One', '2 to do Two', '3 to do New'])
+  })
+
+  test('a plan saved once every step is done replaces it whole', async ($, on) => {
+    const { aside, shown, savePlan, answer, idle } = world($, on)
+    await savePlan([{ title: 'One', prompt: 'Do one.' }])
+    await aside('run')
+    await idle()
+    await answer('s1')
+
+    await savePlan([{ title: 'Fresh', prompt: 'Do it.' }])
+    expect(await shown()).toEqual(['The queue is empty.', 'Plan: 1 of 1 step to do (/aside run)', '1 to do Fresh'])
+  })
+
+  test('the items Claude leaves out of the plan go back to the queue, each shown with its question', async ($, on) => {
+    const { sent, toasts, type, aside, shown, savePlan, startTurn, endTurn, idle } = world($, on)
+    await type('+ a\n+ b\n+ c')
+    await aside('plan')
+    await idle()
+    await startTurn(sent.at(-1)!, 'p1')
+
+    const wrong = await savePlan([{ title: 'A and C', prompt: 'Do a and c.' }], [{ item: 4, question: 'What is it?' }])
+    expect(wrong.deny).toBe('unclear must list items by their number in the queue, from 1 to 3, each with a question')
+    const saved = await savePlan([{ title: 'A and C', prompt: 'Do a and c.' }], [{ item: 2, question: 'What is b for?' }])
+    expect(saved.result).toBe(
+      [
+        'Plan: 1 of 1 step to do (/aside run)',
+        '',
+        '  1  to do  A and C',
+        '',
+        'Not in the plan, back in the queue',
+        '',
+        '  ·  idea  b',
+        '           ↳ What is b for?',
+      ].join('\n'),
+    )
+    await endTurn('p1', 'aborted')
+    expect(toasts).toEqual([])
+    expect((await shown()).slice(0, 2)).toEqual(['1 idea waiting', '1 idea b'])
+    // What undo brings back is only what the plan took: b is in the queue once.
+    expect(await aside('undo')).toBe('Brought back 2 entries, 3 waiting.')
+    expect((await shown()).slice(0, 4)).toEqual(['3 ideas waiting', '1 idea a', '2 idea c', '3 idea b'])
+  })
+
+  test('a plan saved outside the turn that organizes the queue leaves nothing out', async ($, on) => {
+    const { shown, savePlan } = world($, on)
+
+    const saved = await savePlan([{ title: 'One', prompt: 'Do one.' }], [{ item: 1, question: 'What?' }])
+    expect(saved.result).toBe('Plan: 1 of 1 step to do (/aside run)\n\n  1  to do  One')
+    expect(await shown()).toEqual(['The queue is empty.', 'Plan: 1 of 1 step to do (/aside run)', '1 to do One'])
   })
 })
