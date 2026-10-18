@@ -132,4 +132,4 @@ The clipboard is read with `powershell` on WSL and Windows, `pbpaste` on macOS, 
 
 <br>
 
-<p><sub><a href="LICENSE">LICENSE</a> &#xB7; <a href="CHANGELOG.md">CHANGELOG</a> &#xB7; <a href="CONTRIBUTING.md">CONTRIBUTING</a></sub></p>
+<p><sub><a href="LICENSE">LICENSE</a> &#xB7; <a href="CHANGELOG.md">CHANGELOG</a> &#xB7; <a href="CONTRIBUTING.md">CONTRIBUTING</a> &#xB7; <a href="https://github.com/sponsors/gravityXX">SPONSOR</a></sub></p>
