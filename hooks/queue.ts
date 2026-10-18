@@ -233,19 +233,35 @@ export const where = (idea: Idea, root: string): string => {
 }
 
 // One line per entry, as /aside list shows the queue.
-export const listed = (ideas: readonly Idea[], root: string): string =>
-  ideas
-    .map((idea, i) => {
-      const mark = idea.kind === 'idea' ? '' : `[${KINDS[idea.kind].mark}] `
-      const at = where(idea, root)
-      const loose = idea.from === 'terminal' ? ' (from the terminal)' : ' (not in a file)'
-      const quote = idea.quote ? ` "${snippet(idea.quote, 50)}"${idea.isLoose ? loose : ''}` : ''
-      const output = idea.output ? ` [after: ${snippet(idea.output, 40)}]` : ''
-      const head = at || quote || output ? `${at}${quote}${output}: `.trimStart() : ''
+// One entry as /aside shows it: its number (or a bullet) and kind in fixed columns, its text,
+// and what it is about (file and line, quote, tool output) on an indented line under it.
+export const entryLines = (idea: Idea, root: string, label: string, note = ''): string => {
+  const head = `${label.padStart(3)}  ${KINDS[idea.kind].label.padEnd(10)}  `
+  const indent = ' '.repeat(head.length)
+  const text = (idea.text || '(no text)').replace(/\n/g, `\n${indent}`)
+  const loose = idea.from === 'terminal' ? ' (from the terminal)' : ' (not in a file)'
+  const about = [
+    where(idea, root),
+    idea.quote ? `"${snippet(idea.quote, 60)}"${idea.isLoose ? loose : ''}` : '',
+    idea.output ? `after: ${snippet(idea.output, 50)}` : '',
+    note,
+  ]
+    .filter(Boolean)
+    .join('  ')
 
-      return `${i + 1}. ${mark}${head}${idea.text.replace(/\n/g, '\n   ')}`
-    })
-    .join('\n')
+  return `${head}${text}${about ? `\n${indent}${about}` : ''}`
+}
+
+export const listed = (ideas: readonly Idea[], root: string): string =>
+  ideas.map((idea, i) => entryLines(idea, root, String(i + 1))).join('\n')
+
+// The line over the list: how many ideas and comments wait.
+export const summary = (ideas: readonly Idea[]): string => {
+  const plain = ideas.filter(idea => idea.kind === 'idea').length
+  const parts = [plain ? ideasOf(plain) : '', ideas.length - plain ? commentsOf(ideas.length - plain) : ''].filter(Boolean)
+
+  return `${parts.join(' and ')} waiting`
+}
 
 const MARKER = '(Composed by the aside plugin from my queued notes, not typed by me as a message.)'
 

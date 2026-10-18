@@ -140,6 +140,11 @@ const write = ($: Engine, path: string) =>
 const ends = async ($: Engine, turnId: string, reason: 'answer' | 'aborted' = 'answer') =>
   $.turn.complete({ turnId, reason, answer: '', durationMs: 1, isAborted: reason === 'aborted' } as never)
 
+// One entry, and one plan step, as /aside lists them.
+const row = (n: number | string, kind: string, text: string, about = '') =>
+  `${String(n).padStart(3)}  ${kind.padEnd(10)}  ${text}${about ? `\n${' '.repeat(17)}${about}` : ''}`
+const step = (n: number, state: string, title: string) => `${String(n).padStart(3)}  ${state.padEnd(10)}  ${title}`
+
 describe('capture', () => {
   test('a message starting with + is one idea, a plain one is not', () => {
     expect(capture('+ add tests for the parser')).toEqual([{ kind: 'idea', text: 'add tests for the parser', anchor: {}, raw: '+ add tests for the parser' }])
@@ -246,7 +251,7 @@ describe('queue', () => {
     expect(toasts).toEqual(['queued "dark mode" (1 waiting)'])
     await type($, '+ added\n-removed\n kept')
     expect(sent).toEqual(['build the parser', '+ added\n-removed\n kept'])
-    expect((await queue($, 'list')).text).toBe('1. dark mode')
+    expect((await queue($, 'list')).text).toBe(`1 idea waiting\n\n${row(1, 'idea', 'dark mode')}`)
 
     await queue($, 'plan')
     await clock.advance(100)
@@ -261,7 +266,12 @@ describe('queue', () => {
     await type($, '+? where does this come from')
     expect(toasts.at(-1)).toBe('queued ? docs/report.md:5 "Revenue grew by 12% in the th…" (1 waiting)')
     expect((await queue($, 'list')).text).toBe(
-      '1. [?] docs/report.md:5 "Revenue grew by 12% in the third quarter": where does this come from\n\nTags in files:\n- [?] docs/report.md:9 "Costs stayed flat across all regions.": is this the same for Poland',
+      [
+        '1 comment waiting',
+        row(1, 'question', 'where does this come from', 'docs/report.md:5  "Revenue grew by 12% in the third quarter"'),
+        'Tags in files',
+        row('\u00b7', 'question', 'is this the same for Poland', 'docs/report.md:9  "Costs stayed flat across all regions."'),
+      ].join('\n\n'),
     )
   })
 
@@ -270,7 +280,9 @@ describe('queue', () => {
     const { toasts } = world(on, w)
 
     expect(await typed($, '+! make it shorter')).toBe('queued ! "nothing like this is written…" - copied text not found in any .md file under /proj (1 waiting)')
-    expect((await queue($, 'list')).text).toBe('1. [!] "nothing like this is written anywhere at all" (not in a file): make it shorter')
+    expect((await queue($, 'list')).text).toBe(
+      `1 comment waiting\n\n${row(1, 'change', 'make it shorter', '"nothing like this is written anywhere at all" (not in a file)')}`,
+    )
 
     w.clip = 'Costs stayed flat across all regions.'
     w.grep = '/proj/old.md\n'
@@ -319,7 +331,7 @@ describe('queue', () => {
 
     expect((await queue($, 'pop')).text).toBe('In the prompt box, ready to send: b')
     expect(filled).toEqual(['Question:\nb'])
-    expect((await queue($, 'list')).text).toBe('1. a')
+    expect((await queue($, 'list')).text).toBe(`1 idea waiting\n\n${row(1, 'idea', 'a')}`)
   })
 
   test('a planning prompt dropped beneath the mod gives the entries back', async ($, on) => {
@@ -331,7 +343,7 @@ describe('queue', () => {
     await clock.advance(100)
     expect(sent).toEqual([])
     expect(toasts.at(-1)).toBe('Could not hand the queue over (blocked by a hook); the entries are back in it')
-    expect((await queue($, 'list')).text).toBe('1. a')
+    expect((await queue($, 'list')).text).toBe(`1 idea waiting\n\n${row(1, 'idea', 'a')}`)
   })
 
   test('file tags handed over once are not handed over again, and the band then offers the plan', async ($, on) => {
@@ -343,7 +355,9 @@ describe('queue', () => {
     await clock.advance(100)
     expect(sent.at(-1)).toContain('[a <!-- --> tag in the file]: is this the same for Poland')
     expect((await queue($, 'plan')).text).toContain('The queue is empty.')
-    expect((await queue($, 'list')).text).toContain('- (handed over) [?] docs/report.md:9')
+    expect((await queue($, 'list')).text).toContain(
+      row('\u00b7', 'question', 'is this the same for Poland', 'docs/report.md:9  "Costs stayed flat across all regions."  (handed over)'),
+    )
   })
 
   test('remove and clear, and clearing an empty queue keeps what undo can bring back', async ($, on) => {
@@ -368,7 +382,9 @@ describe('from the issues', () => {
     expect((await queue($, '+? why this order')).text).toContain('queued ? "why this order"')
     // A command answers with the text itself: no toast or log line on top of it.
     expect(toasts).toEqual([])
-    expect((await queue($, 'list')).text).toBe('1. add tests for the parser\n2. [?] why this order')
+    expect((await queue($, 'list')).text).toBe(
+      `1 idea and 1 comment waiting\n\n${row(1, 'idea', 'add tests for the parser')}\n${row(2, 'question', 'why this order')}`,
+    )
   })
 
   test('/aside send hands everything over as it is, to be done now; undo brings it back', async ($, on) => {
@@ -390,7 +406,9 @@ describe('from the issues', () => {
     await type($, '+ dark mode\n+! @docs/report.md:5 as a table')
 
     expect((await queue($, 'run')).text).toContain('Running 3 entries one by one')
-    expect((await queue($)).text).toContain('1. [running] dark mode\n2. [todo] as a table\n3. [todo] is this the same for Poland')
+    expect((await queue($)).text).toContain(
+      [step(1, 'running', 'dark mode'), step(2, 'to do', 'as a table'), step(3, 'to do', 'is this the same for Poland')].join('\n'),
+    )
     await clock.advance(100)
     expect(sent[0]).toContain('dark mode (branch main)')
     await $.turn.start({ text: sent[0]!, turnId: 'e1' })
@@ -408,11 +426,13 @@ describe('from the issues', () => {
     const { filled } = world(on)
     await type($, '+ a\n+ b\n+? c')
 
-    expect((await queue($, 'move 3 1')).text).toBe('1. [?] c\n2. a\n3. b')
+    expect((await queue($, 'move 3 1')).text).toBe(
+      `2 ideas and 1 comment waiting\n\n${row(1, 'question', 'c')}\n${row(2, 'idea', 'a')}\n${row(3, 'idea', 'b')}`,
+    )
     expect((await queue($, 'move 9 1')).text).toBe('Give two places from 1 to 3: /aside move 3 1')
     expect((await queue($, 'edit 2')).text).toBe('Entry 2 is in the prompt box: change it and press Enter; it goes back to place 2, still pointing where it did.')
     expect(filled).toEqual(['+ a'])
-    expect((await queue($, 'list')).text).toBe('1. [?] c\n2. b')
+    expect((await queue($, 'list')).text).toBe(`1 idea and 1 comment waiting\n\n${row(1, 'question', 'c')}\n${row(2, 'idea', 'b')}`)
   })
 
   test('a fresh copy comes first; with the clipboard unchanged, the selection in Claude\'s reply wins', async ($, on) => {
@@ -426,7 +446,9 @@ describe('from the issues', () => {
     expect(toasts.at(-1)).toBe('queued ? docs/report.md:5 "Revenue grew by 12% in the th…" (2 waiting)')
     w.selection = 'I chose the async path because the sync one blocks'
     await type($, '+! use the sync path')
-    expect((await queue($, 'list')).text).toContain('3. [!] "I chose the async path because the sync one blocks" (from the terminal): use the sync path')
+    expect((await queue($, 'list')).text).toContain(
+      row(3, 'change', 'use the sync path', '"I chose the async path because the sync one blocks" (from the terminal)'),
+    )
   })
 
   test('a word that looks like a command but has the wrong shape is queued as text', async ($, on) => {
@@ -451,7 +473,9 @@ describe('from the issues', () => {
     await queue($, 'edit 1')
     w.clip = 'Something else entirely, copied later from a web page'
     await type($, '+? where does 12% come from')
-    expect((await queue($, 'list')).text).toMatch(/^1\. \[\?\] docs\/report\.md:5 "Revenue grew by 12% in the third quarter": where does 12% come from\n2\. b\n/)
+    expect((await queue($, 'list')).text).toContain(
+      `${row(1, 'question', 'where does 12% come from', 'docs/report.md:5  "Revenue grew by 12% in the third quarter"')}\n${row(2, 'idea', 'b')}`,
+    )
   })
 
   test('only Bash and edit output counts, and a denial or a missing file is not it', async ($, on) => {
@@ -464,7 +488,7 @@ describe('from the issues', () => {
     await $.tool.call({ tool: 'Read', file_path: '/proj/nope2.md' } as never)
 
     await type($, '+? why')
-    expect((await queue($, 'list')).text).toBe('1. [?] [after: Bash: 3 tests failed]: why')
+    expect((await queue($, 'list')).text).toBe(`1 comment waiting\n\n${row(1, 'question', 'why', 'after: Bash: 3 tests failed')}`)
   })
 
   test('with nothing copied, a comment takes the last tool output of the turn, an error first', async ($, on) => {
@@ -478,7 +502,7 @@ describe('from the issues', () => {
     await $.tool.call({ tool: 'Bash', command: 'pass' } as never)
 
     expect(await typed($, '+? why did it fail')).toBe('queued ? "why did it fail" - with the last tool output (1 waiting)')
-    expect((await queue($, 'list')).text).toContain('[after: Bash failed: exit 1: boom]: why did it fail')
+    expect((await queue($, 'list')).text).toContain(row(1, 'question', 'why did it fail', 'after: Bash failed: exit 1: boom'))
     await $.turn.start({ text: 'next thing', turnId: 't2' })
     expect(await typed($, '+? and now')).toBe('queued ? "and now" - no text on the clipboard (2 waiting)')
   })
@@ -524,7 +548,7 @@ test('Enter is answered at once; two quick entries are both stored, in order', a
   expect(await second).toEqual({ drop: 'queued' })
   await clock.advance(5)
   await clock.settle()
-  expect((await queue($, 'list')).text).toBe('1. one\n2. [?] two')
+  expect((await queue($, 'list')).text).toBe(`1 idea and 1 comment waiting\n\n${row(1, 'idea', 'one')}\n${row(2, 'question', 'two')}`)
 })
 
 describe('tab completion', () => {
@@ -543,7 +567,7 @@ describe('tab completion', () => {
 
     expect(await complete($, '/aside cl')).toEqual(['clear: empty the queue'])
     expect(await complete($, '/aside p')).toEqual(['plan: organize the queue into steps', 'pop: put an entry in the box, ready to send'])
-    expect(await complete($, '/aside pop ')).toEqual(['1: dark mode', '2: [?] why so slow'])
+    expect(await complete($, '/aside pop ')).toEqual(['1: dark mode', '2: question: why so slow'])
     expect(await complete($, 'just text')).toEqual([])
   })
 })
@@ -622,7 +646,7 @@ describe('plan', () => {
     const { sent, toasts, clock } = world(on)
     const saved = await $.tool.call({ tool: 'mcp__aside__plan', steps: STEPS } as never)
     expect(saved.result).toContain('Saved 3 steps')
-    expect((await queue($)).text).toContain('1. [todo] One\n2. [todo] Two\n3. [todo] Three')
+    expect((await queue($)).text).toContain([step(1, 'to do', 'One'), step(2, 'to do', 'Two'), step(3, 'to do', 'Three')].join('\n'))
 
     expect((await queue($, 'run')).text).toContain('3 steps, from step 1')
     await clock.advance(100)
@@ -639,7 +663,7 @@ describe('plan', () => {
     await clock.advance(100)
     expect(sent).toHaveLength(2)
     expect(toasts.at(-1)).toBe('Step 2 done')
-    expect((await queue($)).text).toContain('1. [done] One\n2. [done] Two\n3. [todo] Three')
+    expect((await queue($)).text).toContain([step(1, 'done', 'One'), step(2, 'done', 'Two'), step(3, 'to do', 'Three')].join('\n'))
   })
 
   test('a stop before the next step goes out keeps it from going out', async ($, on) => {
@@ -654,7 +678,7 @@ describe('plan', () => {
     expect((await queue($, 'stop')).text).toBe('The plan stopped before step 2.')
     await clock.advance(100)
     expect(sent).toHaveLength(1)
-    expect((await queue($)).text).toContain('1. [done] One\n2. [todo] Two\n3. [todo] Three')
+    expect((await queue($)).text).toContain([step(1, 'done', 'One'), step(2, 'to do', 'Two'), step(3, 'to do', 'Three')].join('\n'))
   })
 
   test('a step prompt dropped beneath the mod lets the plan go', async ($, on) => {
@@ -692,7 +716,7 @@ describe('plan', () => {
     expect((await queue($, 'pop 2')).text).toBe('In the prompt box, ready to send: b')
     expect(filled).toEqual(['b'])
     expect((await queue($, 'pop 9')).text).toBe('Give a number from 1 to 2, as /aside shows them.')
-    expect((await queue($)).text).toBe('1. a\n2. c')
+    expect((await queue($)).text).toBe(`2 ideas waiting\n\n${row(1, 'idea', 'a')}\n${row(2, 'idea', 'c')}`)
   })
 
   test('/aside alone shows the queue and the plan; nothing is sent', async ($, on) => {
@@ -700,7 +724,9 @@ describe('plan', () => {
     await type($, '+ a')
     await $.tool.call({ tool: 'mcp__aside__plan', steps: [{ title: 'One', prompt: 'Do one.' }] } as never)
 
-    expect((await queue($)).text).toBe('1. a\n\nPlan (/aside run):\n1. [todo] One')
+    expect((await queue($)).text).toBe(
+      `1 idea waiting\n\n${row(1, 'idea', 'a')}\n\nPlan: 1 of 1 step to do (/aside run)\n\n${step(1, 'to do', 'One')}`,
+    )
     await clock.advance(100)
     expect(sent).toEqual([])
   })
@@ -716,7 +742,7 @@ describe('plan', () => {
     expect((await queue($, 'run')).text).toBe('Step 3 is running. /aside stop stops after it.')
     await ends($, 's3', 'aborted')
     expect(toasts.at(-1)).toBe('Plan stopped: step 3 was interrupted')
-    expect((await queue($)).text).toContain('1. [todo] One\n2. [todo] Two\n3. [todo] Three')
+    expect((await queue($)).text).toContain([step(1, 'to do', 'One'), step(2, 'to do', 'Two'), step(3, 'to do', 'Three')].join('\n'))
   })
 
   test('the band shows what waits and offers the next move', async ($, on) => {

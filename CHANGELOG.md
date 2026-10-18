@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.1 - 2026-10-18
+
+- `/aside` lists the queue in columns: a count of what waits, then number, kind and text, with a comment's file, line and quote on the line below. The plan and the file tags read the same way.
+
 ## 0.7.0 - 2026-10-18
 
 - Renamed from idea-queue to aside: the plugin is `aside`, the command is `/aside` (was `/queue`), the plan tool is `mcp__aside__plan`. A queue kept under the old name does not carry over.

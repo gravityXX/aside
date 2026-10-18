@@ -4,11 +4,11 @@
     "name": "gravityXX",
     "url": "https://github.com/gravityXX"
   },
-  "description": "aside: A prompt queue for Claude Code. Note ideas and comments while Claude works, without interrupting it, and hand them over when you are ready.",
+  "description": "aside: A prompt queue for Claude Code. Queue prompts, ideas and comments while Claude works, without interrupting it, and send them once it finishes or whenever you are ready.",
   "plugins": [
     {
       "name": "aside",
-      "description": "A prompt queue for Claude Code. Note ideas and comments while Claude works, without interrupting it, and hand them over when you are ready.",
+      "description": "A prompt queue for Claude Code. Queue prompts, ideas and comments while Claude works, without interrupting it, and send them once it finishes or whenever you are ready.",
       "author": {
         "name": "gravityXX"
       },
