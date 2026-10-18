@@ -495,7 +495,7 @@ async function finishStep($: Engine, ctx: Context, keys: Keys, plan: Plan, e: Tu
       $.ui.toast(`Plan paused after step ${active.step + 1}: ${active.pausedFor}. /aside continue goes on.`)
     } else if (plan.steps.every(one => one.isDone)) {
       const ms = plan.steps.reduce((sum, one) => sum + (one.ms ?? 0), 0)
-      $.ui.toast(`Plan done: ${formatCount(plan.steps.length, 'step')} in ${formatDuration(ms)}`)
+      $.ui.toast(`Plan done: ${formatCount(plan.steps.length, 'step')}${ms > 0 ? ` in ${formatDuration(ms)}` : ''}`)
     } else {
       $.ui.toast(`Step ${active.step + 1} done`)
     }

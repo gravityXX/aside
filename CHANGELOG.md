@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- The plan is drawn as a line of steps, in the `/aside` frame, the list pane and the saved plan's row: each step's mark in its state's colour (done, running, to do), and under a step done how long it took and what it said. A double line marks where a step paused the run, and the plan's title gives its time so far.
+- The line above the prompt shows how far the plan is, as in `plan ▰▰▱▱ 2/4 · step 3 running`.
+
 ## 0.19.0 - 2026-10-18
 
 - aside draws in Claude Code Desktop too: the line above the prompt, the list pane, the framed `/aside` listing and the saved plan. Before, Desktop showed the line, but the pane its `list` button opened stayed empty.
