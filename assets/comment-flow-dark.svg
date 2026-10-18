@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" width="840" height="270" viewBox="0 0 840 270" role="img" aria-label="Copy a sentence from a markdown preview, type +? and a question in Claude Code, and the comment is pinned to report.md line 42">
+  <style>
+    .h { font: 600 13px -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #9198a1; }
+    .n { font: 700 13px -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #d4a72c; }
+    .doc { font: 400 15px -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #656c76; }
+    .doch { font: 700 17px -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #f0f6fc; }
+    .sel { font: 400 15px -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #f0f6fc; }
+    .m { font: 400 13.5px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fill: #f0f6fc; }
+    .d { fill: #9198a1; }
+    .a { fill: #d4a72c; font-weight: 700; }
+    .k { fill: #3fb950; }
+    .key { font: 600 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fill: #f0f6fc; }
+  </style>
+
+  <text x="0" y="16" class="n">1</text>
+  <text x="16" y="16" class="h">Copy a sentence from Claude's report</text>
+  <rect x="1" y="30" width="370" height="200" rx="10" fill="#151b23" stroke="#3d444d"/>
+  <path d="M1 58 V40 a10 10 0 0 1 10 -10 H361 a10 10 0 0 1 10 10 V58 Z" fill="#212830"/>
+  <line x1="1" y1="58" x2="371" y2="58" stroke="#3d444d"/>
+  <text x="18" y="49" class="h">report.md - Preview</text>
+  <text x="22" y="90" class="doch">Results</text>
+  <text x="22" y="120" class="doc">Sales held steady across regions.</text>
+  <rect x="16" y="133" width="214" height="26" rx="4" fill="#3b2e00" stroke="#bb8009"/>
+  <text x="22" y="151" class="sel">Revenue grew by 12% in Q3.</text>
+  <text x="22" y="182" class="doc">Costs stayed flat, mostly thanks</text>
+  <text x="22" y="204" class="doc">to the new pricing.</text>
+  <rect x="244" y="133" width="60" height="26" rx="5" fill="#0d1117" stroke="#3d444d"/>
+  <text x="254" y="151" class="key">Ctrl+C</text>
+
+  <path d="M386 130 H440" stroke="#9198a1" stroke-width="2" fill="none"/>
+  <path d="M434 123 L444 130 L434 137" stroke="#9198a1" stroke-width="2" fill="none" stroke-linejoin="round"/>
+
+  <text x="460" y="16" class="n">2</text>
+  <text x="476" y="16" class="h">Comment in Claude Code, keep working</text>
+  <rect x="460" y="30" width="379" height="200" rx="10" fill="#151b23" stroke="#3d444d"/>
+  <text x="480" y="78" class="m"><tspan class="d">&#x276F;</tspan> <tspan class="a">+?</tspan> where does this number come from</text>
+  <text x="480" y="114" class="m"><tspan class="d">queued</tspan> <tspan class="a">?</tspan> <tspan class="k">report.md:42</tspan></text>
+  <text x="480" y="136" class="m"><tspan class="d">"Revenue grew by 12% in Q3."</tspan></text>
+  <line x1="476" y1="176" x2="823" y2="176" stroke="#3d444d"/>
+  <text x="480" y="204" class="m"><tspan class="d">queue: 1 comment &#xB7;</tspan> [ plan ]</text>
+
+  <text x="0" y="262" class="h">The copied sentence is found in the file, and the comment is pinned to its line.</text>
+</svg>
