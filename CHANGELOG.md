@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.10.0 - 2026-10-18
 
 - The button on the line above the prompt reads `list` instead of `organize`: it opens a pane with the queue and the plan, drawn as `/aside` draws them and kept up to date while it is open. Its `plan` button organizes the queue, as `organize` did; `close` or Escape closes it.
 - No more "Waiting in the queue" toast when Claude answers: the line above the prompt already shows what waits.

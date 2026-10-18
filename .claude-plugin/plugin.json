@@ -1,6 +1,6 @@
 {
   "name": "aside",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "description": "A prompt queue for Claude Code. Queue prompts, ideas and comments while Claude works, without interrupting it, and send them once it finishes or whenever you are ready.",
   "author": {
     "name": "gravityXX",
