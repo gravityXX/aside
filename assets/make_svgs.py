@@ -19,6 +19,9 @@ THEMES = {
         "band": "#fff8c5",
         "bandb": "#d4a72c",
         "btn": "#ffffff",
+        "claude": "#c15f3c",
+        "kidea": "#5769f7",
+        "kquestion": "#966c1e",
     },
     "dark": {
         "fg": "#f0f6fc",
@@ -33,6 +36,9 @@ THEMES = {
         "band": "#2b2100",
         "bandb": "#bb8009",
         "btn": "#0d1117",
+        "claude": "#d77757",
+        "kidea": "#b1b9f9",
+        "kquestion": "#ffc107",
     },
 }
 
@@ -55,6 +61,10 @@ def window(c: dict, height: int, title: str, body: str, label: str) -> str:
     .f {{ fill: {c["faint"]}; }}
     .a {{ fill: {c["acc"]}; font-weight: 700; }}
     .k {{ fill: {c["ok"]}; }}
+    .b {{ font-weight: 700; }}
+    .claude {{ fill: {c["claude"]}; font-weight: 700; }}
+    .kidea {{ fill: {c["kidea"]}; }}
+    .kquestion {{ fill: {c["kquestion"]}; }}
     .t {{ font: 600 12.5px -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: {c["muted"]}; }}
     .key {{ font: 700 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fill: {c["fg"]}; }}
   </style>
@@ -145,52 +155,60 @@ def step2(c: dict) -> str:
     body = (
         line(y0, [("● ", "a"), ("Done. Shall I update the docs too?", "")])
         + f'  <rect x="{PAD - 8}" y="{band_y}" width="{W - 2 * PAD + 16}" height="30" rx="6" fill="{c["band"]}" stroke="{c["bandb"]}"/>\n'
-        + f'  <text x="{PAD}" y="{band_y + 20}" class="m d">queue: 1 idea, 4 comments</text>\n'
+        + f'  <text x="{PAD}" y="{band_y + 20}" class="m d">aside: 1 idea, 4 comments</text>\n'
         + f'  <rect x="{W - PAD - 92}" y="{band_y + 5}" width="84" height="20" rx="4" fill="{c["btn"]}" stroke="{c["line"]}"/>\n'
         + f'  <text x="{W - PAD - 50}" y="{band_y + 19}" class="m" text-anchor="middle">organize</text>\n'
         + line(band_y + 30 + ROW, [("❯ ", "f"), ("yes, go ahead", "")], "your reply goes to Claude as usual")
     )
     label = (
-        "Claude finishes and asks whether to update the docs. Above the prompt, a line shows the queue: 1 idea, 4 comments, "
+        "Claude finishes and asks whether to update the docs. Above the prompt, a line shows the queue, aside: 1 idea, 4 comments, "
         "with an organize button. You answer yes, go ahead, which goes to Claude as usual; the queue keeps waiting."
     )
     return window(c, int(band_y + 30 + ROW + 26), "Claude Code", body, label)
 
 
 def step3(c: dict) -> str:
-    # The list as /aside prints it, under the terminal's output mark. Each column has its own x,
-    # since a browser may collapse the runs of spaces that line the columns up in the terminal.
-    out = PAD + 40
-    number, kind, text = out + 16, out + 36, out + 136
+    # The list as /aside draws it: a frame, the kinds in the theme's colours. Each column has
+    # its own x, since a browser may collapse the runs of spaces that line columns up.
+    box_x, box_w = PAD + 8, W - 2 * PAD - 8
+    out = box_x + 16
+    number, kind, text = out + 16, out + 36, out + 120
     rows = [
-        ("1", "idea", "cache the parsed config", ""),
-        ("2", "question", "where is this from", 'docs/report.md:42  "Revenue grew by 12% in Q3."'),
+        ("1", "idea", "cache the parsed config", "", "kidea"),
+        ("2", "question", "where is this from", '↳ docs/report.md:42 · "Revenue grew by 12% in Q3."', "kquestion"),
     ]
     y = TOP
     body = line(y, [("❯ ", "f"), ("/aside", "a")], "see the list")
-    y += ROW
-    body += f'  <text x="{PAD + 16}" y="{y}" class="m f">⎿</text><text x="{out}" y="{y}" class="m">1 idea and 1 comment waiting</text>\n'
+    top = y + 12
+    y = top + ROW
+    body += (
+        f'  <text x="{out}" y="{y}" class="m claude">aside</text>'
+        f'<text x="{out + 60}" y="{y}" class="m b">1 idea and 1 comment waiting</text>\n'
+    )
     y += ROW * 0.5
-    for n, k, t, about in rows:
+    for n, k, t, about, colour in rows:
         y += ROW
         body += (
-            f'  <text x="{number}" y="{y}" class="m" text-anchor="end">{n}</text>'
-            f'<text x="{kind}" y="{y}" class="m">{esc(k)}</text><text x="{text}" y="{y}" class="m">{esc(t)}</text>\n'
+            f'  <text x="{number}" y="{y}" class="m d" text-anchor="end">{n}</text>'
+            f'<text x="{kind}" y="{y}" class="m {colour}">{esc(k)}</text><text x="{text}" y="{y}" class="m">{esc(t)}</text>\n'
         )
         if about:
             y += ROW
-            body += f'  <text x="{text}" y="{y}" class="m">{esc(about)}</text>\n'
+            body += f'  <text x="{text}" y="{y}" class="m d">{esc(about)}</text>\n'
+    bottom = y + 14
+    body += f'  <rect x="{box_x}" y="{top}" width="{box_w}" height="{bottom - top}" rx="8" fill="none" stroke="{c["line"]}" stroke-width="1.5"/>\n'
+    y = bottom
     for command, gloss in (
         ("/aside plan", "Claude turns it into steps"),
         ("/aside run", "step 1 of 3 running"),
         ("/aside pop 2", "entry 2, ready to send"),
     ):
-        y += ROW * (1.5 if command == "/aside plan" else 1)
+        y += ROW * (1.25 if command == "/aside plan" else 1)
         body += line(y, [("❯ ", "f"), (command, "a")], gloss)
     label = (
-        "In Claude Code: /aside lists what waits, 1 idea and 1 comment, in columns: number, kind, text, and under a comment "
-        "its file, line and quote. /aside plan has Claude turn it into steps; /aside run runs them, step 1 of 3 first; "
-        "/aside pop 2 puts entry 2 in the prompt box, ready to send."
+        "In Claude Code: /aside draws what waits in a frame, 1 idea and 1 comment, in columns: number, kind in its colour, "
+        "text, and under a comment its file, line and quote. /aside plan has Claude turn it into steps; /aside run runs them, "
+        "step 1 of 3 first; /aside pop 2 puts entry 2 in the prompt box, ready to send."
     )
     return window(c, int(y + 26), "Claude Code", body, label)
 

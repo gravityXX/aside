@@ -140,10 +140,11 @@ const write = ($: Engine, path: string) =>
 const ends = async ($: Engine, turnId: string, reason: 'answer' | 'aborted' = 'answer') =>
   $.turn.complete({ turnId, reason, answer: '', durationMs: 1, isAborted: reason === 'aborted' } as never)
 
-// One entry, and one plan step, as /aside lists them.
-const row = (n: number | string, kind: string, text: string, about = '') =>
-  `${String(n).padStart(3)}  ${kind.padEnd(10)}  ${text}${about ? `\n${' '.repeat(17)}${about}` : ''}`
-const step = (n: number, state: string, title: string) => `${String(n).padStart(3)}  ${state.padEnd(10)}  ${title}`
+// One entry, and one plan step, as /aside lists them: the middle column as wide as its
+// longest word in the list (`width`).
+const row = (n: number | string, kind: string, text: string, about = '', width = kind.length) =>
+  `${String(n).padStart(3)}  ${kind.padEnd(width)}  ${text}${about ? `\n${' '.repeat(7 + width)}\u21b3 ${about}` : ''}`
+const step = (n: number, state: string, title: string, width = 5) => `${String(n).padStart(3)}  ${state.padEnd(width)}  ${title}`
 
 describe('capture', () => {
   test('a message starting with + is one idea, a plain one is not', () => {
@@ -166,6 +167,16 @@ describe('capture', () => {
     expect(capture('+! @r.md#results shorter')?.[0]).toMatchObject({ anchor: { file: 'r.md', heading: 'results' } })
     expect(capture('+- #zrodla')?.[0]).toMatchObject({ kind: 'drop', text: '', anchor: { heading: 'zrodla' } })
     expect(capture('+?')).toBeNull()
+  })
+
+  test('a draft that ends with a mark is queued whole, as if the mark came first', () => {
+    expect(capture('why is the build so slow +?')).toEqual([{ kind: 'question', text: 'why is the build so slow', anchor: {}, raw: '+? why is the build so slow' }])
+    expect(capture('a long draft\n- over two lines\n+')).toEqual([{ kind: 'idea', text: 'a long draft\n- over two lines', anchor: {}, raw: '+ a long draft\n- over two lines' }])
+    expect(capture('@docs/r.md:42 why +?')?.[0]).toMatchObject({ kind: 'question', text: 'why', anchor: { file: 'docs/r.md', line: 42 } })
+    expect(capture('look into the cache ++')?.[0]).toMatchObject({ kind: 'deeper', text: 'look into the cache' })
+    expect(capture('I love C++')).toBeNull()
+    expect(capture('what is 2 + 2')).toBeNull()
+    expect(capture('--- a/x\n+++ b/x\n@@ -1 +1 @@\n-old\n+')).toBeNull()
   })
 
   test('a pasted diff is a prompt, not an idea', () => {
@@ -268,9 +279,9 @@ describe('queue', () => {
     expect((await queue($, 'list')).text).toBe(
       [
         '1 comment waiting',
-        row(1, 'question', 'where does this come from', 'docs/report.md:5  "Revenue grew by 12% in the third quarter"'),
+        row(1, 'question', 'where does this come from', 'docs/report.md:5 · "Revenue grew by 12% in the third quarter"'),
         'Tags in files',
-        row('\u00b7', 'question', 'is this the same for Poland', 'docs/report.md:9  "Costs stayed flat across all regions."'),
+        row('\u00b7', 'question', 'is this the same for Poland', 'docs/report.md:9 · "Costs stayed flat across all regions."'),
       ].join('\n\n'),
     )
   })
@@ -281,7 +292,7 @@ describe('queue', () => {
 
     expect(await typed($, '+! make it shorter')).toBe('queued ! "nothing like this is written…" - copied text not found in any .md file under /proj (1 waiting)')
     expect((await queue($, 'list')).text).toBe(
-      `1 comment waiting\n\n${row(1, 'change', 'make it shorter', '"nothing like this is written anywhere at all" (not in a file)')}`,
+      `1 comment waiting\n\n${row(1, 'change', 'make it shorter', 'not in a file · "nothing like this is written anywhere at all"')}`,
     )
 
     w.clip = 'Costs stayed flat across all regions.'
@@ -356,7 +367,7 @@ describe('queue', () => {
     expect(sent.at(-1)).toContain('[a <!-- --> tag in the file]: is this the same for Poland')
     expect((await queue($, 'plan')).text).toContain('The queue is empty.')
     expect((await queue($, 'list')).text).toContain(
-      row('\u00b7', 'question', 'is this the same for Poland', 'docs/report.md:9  "Costs stayed flat across all regions."  (handed over)'),
+      row('\u00b7', 'question', 'is this the same for Poland', 'docs/report.md:9 · "Costs stayed flat across all regions." · handed over'),
     )
   })
 
@@ -383,7 +394,7 @@ describe('from the issues', () => {
     // A command answers with the text itself: no toast or log line on top of it.
     expect(toasts).toEqual([])
     expect((await queue($, 'list')).text).toBe(
-      `1 idea and 1 comment waiting\n\n${row(1, 'idea', 'add tests for the parser')}\n${row(2, 'question', 'why this order')}`,
+      `1 idea and 1 comment waiting\n\n${row(1, 'idea', 'add tests for the parser', '', 8)}\n${row(2, 'question', 'why this order')}`,
     )
   })
 
@@ -407,7 +418,7 @@ describe('from the issues', () => {
 
     expect((await queue($, 'run')).text).toContain('Running 3 entries one by one')
     expect((await queue($)).text).toContain(
-      [step(1, 'running', 'dark mode'), step(2, 'to do', 'as a table'), step(3, 'to do', 'is this the same for Poland')].join('\n'),
+      [step(1, 'running', 'dark mode', 7), step(2, 'to do', 'as a table', 7), step(3, 'to do', 'is this the same for Poland', 7)].join('\n'),
     )
     await clock.advance(100)
     expect(sent[0]).toContain('dark mode (branch main)')
@@ -427,12 +438,12 @@ describe('from the issues', () => {
     await type($, '+ a\n+ b\n+? c')
 
     expect((await queue($, 'move 3 1')).text).toBe(
-      `2 ideas and 1 comment waiting\n\n${row(1, 'question', 'c')}\n${row(2, 'idea', 'a')}\n${row(3, 'idea', 'b')}`,
+      `2 ideas and 1 comment waiting\n\n${row(1, 'question', 'c')}\n${row(2, 'idea', 'a', '', 8)}\n${row(3, 'idea', 'b', '', 8)}`,
     )
     expect((await queue($, 'move 9 1')).text).toBe('Give two places from 1 to 3: /aside move 3 1')
     expect((await queue($, 'edit 2')).text).toBe('Entry 2 is in the prompt box: change it and press Enter; it goes back to place 2, still pointing where it did.')
     expect(filled).toEqual(['+ a'])
-    expect((await queue($, 'list')).text).toBe(`1 idea and 1 comment waiting\n\n${row(1, 'question', 'c')}\n${row(2, 'idea', 'b')}`)
+    expect((await queue($, 'list')).text).toBe(`1 idea and 1 comment waiting\n\n${row(1, 'question', 'c')}\n${row(2, 'idea', 'b', '', 8)}`)
   })
 
   test('a fresh copy comes first; with the clipboard unchanged, the selection in Claude\'s reply wins', async ($, on) => {
@@ -447,7 +458,7 @@ describe('from the issues', () => {
     w.selection = 'I chose the async path because the sync one blocks'
     await type($, '+! use the sync path')
     expect((await queue($, 'list')).text).toContain(
-      row(3, 'change', 'use the sync path', '"I chose the async path because the sync one blocks" (from the terminal)'),
+      row(3, 'change', 'use the sync path', 'terminal · "I chose the async path because the sync one blocks"', 8),
     )
   })
 
@@ -474,7 +485,7 @@ describe('from the issues', () => {
     w.clip = 'Something else entirely, copied later from a web page'
     await type($, '+? where does 12% come from')
     expect((await queue($, 'list')).text).toContain(
-      `${row(1, 'question', 'where does 12% come from', 'docs/report.md:5  "Revenue grew by 12% in the third quarter"')}\n${row(2, 'idea', 'b')}`,
+      `${row(1, 'question', 'where does 12% come from', 'docs/report.md:5 · "Revenue grew by 12% in the third quarter"')}\n${row(2, 'idea', 'b', '', 8)}`,
     )
   })
 
@@ -488,7 +499,7 @@ describe('from the issues', () => {
     await $.tool.call({ tool: 'Read', file_path: '/proj/nope2.md' } as never)
 
     await type($, '+? why')
-    expect((await queue($, 'list')).text).toBe(`1 comment waiting\n\n${row(1, 'question', 'why', 'after: Bash: 3 tests failed')}`)
+    expect((await queue($, 'list')).text).toBe(`1 comment waiting\n\n${row(1, 'question', 'why', 'after Bash · 3 tests failed')}`)
   })
 
   test('with nothing copied, a comment takes the last tool output of the turn, an error first', async ($, on) => {
@@ -502,13 +513,24 @@ describe('from the issues', () => {
     await $.tool.call({ tool: 'Bash', command: 'pass' } as never)
 
     expect(await typed($, '+? why did it fail')).toBe('queued ? "why did it fail" - with the last tool output (1 waiting)')
-    expect((await queue($, 'list')).text).toContain(row(1, 'question', 'why did it fail', 'after: Bash failed: exit 1: boom'))
+    expect((await queue($, 'list')).text).toContain(row(1, 'question', 'why did it fail', 'after Bash failed · exit 1: boom'))
     await $.turn.start({ text: 'next thing', turnId: 't2' })
     expect(await typed($, '+? and now')).toBe('queued ? "and now" - no text on the clipboard (2 waiting)')
   })
 })
 
 describe('the prompt box', () => {
+  test('a draft already typed goes to the queue when it ends with a mark, with what was copied', async ($, on) => {
+    world(on, { files: { '/proj/docs/report.md': REPORT }, clip: 'Revenue grew by 12% in the third quarter', grep: '', branch: 'main' })
+    await write($, '/proj/docs/report.md')
+
+    expect(await typed($, 'where does this number come from +?')).toContain('queued ? docs/report.md:5')
+    expect(await type($, 'and this one goes to Claude')).not.toEqual({ drop: 'queued' })
+    expect((await queue($)).text).toContain(
+      `1 comment waiting\n\n${row(1, 'question', 'where does this number come from', 'docs/report.md:5 · "Revenue grew by 12% in the third quarter"')}`,
+    )
+  })
+
   test('a queued message leaves the box empty, but a new draft typed meanwhile stays', async ($, on) => {
     const { filled, clock } = world(on)
     let box = ''
@@ -548,7 +570,7 @@ test('Enter is answered at once; two quick entries are both stored, in order', a
   expect(await second).toEqual({ drop: 'queued' })
   await clock.advance(5)
   await clock.settle()
-  expect((await queue($, 'list')).text).toBe(`1 idea and 1 comment waiting\n\n${row(1, 'idea', 'one')}\n${row(2, 'question', 'two')}`)
+  expect((await queue($, 'list')).text).toBe(`1 idea and 1 comment waiting\n\n${row(1, 'idea', 'one', '', 8)}\n${row(2, 'question', 'two')}`)
 })
 
 describe('the order setting', () => {
@@ -561,7 +583,7 @@ describe('the order setting', () => {
     await type($, '+? charlie')
 
     expect((await queue($)).text).toBe(
-      `2 ideas and 1 comment waiting\n\n${row(1, 'question', 'charlie')}\n${row(2, 'idea', 'bravo')}\n${row(3, 'idea', 'alpha')}`,
+      `2 ideas and 1 comment waiting\n\n${row(1, 'question', 'charlie')}\n${row(2, 'idea', 'bravo', '', 8)}\n${row(3, 'idea', 'alpha', '', 8)}`,
     )
     expect((await queue($, 'pop')).text).toBe('In the prompt box, ready to send: charlie')
     expect((await queue($, 'remove 2')).text).toBe('Removed: alpha')
@@ -594,6 +616,47 @@ describe('the order setting', () => {
     await clock.advance(100)
     expect(sent.at(-1)).toContain('bravo')
     expect(sent.at(-1)).not.toContain('alpha')
+  })
+})
+
+describe('the drawn list', () => {
+  const draw = ($: Engine, text: string, command = 'aside') =>
+    $.ui.mount({
+      plugin: 'aside',
+      surface: 'terminal',
+      component: 'CommandOutput',
+      props: { command, args: '', text, isErrored: false } as never,
+      viewport: { columns: 100, rows: 30 },
+    })
+
+  test('the list /aside printed is drawn in a frame, each kind in its colour', async ($, on) => {
+    world(on, { files: { '/proj/docs/report.md': REPORT }, clip: 'Revenue grew by 12% in the third quarter', grep: '', branch: 'main' })
+    await write($, '/proj/docs/report.md')
+    await type($, '+ alpha')
+    await type($, '+? where from')
+
+    const ui = await draw($, (await queue($)).text!)
+    expect(await ui.drawn()).toMatchObject({ type: 'Box', props: { borderStyle: 'round' } })
+    expect((await ui.find({ type: 'Text', text: '1 idea and 1 comment waiting' }))?.props.bold).toBe(true)
+    expect((await ui.find({ type: 'Text', text: /^question$/ }))?.props.color).toBe('warning')
+    expect((await ui.find({ type: 'Text', text: /^idea$/ }))?.props.color).toBe('suggestion')
+    expect((await ui.find({ type: 'Text', text: /^\u21b3 docs\/report\.md:5 · "Revenue/ }))?.props.dimColor).toBe(true)
+    expect((await ui.find({ type: 'Text', text: 'Tags in files' }))?.props.bold).toBe(true)
+    await ui.unmount()
+  })
+
+  test('anything else, from /aside or another command, is drawn as it is', async ($, on) => {
+    // The engine's own row, which the kit does not draw.
+    on('ui.render', { component: 'CommandOutput' }, () => ({ type: 'Text', props: {}, children: ['as printed'] }) as never)
+    world(on)
+    for (const [text, command] of [['Removed: alpha', 'aside'], ['The queue is empty.', 'aside'], [`1 idea waiting\n\n${row(1, 'idea', 'a')}`, 'cost']] as const) {
+      const ui = await draw($, text, command)
+      expect(await ui.drawn()).toMatchObject({ type: 'Text', children: ['as printed'] })
+      await ui.unmount()
+    }
+    const listing = await draw($, `aside: 1 idea waiting\n\n${row(1, 'idea', 'a')}`)
+    expect(await listing.drawn()).toMatchObject({ type: 'Box', props: { borderStyle: 'round' } })
+    await listing.unmount()
   })
 })
 
@@ -806,7 +869,7 @@ describe('plan', () => {
         props: { hasSurvey: false } as never,
         viewport: { columns: 120, rows: 30 },
       })
-      const text = (await ui.find({ type: 'Text', text: /queue|engine/ }))?.text
+      const text = (await ui.find({ type: 'Text', text: /^aside: |engine/ }))?.text
       const button = (await ui.find({ key: 'queue' }))?.props.label
       await ui.unmount()
 
@@ -815,9 +878,9 @@ describe('plan', () => {
 
     expect(await band()).toEqual(['engine', undefined])
     await type($, '+ x\n+? y')
-    expect(await band()).toEqual(['queue: 1 idea, 1 comment · ', 'organize'])
+    expect(await band()).toEqual(['aside: 1 idea, 1 comment · ', 'organize'])
     await queue($, 'plan')
     await $.tool.call({ tool: 'mcp__aside__plan', steps: STEPS } as never)
-    expect(await band()).toEqual(['queue: plan: 3 of 3 steps left · ', 'run plan'])
+    expect(await band()).toEqual(['aside: plan: 3 of 3 steps left · ', 'run plan'])
   })
 })

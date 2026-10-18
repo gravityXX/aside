@@ -79,8 +79,17 @@ export const looksLikeDiff = (text: string): boolean => {
 // each line is its own entry; otherwise the whole message is one.
 export const capture = (text: string): Entry[] | null => {
   const lines = text.trim().split(/\r?\n/).filter(line => line.trim() !== '')
-  if (lines.length === 0 || !lines[0]!.trim().startsWith('+') || looksLikeDiff(text.trim())) {
+  if (lines.length === 0 || looksLikeDiff(text.trim())) {
     return null
+  }
+  if (!lines[0]!.trim().startsWith('+')) {
+    // A draft already typed goes to the queue too when it ends with a mark after a space
+    // or a line break: "why is this so slow +?" is "+? why is this so slow". "C++" is not.
+    const end = /\s(\+[?!+-]?)$/.exec(text.trim())
+    const body = end ? text.trim().slice(0, end.index).trim() : ''
+    const one = body === '' ? null : entry(`${end![1]} ${body}`)
+
+    return one === null ? null : [one]
   }
 
   const isList = lines.every(line => line.trim().startsWith('+'))
@@ -232,28 +241,66 @@ export const where = (idea: Idea, root: string): string => {
   return `${relative(idea.file, root)}${at}`
 }
 
-// One line per entry, as /aside list shows the queue.
-// One entry as /aside shows it: its number (or a bullet) and kind in fixed columns, its text,
-// and what it is about (file and line, quote, tool output) on an indented line under it.
-export const entryLines = (idea: Idea, root: string, label: string, note = ''): string => {
-  const head = `${label.padStart(3)}  ${KINDS[idea.kind].label.padEnd(10)}  `
+// The kind column is as wide as the longest kind it shows.
+export const kindWidth = (ideas: readonly Idea[]): number => Math.max(0, ...ideas.map(idea => KINDS[idea.kind].label.length))
+
+// One entry as /aside shows it: its number (or a bullet), its kind and its text in columns,
+// and under it what it is about, where first: "↳ docs/report.md:42 · "the quote"".
+export const entryLines = (idea: Idea, root: string, label: string, width: number, note = ''): string => {
+  const head = `${label.padStart(3)}  ${KINDS[idea.kind].label.padEnd(width)}  `
   const indent = ' '.repeat(head.length)
   const text = (idea.text || '(no text)').replace(/\n/g, `\n${indent}`)
-  const loose = idea.from === 'terminal' ? ' (from the terminal)' : ' (not in a file)'
+  const loose = idea.from === 'terminal' ? 'terminal' : 'not in a file'
+  // A tool output reads "Bash failed: exit 1": the tool, then what it said.
+  const [tool, ...said] = (idea.output ?? '').split(': ')
   const about = [
-    where(idea, root),
-    idea.quote ? `"${snippet(idea.quote, 60)}"${idea.isLoose ? loose : ''}` : '',
-    idea.output ? `after: ${snippet(idea.output, 50)}` : '',
+    where(idea, root) || (idea.quote && idea.isLoose ? loose : ''),
+    idea.quote ? `"${snippet(idea.quote, 60)}"` : '',
+    idea.output ? `after ${tool}` : '',
+    idea.output && said.length > 0 ? snippet(said.join(': '), 50) : '',
     note,
   ]
     .filter(Boolean)
-    .join('  ')
+    .join(' · ')
 
-  return `${head}${text}${about ? `\n${indent}${about}` : ''}`
+  return `${head}${text}${about ? `\n${indent}↳ ${about}` : ''}`
 }
 
 export const listed = (ideas: readonly Idea[], root: string): string =>
-  ideas.map((idea, i) => entryLines(idea, root, String(i + 1))).join('\n')
+  ideas.map((idea, i) => entryLines(idea, root, String(i + 1), kindWidth(ideas))).join('\n')
+
+// The /aside listing read back from its text, so the transcript can draw it in colour:
+// sections of a title and rows, each row a number (or a bullet), a kind or a step's state,
+// its lines of text and what it is about. Null for any other text, drawn as it is.
+export type ListingRow = { label: string; word: string; lines: string[]; about: string[] }
+export type ListingSection = { title: string; rows: ListingRow[] }
+
+const WORDS = [...Object.values(KINDS).map(kind => kind.label), 'running', 'done', 'to do']
+const ROW = new RegExp(`^ {0,2}(\\d+|\u00b7)  (${WORDS.join('|')}) {2,}(\\S.*)$`)
+
+export const readListing = (text: string): ListingSection[] | null => {
+  const sections: ListingSection[] = []
+  for (const line of text.split('\n')) {
+    const found = ROW.exec(line)
+    const section = sections.at(-1)
+    const row = section?.rows.at(-1)
+    if (line.trim() === '') continue
+    if (found) {
+      if (section === undefined) return null
+      section.rows.push({ label: found[1]!, word: found[2]!, lines: [found[3]!], about: [] })
+    } else if (!line.startsWith(' ')) {
+      sections.push({ title: line, rows: [] })
+    } else if (row === undefined) {
+      return null
+    } else if (line.trim().startsWith('\u21b3 ')) {
+      row.about.push(line.trim().slice(2))
+    } else {
+      row.lines.push(line.trim())
+    }
+  }
+
+  return sections.some(section => section.rows.length > 0) ? sections : null
+}
 
 // The line over the list: how many ideas and comments wait.
 export const summary = (ideas: readonly Idea[]): string => {

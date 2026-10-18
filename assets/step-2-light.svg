@@ -1,10 +1,14 @@
-<svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" width="880" height="152" viewBox="0 0 880 152" role="img" aria-label="Claude finishes and asks whether to update the docs. Above the prompt, a line shows the queue: 1 idea, 4 comments, with an organize button. You answer yes, go ahead, which goes to Claude as usual; the queue keeps waiting.">
+<svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" width="880" height="152" viewBox="0 0 880 152" role="img" aria-label="Claude finishes and asks whether to update the docs. Above the prompt, a line shows the queue, aside: 1 idea, 4 comments, with an organize button. You answer yes, go ahead, which goes to Claude as usual; the queue keeps waiting.">
   <style>
     .m { font: 400 13.5px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fill: #1f2328; }
     .d { fill: #59636e; }
     .f { fill: #818b98; }
     .a { fill: #9a6700; font-weight: 700; }
     .k { fill: #1a7f37; }
+    .b { font-weight: 700; }
+    .claude { fill: #c15f3c; font-weight: 700; }
+    .kidea { fill: #5769f7; }
+    .kquestion { fill: #966c1e; }
     .t { font: 600 12.5px -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #59636e; }
     .key { font: 700 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fill: #1f2328; }
   </style>
@@ -15,7 +19,7 @@
   <text x="440.0" y="21" class="t" text-anchor="middle">Claude Code</text>
   <text x="24" y="56" class="m"><tspan class="a">● </tspan>Done. Shall I update the docs too?</text>
   <rect x="16" y="70" width="848" height="30" rx="6" fill="#fff8c5" stroke="#d4a72c"/>
-  <text x="24" y="90" class="m d">queue: 1 idea, 4 comments</text>
+  <text x="24" y="90" class="m d">aside: 1 idea, 4 comments</text>
   <rect x="764" y="75" width="84" height="20" rx="4" fill="#ffffff" stroke="#d1d9e0"/>
   <text x="806" y="89" class="m" text-anchor="middle">organize</text>
   <text x="24" y="126" class="m"><tspan class="f">❯ </tspan>yes, go ahead</text><text x="380" y="126" class="m d">your reply goes to Claude as usual</text>
