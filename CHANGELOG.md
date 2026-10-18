@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.19.0 - 2026-10-18
 
 - aside draws in Claude Code Desktop too: the line above the prompt, the list pane, the framed `/aside` listing and the saved plan. Before, Desktop showed the line, but the pane its `list` button opened stayed empty.
 - The README says where aside works: the terminal on every system, Desktop's local and SSH sessions, and Remote Control for `+` entries; and where Claude Code does not load it.
