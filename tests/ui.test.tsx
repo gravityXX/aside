@@ -40,7 +40,8 @@ describe('the band above the prompt', () => {
     await savePlan(STEPS)
 
     await pressBand()
-    expect(sent).toEqual(['Do one.\n\n(Step 1 of 3 of the queue plan, "One", sent by the aside plugin.)'])
+    expect(sent).toHaveLength(1)
+    expect(sent[0]).toContain('(Step 1 of 3 of the queue plan, "One", sent by the aside plugin.')
     await startTurn(sent[0]!, 's1')
     await pressBand()
     expect(toasts).toEqual(['Running the plan: 3 steps, from step 1. /aside stop stops after the current one.', 'The plan stops after step 1.'])

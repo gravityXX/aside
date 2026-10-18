@@ -7,7 +7,7 @@ import { MARKDOWN_PATH } from '../core/markdown'
 import { shortenText } from '../core/text'
 import { loadEntries, loadPlan, projectKeys, refreshBand } from '../io/store'
 import { addEntries } from './capture'
-import { handOverQueue, registerPlanTool, runEntries, runPlan, stopPlan } from './plan'
+import { handOverQueue, registerPlanTool, registerWaitTool, runEntries, runPlan, stopPlan } from './plan'
 import { clearQueue, editEntry, moveEntry, popEntry, removeEntries, restoreTaken, scanFile, showListing } from './queue'
 
 type Name = 'list' | 'plan' | 'run' | 'stop' | 'pop' | 'edit' | 'move' | 'remove' | 'clear' | 'undo' | 'scan' | 'help'
@@ -152,7 +152,7 @@ async function runQueue($: Engine, ctx: Context, arg: string | undefined) {
     return handOverQueue($, ctx, 'send')
   }
 
-  return (await runPlan($, arg === undefined ? undefined : Number(arg))) ?? runEntries($, ctx)
+  return (await runPlan($, ctx, arg === undefined ? undefined : Number(arg))) ?? runEntries($, ctx)
 }
 
 async function runCommand($: Engine, ctx: Context, name: Name, args: readonly string[]): Promise<string> {
@@ -258,6 +258,7 @@ export async function startSession(ctx: Context, $: Engine, e: SessionStart[1], 
     immediate: true,
   })
   ctx.session.planTool = await registerPlanTool($)
+  ctx.session.waitTool = await registerWaitTool($)
   await refreshBand($)
 
   return next(e)

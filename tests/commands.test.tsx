@@ -227,7 +227,7 @@ describe('the order setting', () => {
 
     expect(await aside('run')).toBe('Running 2 entries one by one. /aside stop stops after the current one.')
     await idle()
-    expect(sent.at(-1)).toBe('bravo (branch main)\n\n(Step 1 of 2 of the queue plan, "bravo", sent by the aside plugin.)')
+    expect(sent.at(-1)).toContain('(Step 1 of 2 of the queue plan, "bravo", sent by the aside plugin.\nPlan: 1 bravo (this one) · 2 alpha (to do).')
   })
 })
 

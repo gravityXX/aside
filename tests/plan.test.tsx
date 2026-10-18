@@ -4,8 +4,9 @@ import { REPORT, REPORT_PATH, STEPS, world } from './world'
 
 const MARKER = '(Composed by the aside plugin from my queued notes, not typed by me as a message.)'
 
-const step = (prompt: string, n: number, total: number, title: string) =>
-  `${prompt}\n\n(Step ${n} of ${total} of the queue plan, "${title}", sent by the aside plugin.)`
+// The lines under each step of a plan of several, as Claude reads them.
+const NEXT = 'Do this step only; the next one is sent when you answer. If you need my answer first, call the mcp__aside__wait tool and stop.'
+const LAST = 'Do this step only; it is the last one.'
 
 describe('handing the queue over', () => {
   test('/aside plan sends the queue as one planning prompt: ideas, then comments by file', async ($, on) => {
@@ -236,15 +237,31 @@ describe('handing the queue over', () => {
     await answer('e1')
     await answer('e2')
     expect(sent).toEqual([
-      step('dark mode (branch main)', 1, 3, 'dark mode'),
-      step('Change - In docs/report.md: line 5:\nas a table (branch main)', 2, 3, 'as a table'),
-      step(
-        'Question - In docs/report.md: line 9, on "Costs stayed flat across all regions.":\nis this the same for Poland\n\n' +
-          'This comment is a <!-- --> tag in the file; remove the tag once it is handled.',
-        3,
-        3,
+      [
+        'dark mode (branch main)',
+        '',
+        '(Step 1 of 3 of the queue plan, "dark mode", sent by the aside plugin.',
+        'Plan: 1 dark mode (this one) · 2 as a table (to do) · 3 is this the same for Poland (to do).',
+        `${NEXT})`,
+      ].join('\n'),
+      [
+        'Change - In docs/report.md: line 5:',
+        'as a table (branch main)',
+        '',
+        '(Step 2 of 3 of the queue plan, "as a table", sent by the aside plugin.',
+        'Plan: 1 dark mode (done) · 2 as a table (this one) · 3 is this the same for Poland (to do).',
+        `${NEXT})`,
+      ].join('\n'),
+      [
+        'Question - In docs/report.md: line 9, on "Costs stayed flat across all regions.":',
         'is this the same for Poland',
-      ),
+        '',
+        'This comment is a <!-- --> tag in the file; remove the tag once it is handled.',
+        '',
+        '(Step 3 of 3 of the queue plan, "is this the same for Poland", sent by the aside plugin.',
+        'Plan: 1 dark mode (done) · 2 as a table (done) · 3 is this the same for Poland (this one).',
+        `${LAST})`,
+      ].join('\n'),
     ])
   })
 })
@@ -261,9 +278,52 @@ describe('running the plan', () => {
     await answer('s1')
     await answer('s2')
     await answer('s3')
-    expect(sent).toEqual([step('Do one.', 1, 3, 'One'), step('Do two.', 2, 3, 'Two'), step('Do three.', 3, 3, 'Three')])
+    expect(sent).toEqual([
+      `Do one.\n\n(Step 1 of 3 of the queue plan, "One", sent by the aside plugin.\nPlan: 1 One (this one) · 2 Two (to do) · 3 Three (to do).\n${NEXT})`,
+      `Do two.\n\n(Step 2 of 3 of the queue plan, "Two", sent by the aside plugin.\nPlan: 1 One (done) · 2 Two (this one) · 3 Three (to do).\n${NEXT})`,
+      `Do three.\n\n(Step 3 of 3 of the queue plan, "Three", sent by the aside plugin.\nPlan: 1 One (done) · 2 Two (done) · 3 Three (this one).\n${LAST})`,
+    ])
     expect(toasts).toEqual(['Plan done'])
     expect(await shown()).toEqual(['The queue is empty.'])
+  })
+
+  test('a step run alone is told to do only that step', async ($, on) => {
+    const { sent, aside, savePlan, idle } = world($, on)
+    await savePlan(STEPS)
+    await aside('run 2')
+    await idle()
+
+    expect(sent).toEqual([
+      'Do two.\n\n(Step 2 of 3 of the queue plan, "Two", sent by the aside plugin.\nPlan: 1 One (to do) · 2 Two (this one) · 3 Three (to do).\nDo this step only.)',
+    ])
+  })
+
+  test('a step that needs an answer pauses the plan with the wait tool, and /aside run goes on from the next step', async ($, on) => {
+    const { sent, toasts, aside, shown, savePlan, startTurn, endTurn, idle } = world($, on)
+    await savePlan(STEPS)
+    await aside('run')
+    await idle()
+    await startTurn(sent[0]!, 's1')
+
+    const paused = await $.tool.call({ tool: 'mcp__aside__wait', reason: 'needs your yes on the design' } as never)
+    expect(paused.result).toBe('The plan pauses after this step. End your reply with your question; the user continues with /aside run.')
+    await endTurn('s1')
+    await idle()
+    expect(sent).toHaveLength(1)
+    expect(toasts).toEqual(['Plan paused after step 1: needs your yes on the design. /aside run continues.'])
+    expect(await shown()).toEqual(['The queue is empty.', 'Plan: 2 of 3 steps to do (/aside run)', '1 done One', '2 to do Two', '3 to do Three'])
+
+    expect(await aside('run')).toBe('Running the plan: 2 steps, from step 2. /aside stop stops after the current one.')
+    await idle()
+    expect(sent[1]).toContain('Do two.')
+  })
+
+  test('the wait tool is refused outside a step of the plan', async ($, on) => {
+    world($, on)
+
+    expect((await $.tool.call({ tool: 'mcp__aside__wait', reason: 'x' } as never)).deny).toBe(
+      'no step of the aside plan is running; call this tool only from a step of the plan',
+    )
   })
 
   test('/aside stop while a step runs makes it the last', async ($, on) => {
@@ -343,7 +403,7 @@ describe('running the plan', () => {
 
     expect(await aside('run')).toBe('Running 1 entry one by one. /aside stop stops after the current one.')
     await idle()
-    expect(sent.at(-1)).toBe(step('extra (branch main)', 1, 1, 'extra'))
+    expect(sent.at(-1)).toBe('extra (branch main)\n\n(Step 1 of 1 of the queue plan, "extra", sent by the aside plugin.)')
   })
 
   test('/aside undo waits while a step runs, so nothing is done twice', async ($, on) => {
