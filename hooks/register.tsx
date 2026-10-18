@@ -10,9 +10,11 @@ import {
   entryLines,
   headingLine,
   ideasOf,
+  kindWidth,
   listed,
   locate,
   entryPrompt,
+  readListing,
   plan as planPrompt,
   popText,
   quoteWords,
@@ -39,6 +41,7 @@ const ENV = { LC_ALL: 'C.UTF-8' }
 
 const HELP = [
   'Queue an idea: start a message with "+". When every line starts with "+", each line is its own entry.',
+  'Already typed it? End the message with the mark after a space ("... +", "... +?") and it is queued whole.',
   'Comment on what the agents wrote: copy a fragment in the preview, then type',
   '  +? question   +! change   +- drop   ++ dig deeper',
   '  pin it yourself with @file, @file:42, @file#heading or #heading after the mark.',
@@ -67,6 +70,18 @@ let planTool = 'mcp__aside__plan'
 // so the setting can change at any time; only what /aside shows, numbers and runs follows it.
 let order: 'oldest' | 'newest' = 'oldest'
 const inOrder = (list: readonly Idea[]): Idea[] => (order === 'newest' ? [...list].reverse() : [...list])
+
+// The colour of each kind and step state in the drawn list, from the theme, so it suits
+// light and dark alike.
+const COLOURS: Record<string, string> = {
+  idea: 'suggestion',
+  question: 'warning',
+  change: 'autoAccept',
+  drop: 'error',
+  'dig deeper': 'success',
+  running: 'warning',
+  done: 'success',
+}
 
 // What Tab offers after "/aside ", with the dim line beside each.
 const SUBCOMMANDS: readonly (readonly [string, string])[] = [
@@ -906,18 +921,16 @@ export const register: Register = (on, options) => {
 
     if (word === '' || word === 'list' || word === 'ls') {
       const plan = await loadPlan($, planKey)
-      const steps = plan.steps.map((step, i) => {
-        const state = plan.active?.step === i ? 'running' : step.isDone ? 'done' : 'to do'
-
-        return `${String(i + 1).padStart(3)}  ${state.padEnd(10)}  ${step.title}`
-      })
+      const states = plan.steps.map((step, i) => (plan.active?.step === i ? 'running' : step.isDone ? 'done' : 'to do'))
+      const width = Math.max(...states.map(state => state.length))
+      const steps = plan.steps.map((step, i) => `${String(i + 1).padStart(3)}  ${states[i]!.padEnd(width)}  ${step.title}`)
       const left = plan.steps.filter(step => !step.isDone).length
       const total = plan.steps.length
       const planned = left > 0 ? `\n\nPlan: ${left} of ${total} ${total === 1 ? 'step' : 'steps'} to do (/aside run)\n\n${steps.join('\n')}` : ''
       const fresh = new Set((await fileTags($, true)).map(tagKey))
       const inFiles = await fileTags($)
       const own = list.length === 0 ? 'The queue is empty.' : `${summary(list)}\n\n${listed(list, root)}`
-      const shown = inFiles.map(tag => entryLines(tag, root, '\u00b7', fresh.has(tagKey(tag)) ? '' : '(handed over)'))
+      const shown = inFiles.map(tag => entryLines(tag, root, '\u00b7', kindWidth(inFiles), fresh.has(tagKey(tag)) ? '' : 'handed over'))
       const tagged = inFiles.length === 0 ? '' : `\n\nTags in files\n\n${shown.join('\n')}`
 
       return { text: `${own}${tagged}${planned}` }
@@ -1104,6 +1117,52 @@ export const register: Register = (on, options) => {
     return { text: HELP }
   })
 
+  // The list /aside printed, drawn in a frame with colours. It is drawn from the row's own
+  // text, so an older listing keeps showing what it said; any other output is left as it is.
+  on('ui.render', { component: 'CommandOutput' }, async ($, e, next) => {
+    const sections = e.props.command === 'aside' && !e.props.isErrored ? readListing(e.props.text.replace(/^aside: /, '')) : null
+    if (e.surface !== 'terminal' || sections === null) {
+      return next(e)
+    }
+
+    const { Box, Text } = $.ui.resolve(e)
+
+    return (
+      <Box flexDirection="column" borderStyle="round" borderColor="promptBorder" paddingX={1}>
+        {sections.map((section, i) => {
+          const width = Math.max(0, ...section.rows.map(row => row.word.length))
+
+          return (
+            <Box flexDirection="column" marginTop={i === 0 ? 0 : 1}>
+              <Box>
+                {i === 0 ? <Text bold color="claude">aside  </Text> : null}
+                <Text bold>{section.title}</Text>
+              </Box>
+              {section.rows.map((row, n) => (
+                <Box marginTop={n === 0 ? 1 : 0}>
+                  <Box width={5} flexShrink={0}>
+                    <Text dimColor>{row.label.padStart(3)}</Text>
+                  </Box>
+                  <Box width={width + 2} flexShrink={0}>
+                    <Text color={COLOURS[row.word] ?? 'text'}>{row.word}</Text>
+                  </Box>
+                  <Box flexDirection="column" flexShrink={1}>
+                    {row.lines.map(line => (
+                      <Text dimColor={row.word === 'done'}>{line}</Text>
+                    ))}
+                    {row.about.map(about => (
+                      <Text dimColor>{`\u21b3 ${about}`}</Text>
+                    ))}
+                  </Box>
+                </Box>
+              ))}
+            </Box>
+          )
+        })}
+      </Box>
+    )
+  })
+
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const now = await read($, band)
     const waiting = now.ideas + now.comments + now.tags
@@ -1128,7 +1187,7 @@ export const register: Register = (on, options) => {
 
     return (
       <Box>
-        <Text dimColor>queue: {parts.join(', ')} · </Text>
+        <Text dimColor>aside: {parts.join(', ')} · </Text>
         <Button key="queue" label={action} onPress={() => void press()} />
       </Box>
     )

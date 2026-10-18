@@ -1,25 +1,30 @@
-<svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" width="880" height="290" viewBox="0 0 880 290" role="img" aria-label="In Claude Code: /aside lists what waits, 1 idea and 1 comment, in columns: number, kind, text, and under a comment its file, line and quote. /aside plan has Claude turn it into steps; /aside run runs them, step 1 of 3 first; /aside pop 2 puts entry 2 in the prompt box, ready to send.">
+<svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" width="880" height="309" viewBox="0 0 880 309" role="img" aria-label="In Claude Code: /aside draws what waits in a frame, 1 idea and 1 comment, in columns: number, kind in its colour, text, and under a comment its file, line and quote. /aside plan has Claude turn it into steps; /aside run runs them, step 1 of 3 first; /aside pop 2 puts entry 2 in the prompt box, ready to send.">
   <style>
     .m { font: 400 13.5px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fill: #1f2328; }
     .d { fill: #59636e; }
     .f { fill: #818b98; }
     .a { fill: #9a6700; font-weight: 700; }
     .k { fill: #1a7f37; }
+    .b { font-weight: 700; }
+    .claude { fill: #c15f3c; font-weight: 700; }
+    .kidea { fill: #5769f7; }
+    .kquestion { fill: #966c1e; }
     .t { font: 600 12.5px -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #59636e; }
     .key { font: 700 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fill: #1f2328; }
   </style>
-  <rect x="0.5" y="0.5" width="879" height="289" rx="10" fill="#f6f8fa" stroke="#d1d9e0"/>
+  <rect x="0.5" y="0.5" width="879" height="308" rx="10" fill="#f6f8fa" stroke="#d1d9e0"/>
   <path d="M0.5 32 V10.5 a10 10 0 0 1 10 -10 H869.5 a10 10 0 0 1 10 10 V32 Z" fill="#eef1f4"/>
   <line x1="0.5" y1="32" x2="879.5" y2="32" stroke="#d1d9e0"/>
   <circle cx="18" cy="16.5" r="4.5" fill="#d1d9e0"/><circle cx="33" cy="16.5" r="4.5" fill="#d1d9e0"/><circle cx="48" cy="16.5" r="4.5" fill="#d1d9e0"/>
   <text x="440.0" y="21" class="t" text-anchor="middle">Claude Code</text>
   <text x="24" y="56" class="m"><tspan class="f">❯ </tspan><tspan class="a">/aside</tspan></text><text x="380" y="56" class="m d">see the list</text>
-  <text x="40" y="82" class="m f">⎿</text><text x="64" y="82" class="m">1 idea and 1 comment waiting</text>
-  <text x="80" y="121.0" class="m" text-anchor="end">1</text><text x="100" y="121.0" class="m">idea</text><text x="200" y="121.0" class="m">cache the parsed config</text>
-  <text x="80" y="147.0" class="m" text-anchor="end">2</text><text x="100" y="147.0" class="m">question</text><text x="200" y="147.0" class="m">where is this from</text>
-  <text x="200" y="173.0" class="m">docs/report.md:42  &quot;Revenue grew by 12% in Q3.&quot;</text>
-  <text x="24" y="212.0" class="m"><tspan class="f">❯ </tspan><tspan class="a">/aside plan</tspan></text><text x="380" y="212.0" class="m d">Claude turns it into steps</text>
-  <text x="24" y="238.0" class="m"><tspan class="f">❯ </tspan><tspan class="a">/aside run</tspan></text><text x="380" y="238.0" class="m d">step 1 of 3 running</text>
-  <text x="24" y="264.0" class="m"><tspan class="f">❯ </tspan><tspan class="a">/aside pop 2</tspan></text><text x="380" y="264.0" class="m d">entry 2, ready to send</text>
+  <text x="48" y="94" class="m claude">aside</text><text x="108" y="94" class="m b">1 idea and 1 comment waiting</text>
+  <text x="64" y="133.0" class="m d" text-anchor="end">1</text><text x="84" y="133.0" class="m kidea">idea</text><text x="168" y="133.0" class="m">cache the parsed config</text>
+  <text x="64" y="159.0" class="m d" text-anchor="end">2</text><text x="84" y="159.0" class="m kquestion">question</text><text x="168" y="159.0" class="m">where is this from</text>
+  <text x="168" y="185.0" class="m d">↳ docs/report.md:42 · &quot;Revenue grew by 12% in Q3.&quot;</text>
+  <rect x="32" y="68" width="824" height="131.0" rx="8" fill="none" stroke="#d1d9e0" stroke-width="1.5"/>
+  <text x="24" y="231.5" class="m"><tspan class="f">❯ </tspan><tspan class="a">/aside plan</tspan></text><text x="380" y="231.5" class="m d">Claude turns it into steps</text>
+  <text x="24" y="257.5" class="m"><tspan class="f">❯ </tspan><tspan class="a">/aside run</tspan></text><text x="380" y="257.5" class="m d">step 1 of 3 running</text>
+  <text x="24" y="283.5" class="m"><tspan class="f">❯ </tspan><tspan class="a">/aside pop 2</tspan></text><text x="380" y="283.5" class="m d">entry 2, ready to send</text>
 
 </svg>
