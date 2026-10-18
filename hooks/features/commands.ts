@@ -1,10 +1,10 @@
-import type { EngineInterface as Engine, Hook, MatchedHook } from 'claude-code'
+import type { CatchHandler, EngineInterface as Engine, Hook, MatchedHook } from 'claude-code'
 
 import { currentOutput, currentTask } from '../context'
 import type { Context } from '../context'
 import { inOrder, KINDS } from '../core/entries'
 import { MARKDOWN_PATH } from '../core/markdown'
-import { shortenText } from '../core/text'
+import { describeFailure, shortenText } from '../core/text'
 import { loadEntries, loadPlan, projectKeys, refreshBand } from '../io/store'
 import { addEntries } from './capture'
 import { handOverQueue, registerPlanTool, registerWaitTool, runChosen, runEntries, runPlan, stopPlan } from './plan'
@@ -207,6 +207,16 @@ export async function runAside(ctx: Context, $: Engine, e: AsideEvent) {
   const command = commandNamed(word.toLowerCase())
 
   return { text: command?.takes(args) ? await runCommand($, ctx, command.name, args) : await queueText($, ctx, e.args.trim()) }
+}
+
+// A /aside that failed says so in a sentence of its own, not in the engine's words; what it
+// had done stays, and /aside shows it.
+type AsideFailed = Parameters<CatchHandler<MatchedHook<'command.run', { readonly command: 'aside' }>>>
+
+export function asideFailed($: Engine, e: AsideFailed[1], next: AsideFailed[2]) {
+  const typed = e.args.trim() === '' ? '/aside' : `/aside ${shortenText(e.args.trim(), 40)}`
+
+  return { text: `${typed} did not finish (${describeFailure(next.error)}). /aside shows where the queue and the plan stand.` }
 }
 
 // The numbers Tab offers after a command: the entries as /aside shows them, or for /aside run

@@ -145,6 +145,43 @@ describe('the prompt box', () => {
   })
 })
 
+describe('when the store refuses an entry', () => {
+  test('a typed entry goes back into the empty prompt box, and stays there, and the transcript says why', async ($, on) => {
+    const { w, filled, logged, type, shown, idle } = world($, on, { isStoreFull: true })
+    on('prompt.read', () => ({ value: { text: filled.at(-1) ?? '', cursor: 0 } }) as never)
+
+    expect(await type('+ dark mode for the pane')).toEqual({ drop: 'queued' })
+    await idle()
+    expect(filled).toEqual(['+ dark mode for the pane'])
+    expect(logged.at(-1)).toBe('aside could not queue "+ dark mode for the pane" (the store is full); it is back in the prompt box.')
+    w.isStoreFull = false
+    expect(await shown()).toEqual(['The queue is empty.'])
+  })
+
+  test('with a new draft in the box, the transcript line gives the entry whole', async ($, on) => {
+    const { filled, logged, type } = world($, on, { isStoreFull: true })
+    on('prompt.read', () => ({ value: { text: 'a new draft', cursor: 11 } }) as never)
+
+    await type('+ a long idea\nwith a second line')
+    expect(filled.filter(text => text !== '')).toEqual([])
+    expect(logged.at(-1)).toBe('aside could not queue this entry (the store is full); here it is to queue again:\n+ a long idea\nwith a second line')
+  })
+
+  test('an entry taken out with /aside edit stays taken until it is stored again', async ($, on) => {
+    const { w, filled, type, aside, shown } = world($, on)
+    on('prompt.read', () => ({ value: { text: '', cursor: 0 } }) as never)
+    await type('+ one\n+ two')
+    await aside('edit 1')
+    expect(filled.at(-1)).toBe('+ one')
+
+    w.isStoreFull = true
+    await type('+ one, reworked')
+    w.isStoreFull = false
+    await type('+ one, reworked')
+    expect(await shown()).toEqual(['2 ideas waiting', '1 idea one, reworked', '2 idea two'])
+  })
+})
+
 describe('what an entry remembers', () => {
   test('an entry queued while Claude works names the task; one queued at an idle prompt does not', async ($, on) => {
     const { sent, type, aside, startTurn, endTurn, idle } = world($, on)

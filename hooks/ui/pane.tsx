@@ -1,6 +1,7 @@
 import type { EngineInterface as Engine, MatchedHook } from 'claude-code'
 
 import type { Context } from '../context'
+import { describeError } from '../core/text'
 import { handOverQueue } from '../features/plan'
 import { currentListing, LIST_PANE } from '../features/queue'
 import { readBand } from '../io/store'
@@ -17,9 +18,11 @@ export async function drawPane(ctx: Context, $: Engine, e: PaneRender[1], next: 
   const sections = await currentListing($, ctx)
   // Planning while a step runs would send a second prompt into the running plan.
   const canPlan = now.ideas + now.comments + now.tags > 0 && now.running === undefined
+  // A hand-over that fails is caught and told as a toast; the pane closes either way.
   const planFromPane = async () => {
-    await $.ui.close({ id: LIST_PANE })
-    $.ui.toast(await handOverQueue($, ctx, 'plan'))
+    const said = await handOverQueue($, ctx, 'plan').catch(error => `aside could not organize the queue (${describeError(error)}).`)
+    await $.ui.close({ id: LIST_PANE }).catch(() => undefined)
+    $.ui.toast(said)
   }
 
   const ui = $.ui.resolve(e)

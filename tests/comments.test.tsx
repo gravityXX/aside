@@ -64,6 +64,28 @@ describe('where a comment points', () => {
     expect(await queue('+? @old.md where')).toBe('queued ? notes/deep/old.md:8 "Costs stayed flat across all…" (2 waiting)')
   })
 
+  test('on Linux, a clipboard reader that runs but fails gives way to the next one, and is asked again next time', async ($, on) => {
+    const { w, runs, write, queue } = world($, on, { system: 'linux', readers: { 'wl-paste': 1, xclip: 0 }, files: REPORT_FILES, clip: 'Revenue grew by 12% in the third quarter' })
+    await write(REPORT_PATH)
+
+    expect(await queue('+? where does this come from')).toBe('queued ? docs/report.md:5 "Revenue grew by 12% in the th…" (1 waiting)')
+    w.clip = 'Costs stayed flat across all regions.'
+    expect(await queue('+? and this')).toBe('queued ? docs/report.md:8 "Costs stayed flat across all…" (2 waiting)')
+    // Which reader is asked shows nowhere the person sees, so the commands run are checked.
+    expect(runs.filter(name => !['git', 'grep'].includes(name))).toEqual(['pbpaste', 'wl-paste', 'xclip', 'pbpaste', 'wl-paste', 'xclip'])
+  })
+
+  test('on Linux, the first clipboard reader that works is kept for the session', async ($, on) => {
+    const { w, runs, write, queue } = world($, on, { system: 'linux', readers: { 'wl-paste': 0, xclip: 0 }, files: REPORT_FILES, clip: 'Revenue grew by 12% in the third quarter' })
+    await write(REPORT_PATH)
+
+    await queue('+? where does this come from')
+    w.clip = 'Costs stayed flat across all regions.'
+    expect(await queue('+? and this')).toBe('queued ? docs/report.md:8 "Costs stayed flat across all…" (2 waiting)')
+    // As above: the readers asked are seen only in the commands run.
+    expect(runs.filter(name => !['git', 'grep'].includes(name))).toEqual(['pbpaste', 'wl-paste', 'wl-paste'])
+  })
+
   test('with nothing copied, a comment points nowhere and says so', async ($, on) => {
     const { queue, shown } = world($, on)
 

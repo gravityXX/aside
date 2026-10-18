@@ -1,3 +1,5 @@
+import type { HookFailure } from 'claude-code'
+
 // Lower case, without diacritics, ł as l: how two spellings of a word are compared.
 const foldText = (s: string) =>
   s.normalize('NFD').replace(/\p{M}/gu, '').replace(/ł/g, 'l').replace(/Ł/g, 'L').toLowerCase()
@@ -28,3 +30,19 @@ export const formatDuration = (ms: number): string => {
 
   return minutes < 60 ? `${minutes} min` : `${Math.floor(minutes / 60)} h${minutes % 60 > 0 ? ` ${minutes % 60} min` : ''}`
 }
+
+// What went wrong, in a few words for the person: the first line of the error's message,
+// never a stack.
+export const describeError = (error: unknown): string => {
+  const message = error instanceof Error ? error.message : typeof error === 'string' ? error : String((error as { message?: unknown })?.message ?? error)
+
+  // The engine leads its own errors with the plugin and the call ("aside: $.store.set: ..."),
+  // which say nothing to the person.
+  const line = (message.split('\n')[0] ?? '').replace(/^[\w-]+: \$\.[\w.]+: /, '')
+
+  return shortenText(line, 120) || 'an unknown error'
+}
+
+// The same for a hook that failed, as its .catch handler hears it.
+export const describeFailure = (failure: HookFailure): string =>
+  failure.message === undefined && failure.kind === 'timeout' ? 'it took too long' : describeError(failure.message ?? 'an unknown error')

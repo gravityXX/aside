@@ -2,8 +2,8 @@ import type { Register } from 'claude-code'
 
 import { createContext } from './context'
 import { dropFailedEntry, emptyBoxAfterQueue, queueTyped, rememberMarkdownFile, rememberToolOutput } from './features/capture'
-import { completeAside, runAside, startSession } from './features/commands'
-import { onTurnEnd, onTurnStart, pausePlanFromTool, savePlanFromTool } from './features/plan'
+import { asideFailed, completeAside, runAside, startSession } from './features/commands'
+import { onTurnEnd, onTurnStart, pausePlanFromTool, planToolFailed, savePlanFromTool, turnEndFailed, turnStartFailed, waitToolFailed } from './features/plan'
 import { drawBand } from './ui/band'
 import { drawListingFrame, drawPlanTool, hidePlanToolResult } from './ui/output'
 import { drawPane } from './ui/pane'
@@ -23,13 +23,13 @@ export const register: Register = (on, options) => {
   on('tool.call', { tool: 'Edit' }, async ($, e, next) => rememberMarkdownFile($, e.file_path, await next(e)))
   // A RegExp: the laid types know only the tools connected when they were written, and the
   // plan tools' full names are known only once they are registered.
-  on('tool.call', { tool: /__plan$/ }, ($, e, next) => savePlanFromTool(ctx, $, e, next))
-  on('tool.call', { tool: /__wait$/ }, ($, e, next) => pausePlanFromTool(ctx, $, e, next))
+  on('tool.call', { tool: /__plan$/ }, ($, e, next) => savePlanFromTool(ctx, $, e, next)).catch(planToolFailed)
+  on('tool.call', { tool: /__wait$/ }, ($, e, next) => pausePlanFromTool(ctx, $, e, next)).catch(waitToolFailed)
 
-  on('turn.start', ($, e, next) => onTurnStart(ctx, $, e, next))
-  on('turn.complete', ($, e, next) => onTurnEnd(ctx, $, e, next))
+  on('turn.start', ($, e, next) => onTurnStart(ctx, $, e, next)).catch(turnStartFailed)
+  on('turn.complete', ($, e, next) => onTurnEnd(ctx, $, e, next)).catch(turnEndFailed)
 
-  on('command.run', { command: 'aside' }, ($, e) => runAside(ctx, $, e))
+  on('command.run', { command: 'aside' }, ($, e) => runAside(ctx, $, e)).catch(asideFailed)
 
   on('ui.render', { component: 'AbovePrompt' }, ($, e, next) => drawBand(ctx, $, e, next))
   // LIST_PANE in ui/pane.tsx, written out so the engine's scan of this file reads it.

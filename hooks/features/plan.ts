@@ -1,4 +1,4 @@
-import type { Args, EngineInterface as Engine, Hook, MatchedHook } from 'claude-code'
+import type { Args, CatchHandler, EngineInterface as Engine, Hook, MatchedHook } from 'claude-code'
 
 import type { Entry, Plan, Step } from '../../types'
 import type { Context } from '../context'
@@ -6,7 +6,7 @@ import { inOrder, KINDS } from '../core/entries'
 import { describeCount, formatPlace, leftOutSection, listingText, planSection } from '../core/listing'
 import { entryPrompt, isOwnPrompt, isPlanningPrompt, PLAN_SAVED_NOTE, planningPrompt, readStepResult, sendPrompt, STEP_MARKER, stepPrompt } from '../core/prompts'
 import type { StepMode } from '../core/prompts'
-import { formatCount, formatDuration, shortenText } from '../core/text'
+import { describeError, describeFailure, formatCount, formatDuration, shortenText } from '../core/text'
 import {
   bringBackTake,
   forgetAnsweredTake,
@@ -24,18 +24,23 @@ import { tagsInFiles } from './queue'
 
 // Submits the prompt `compose` gives as the person's own, or nothing when it gives none. It
 // goes out from a timer, since neither a command's hook nor a turn's end may submit one while
-// it holds the turn; `onFail` hears why when a hook beneath drops it or the engine refuses it.
+// it holds the turn; `onFail` hears why, once, when a hook beneath drops it, the engine
+// refuses it or composing it fails. Nothing here is left to throw unheard in the timer.
 function submitLater($: Engine, compose: () => Promise<string | undefined>, onFail: (why: string) => Promise<void>) {
   $.clock.after(50, async () => {
-    const prompt = await compose()
-    if (prompt === undefined) {
-      return
-    }
+    let why: string | undefined
     try {
+      const prompt = await compose()
+      if (prompt === undefined) {
+        return
+      }
       const sent = await $.prompt.submit({ text: prompt, asUser: true })
-      if ('drop' in sent && sent.drop !== undefined) await onFail(sent.drop)
+      if ('drop' in sent && sent.drop !== undefined) why = sent.drop
     } catch (error) {
-      await onFail(String(error))
+      why = describeError(error)
+    }
+    if (why !== undefined) {
+      await onFail(why).catch(error => $.ui.toast(`aside could not send its prompt (${why}), nor set things back: ${describeError(error)}`))
     }
   })
 }
@@ -394,9 +399,11 @@ export async function savePlanFromTool(ctx: Context, $: Engine, e: PlanToolCall[
   // Claude; a plan run to its end makes way for the new one.
   const done = old.steps.some(step => !step.isDone) ? old.steps.filter(step => step.isDone) : []
   const plan: Plan = { steps: [...done, ...steps] }
-  await savePlan($, keys.plan, plan)
+  // The items left out go back before the plan is saved, so a plan is never saved with items
+  // still missing; a call made again after a failure gives back none twice.
   const left = unclear.map(({ item, question }) => ({ entry: items[item - 1]!, question }))
   await giveBackItems($, keys, left.map(one => one.entry))
+  await savePlan($, keys.plan, plan)
   if (planning) planning.isSaved = true
   await refreshBand($, left.some(one => one.entry.isTag) ? (await tagsInFiles($, true)).length : undefined)
   const sections = [planSection(plan)!, ...(left.length > 0 ? [leftOutSection(left, keys.root)] : [])]
@@ -550,6 +557,35 @@ export async function onTurnEnd(ctx: Context, $: Engine, e: TurnComplete[1], nex
   } else {
     await handOverAfterAnswer($, ctx, plan, e.reason)
   }
+
+  return done
+}
+
+// What the person hears when one of the plan's hooks fails, in place of the engine's own
+// words: the reason, and what still stands.
+type PlanToolFailed = Parameters<CatchHandler<MatchedHook<'tool.call', { readonly tool: RegExp }>>>
+
+export function planToolFailed($: Engine, e: PlanToolFailed[1], next: PlanToolFailed[2]) {
+  return next.called ? next(e) : { deny: `aside could not save the plan (${describeFailure(next.error)}); the plan was not saved, so call the tool again` }
+}
+
+export function waitToolFailed($: Engine, e: PlanToolFailed[1], next: PlanToolFailed[2]) {
+  return next.called ? next(e) : { deny: `aside could not pause the plan (${describeFailure(next.error)}); call the tool again` }
+}
+
+type TurnStartFailed = Parameters<CatchHandler<Hook<'turn.start'>>>
+
+export function turnStartFailed($: Engine, e: TurnStartFailed[1], next: TurnStartFailed[2]) {
+  $.ui.toast(`aside could not note the start of this turn (${describeFailure(next.error)}); a running plan may not go on by itself`)
+
+  return next(e)
+}
+
+type TurnEndFailed = Parameters<CatchHandler<Hook<'turn.complete'>>>
+
+export async function turnEndFailed($: Engine, e: TurnEndFailed[1], next: TurnEndFailed[2]) {
+  const done = await next(e)
+  $.ui.toast(`aside could not finish its work at the end of this turn (${describeFailure(next.error)}); /aside shows where the queue and the plan stand`)
 
   return done
 }

@@ -114,6 +114,92 @@ describe('handing the queue over', () => {
     expect(await shown()).toEqual(['1 idea waiting', '1 idea a'])
   })
 
+  test('a hand-over the store refuses leaves the queue as it was and says why', async ($, on) => {
+    const { w, sent, type, aside, shown, idle } = world($, on)
+    await type('+ a\n+ b')
+    w.isStoreFull = true
+
+    expect(await aside('plan')).toBe('/aside plan did not finish (the store is full). /aside shows where the queue and the plan stand.')
+    await idle()
+    w.isStoreFull = false
+    expect(sent).toEqual([])
+    expect(await shown()).toEqual(['2 ideas waiting', '1 idea a', '2 idea b'])
+    expect(await aside('undo')).toBe('Nothing to bring back.')
+  })
+
+  test('a plan the store refuses is refused to Claude with the reason, and the items stay with the take', async ($, on) => {
+    const { w, sent, type, aside, savePlan, startTurn, endTurn, idle } = world($, on)
+    await type('+ a\n+ b')
+    await aside('plan')
+    await idle()
+    await startTurn(sent.at(-1)!, 'p1')
+    w.isStoreFull = true
+
+    expect((await savePlan([{ title: 'A', prompt: 'Do a.' }], [{ item: 2, question: 'What is b?' }])).deny).toBe(
+      'aside could not save the plan (the store is full); the plan was not saved, so call the tool again',
+    )
+    w.isStoreFull = false
+    const saved = await savePlan([{ title: 'A', prompt: 'Do a.' }], [{ item: 2, question: 'What is b?' }])
+    expect(saved.result).toContain('Not in the plan, back in the queue')
+    await endTurn('p1', 'aborted')
+    expect(await aside('undo')).toBe('Brought back 1 entry, 2 waiting.')
+  })
+
+  test('a hand-over refused at its first write keeps what undo had, a clear included', async ($, on) => {
+    const { w, type, aside, shown } = world($, on)
+    await type('+ a')
+    await aside('clear')
+    await type('+ b')
+    w.refuseWrite = 1
+
+    expect(await aside('plan')).toBe('/aside plan did not finish (the store is full). /aside shows where the queue and the plan stand.')
+    expect(await aside('undo')).toBe('Brought back 1 entry, 2 waiting.')
+    expect(await shown()).toEqual(['2 ideas waiting', '1 idea a', '2 idea b'])
+  })
+
+  test('a hand-over refused half-way leaves the queue as it was, with nothing for undo to bring back twice', async ($, on) => {
+    const { w, sent, type, aside, shown, idle } = world($, on)
+    await type('+ a\n+ b')
+    // The take's two writes go through; the third, marking the tags handed over, is refused.
+    w.refuseWrite = 3
+
+    expect(await aside('plan')).toBe('/aside plan did not finish (the store is full). /aside shows where the queue and the plan stand.')
+    await idle()
+    expect(sent).toEqual([])
+    expect(await shown()).toEqual(['2 ideas waiting', '1 idea a', '2 idea b'])
+    expect(await aside('undo')).toBe('Nothing to bring back.')
+  })
+
+  test('/aside run N refused half-way leaves the queue whole, with nothing for undo to bring back twice', async ($, on) => {
+    const { w, sent, type, aside, shown, idle } = world($, on)
+    await type('+ a\n+ b')
+    // The take's two writes go through; the third, the queue without entry 1, is refused.
+    w.refuseWrite = 3
+
+    expect(await aside('run 1')).toBe('/aside run 1 did not finish (the store is full). /aside shows where the queue and the plan stand.')
+    await idle()
+    expect(sent).toEqual([])
+    expect(await shown()).toEqual(['2 ideas waiting', '1 idea a', '2 idea b'])
+    expect(await aside('undo')).toBe('Nothing to bring back.')
+  })
+
+  test('a plan saved again after a refusal half-way gives each item left out back once', async ($, on) => {
+    const { w, sent, type, aside, shown, savePlan, startTurn, endTurn, idle } = world($, on)
+    await type('+ a\n+ b')
+    await aside('plan')
+    await idle()
+    await startTurn(sent.at(-1)!, 'p1')
+    // The item goes back to the queue; the next write, unmarking nothing, then the take, is refused.
+    w.refuseWrite = 3
+    const steps = [{ title: 'A', prompt: 'Do a.' }]
+    const unclear = [{ item: 2, question: 'What is b?' }]
+
+    expect((await savePlan(steps, unclear)).deny).toContain('the plan was not saved, so call the tool again')
+    expect((await savePlan(steps, unclear)).result).toContain('Not in the plan, back in the queue')
+    await endTurn('p1')
+    expect((await shown()).slice(0, 2)).toEqual(['1 idea waiting', '1 idea b'])
+  })
+
   test('a tag in a file is handed over once, and then shown as handed over', async ($, on) => {
     const { sent, write, aside, shown, idle } = world($, on, { files: { [REPORT_PATH]: REPORT } })
     await write(REPORT_PATH)
@@ -484,6 +570,46 @@ describe('running the plan', () => {
     await answer('s3')
     expect(sent).toHaveLength(2)
     expect((await shown())[1]).toBe('Plan: 1 of 3 steps to do (/aside run)')
+  })
+
+  test('when the store refuses the pause, the wait tool tells Claude to call it again', async ($, on) => {
+    const { w, sent, aside, savePlan, startTurn, wait, idle } = world($, on)
+    await savePlan(STEPS)
+    await aside('run')
+    await idle()
+    await startTurn(sent[0]!, 's1')
+    w.isStoreFull = true
+
+    expect((await wait('x')).deny).toBe('aside could not pause the plan (the store is full); call the tool again')
+  })
+
+  test('when the store fails at the start or the end of a step, aside says so in a toast', async ($, on) => {
+    const { w, sent, toasts, aside, savePlan, startTurn, endTurn, idle } = world($, on)
+    await savePlan(STEPS)
+    await aside('run')
+    await idle()
+    w.isStoreFull = true
+
+    await startTurn(sent[0]!, 's1')
+    expect(toasts.at(-1)).toBe('aside could not note the start of this turn (the store is full); a running plan may not go on by itself')
+    w.isStoreFull = false
+    await startTurn(sent[0]!, 's1')
+    w.isStoreFull = true
+    await endTurn('s1')
+    expect(toasts.at(-1)).toBe(
+      'aside could not finish its work at the end of this turn (the store is full); /aside shows where the queue and the plan stand',
+    )
+  })
+
+  test('a dropped hand-over the store will not take back is told once, with both reasons', async ($, on) => {
+    const { w, toasts, type, aside, idle } = world($, on)
+    await type('+ a')
+    w.isDropping = true
+    await aside('plan')
+    w.isStoreFull = true
+    await idle()
+
+    expect(toasts).toEqual(['aside could not send its prompt (blocked by a hook), nor set things back: the store is full'])
   })
 
   test('the wait tool is refused outside a step of the plan', async ($, on) => {

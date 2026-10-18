@@ -67,6 +67,15 @@ describe('the band above the prompt', () => {
     expect(sent.at(-1)).toContain('Do two.')
   })
 
+  test('when the store refuses the run, the band\'s button says why in a toast', async ($, on) => {
+    const { w, toasts, savePlan, pressBand } = world($, on)
+    await savePlan(STEPS)
+    w.isStoreFull = true
+
+    await pressBand('action')
+    expect(toasts.at(-1)).toBe('aside could not run the plan (the store is full).')
+  })
+
   test('its list button opens the list pane, and closes it on a second press', async ($, on) => {
     const { panes, type, pressBand } = world($, on)
     await type('+ x')
@@ -104,6 +113,21 @@ describe('the list pane', () => {
     await idle()
     expect(panes).toEqual([])
     expect(sent.at(-1)).toContain('Organize all of it, and only organize it')
+  })
+
+  test('when the store refuses the hand-over, the plan button says why and the pane closes after', async ($, on) => {
+    const { w, sent, toasts, panes, type, pressBand, pane, idle } = world($, on)
+    await type('+ x')
+    await pressBand()
+    w.isStoreFull = true
+
+    const ui = await pane()
+    await ui.press({ key: 'plan' })
+    await ui.unmount()
+    await idle()
+    expect(toasts.at(-1)).toBe('aside could not organize the queue (the store is full).')
+    expect(panes).toEqual([])
+    expect(sent).toEqual([])
   })
 
   test('while a step runs, the pane lists the queue but offers no plan', async ($, on) => {
