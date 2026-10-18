@@ -2,7 +2,8 @@
 
 ## Unreleased
 
-- Nothing changes in use. The tests are split by what they check (typing, comments, commands, the plan, the band and pane, matching in files) and check what the person sees, not how the plugin does it.
+- `/aside undo` brings back the tags in files that a plan or run took, so the next `/aside plan` takes them again. Each plan, run or clear replaces what undo brings back, and a hand-over that failed leaves nothing to bring back twice.
+- The tests are split by what they check (typing, comments, commands, the plan, the band and pane, matching in files) and check what the person sees, not how the plugin does it.
 - The code under `hooks/` is split into layers by what each part does, with `register.tsx` as the list of the plugin's hooks. `/aside help` lists one command per line, and `/aside constructor ...` is queued as text like any other word that is no command, where it used to show the help or fail; nothing else changes in use.
 
 ## 0.10.0 - 2026-10-18

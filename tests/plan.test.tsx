@@ -117,6 +117,58 @@ describe('handing the queue over', () => {
     ])
   })
 
+  test('undo brings back the tags a hand-over took, so the next plan takes them again', async ($, on) => {
+    const { write, type, aside, shown, idle } = world($, on, { files: { [REPORT_PATH]: REPORT } })
+    await write(REPORT_PATH)
+    await type('+ a')
+    await aside('plan')
+    await idle()
+
+    expect(await aside('undo')).toBe('Brought back 1 entry and 1 tag, 2 waiting.')
+    expect(await shown()).toEqual([
+      '1 idea waiting',
+      '1 idea a',
+      'Tags in files',
+      '· question is this the same for Poland',
+      '↳ docs/report.md:9 · "Costs stayed flat across all regions."',
+    ])
+    expect(await aside('plan')).toBe('Organizing 1 idea and 1 comment.')
+  })
+
+  test('with only tags handed over, undo brings the tags back', async ($, on) => {
+    const { write, aside, idle } = world($, on, { files: { [REPORT_PATH]: REPORT } })
+    await write(REPORT_PATH)
+    await aside('plan')
+    await idle()
+
+    expect(await aside('undo')).toBe('Brought back 1 tag, 1 waiting.')
+    expect(await aside('plan')).toBe('Organizing 1 comment.')
+  })
+
+  test('each take replaces what undo brings back: a clear after a plan brings back only what it cleared', async ($, on) => {
+    const { write, type, aside, idle } = world($, on, { files: { [REPORT_PATH]: REPORT } })
+    await write(REPORT_PATH)
+    await type('+ a')
+    await aside('plan')
+    await idle()
+    await type('+ b')
+    await aside('clear')
+
+    expect(await aside('undo')).toBe('Brought back 1 entry, 1 waiting.')
+    expect(await aside('undo')).toBe('Nothing to bring back.')
+  })
+
+  test('a hand-over that failed leaves nothing for undo to bring back a second time', async ($, on) => {
+    const { w, type, aside, shown, idle } = world($, on)
+    await type('+ a')
+    w.isDropping = true
+    await aside('plan')
+    await idle()
+
+    expect(await aside('undo')).toBe('Nothing to bring back.')
+    expect(await shown()).toEqual(['1 idea waiting', '1 idea a'])
+  })
+
   test('with no plan, /aside run sends each entry as a step of its own, one after another', async ($, on) => {
     const { sent, write, type, aside, shown, answer, idle } = world($, on, { files: { [REPORT_PATH]: REPORT } })
     await write(REPORT_PATH)

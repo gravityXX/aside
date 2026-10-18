@@ -12,13 +12,16 @@ import {
   loadEntries,
   loadHanded,
   loadPlan,
+  loadTake,
   projectKeys,
+  readTrackedFiles,
   refreshBand,
-  trackFile,
   saveEditing,
   saveEntries,
+  saveTake,
   tagId,
-  readTrackedFiles,
+  trackFile,
+  unhandTags,
 } from '../io/store'
 import type { Keys } from '../io/store'
 
@@ -152,7 +155,7 @@ export async function clearQueue($: Engine): Promise<string> {
   if (stored.length === 0) {
     return 'The queue is already empty.'
   }
-  await saveEntries($, keys.taken, stored)
+  await saveTake($, keys, stored, [])
   await saveEntries($, keys.queue, [])
   await refreshBand($)
 
@@ -167,15 +170,17 @@ export async function restoreTaken($: Engine): Promise<string> {
   if (running && running.sessionId === (await $.session.id())) {
     return `Step ${running.step + 1} of the plan is running; /aside stop first, so nothing is done twice.`
   }
-  const back = await loadEntries($, keys.taken)
-  if (back.length === 0) {
+  const { entries, tagIds } = await loadTake($, keys)
+  if (entries.length === 0 && tagIds.length === 0) {
     return 'Nothing to bring back.'
   }
-  await saveEntries($, keys.queue, [...back, ...(await loadEntries($, keys.queue))])
-  await saveEntries($, keys.taken, [])
-  const now = await refreshBand($)
+  await saveEntries($, keys.queue, [...entries, ...(await loadEntries($, keys.queue))])
+  await unhandTags($, keys, tagIds)
+  await saveTake($, keys, [], [])
+  const now = await refreshBand($, (await tagsInFiles($, true)).length)
+  const back = [entries.length > 0 ? formatCount(entries.length, 'entry') : '', tagIds.length > 0 ? formatCount(tagIds.length, 'tag') : '']
 
-  return `Brought back ${back.length} entries, ${now.ideas + now.comments} waiting.`
+  return `Brought back ${back.filter(Boolean).join(' and ')}, ${now.ideas + now.comments + now.tags} waiting.`
 }
 
 // Adds a file Claude did not write in this session to the files whose tags /aside reads.
