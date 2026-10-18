@@ -158,6 +158,53 @@ describe('handing the queue over', () => {
     expect(await aside('undo')).toBe('Nothing to bring back.')
   })
 
+  test('once Claude has answered the planning prompt, undo has nothing to bring back', async ($, on) => {
+    const { sent, type, aside, startTurn, endTurn, idle } = world($, on)
+    await type('+ a')
+    await aside('plan')
+    await idle()
+    await startTurn(sent.at(-1)!, 'p1')
+    await endTurn('p1')
+
+    expect(await aside('undo')).toBe('Nothing to bring back.')
+  })
+
+  test('a planning turn that was interrupted leaves the hand-over for undo', async ($, on) => {
+    const { sent, type, aside, startTurn, endTurn, idle } = world($, on)
+    await type('+ a')
+    await aside('plan')
+    await idle()
+    await startTurn(sent.at(-1)!, 'p1')
+    await endTurn('p1', 'aborted')
+
+    expect(await aside('undo')).toBe('Brought back 1 entry, 1 waiting.')
+  })
+
+  test('once the entries a run sent as steps are done, undo has nothing to bring back', async ($, on) => {
+    const { type, aside, answer, idle } = world($, on)
+    await type('+ a\n+ b')
+    await aside('run')
+    await idle()
+    await answer('e1')
+    await answer('e2')
+
+    expect(await aside('undo')).toBe('Nothing to bring back.')
+  })
+
+  test('a clear stays undoable while the steps of a plan run', async ($, on) => {
+    const { type, aside, savePlan, answer, idle } = world($, on)
+    await savePlan(STEPS)
+    await type('+ a')
+    await aside('clear')
+    await aside('run')
+    await idle()
+    await answer('s1')
+    await answer('s2')
+    await answer('s3')
+
+    expect(await aside('undo')).toBe('Brought back 1 entry, 1 waiting.')
+  })
+
   test('a hand-over that failed leaves nothing for undo to bring back a second time', async ($, on) => {
     const { w, type, aside, shown, idle } = world($, on)
     await type('+ a')

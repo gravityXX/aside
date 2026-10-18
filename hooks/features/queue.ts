@@ -9,6 +9,7 @@ import { popPrompt } from '../core/prompts'
 import { formatCount, relativePath, shortenText } from '../core/text'
 import { resolveFile, tryReadFile } from '../io/host'
 import {
+  forgetTake,
   loadEntries,
   loadHanded,
   loadPlan,
@@ -155,7 +156,7 @@ export async function clearQueue($: Engine): Promise<string> {
   if (stored.length === 0) {
     return 'The queue is already empty.'
   }
-  await saveTake($, keys, stored, [])
+  await saveTake($, keys, { entries: stored, tagIds: [], by: 'clear' })
   await saveEntries($, keys.queue, [])
   await refreshBand($)
 
@@ -176,7 +177,7 @@ export async function restoreTaken($: Engine): Promise<string> {
   }
   await saveEntries($, keys.queue, [...entries, ...(await loadEntries($, keys.queue))])
   await unhandTags($, keys, tagIds)
-  await saveTake($, keys, [], [])
+  await forgetTake($, keys)
   const now = await refreshBand($, (await tagsInFiles($, true)).length)
   const back = [entries.length > 0 ? formatCount(entries.length, 'entry') : '', tagIds.length > 0 ? formatCount(tagIds.length, 'tag') : '']
 
