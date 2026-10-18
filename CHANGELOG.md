@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.12.0 - 2026-10-18
 
 - Each step of a plan tells Claude where it stands: the titles of the steps done and still to do, and that the next one is sent by itself. A step that needs your answer pauses the plan with the plugin's new `wait` tool: the step finishes, the next one waits, and `/aside run` goes on from there.
 
