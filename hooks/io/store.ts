@@ -27,7 +27,7 @@ export function trackFile($: Engine, path: string) {
 }
 
 // Everything belongs to the project: each root keeps its own queue and plan.
-export type Keys = { root: string; queue: string; taken: string; plan: string; handed: string; editing: string }
+export type Keys = { root: string; queue: string; taken: string; takenTags: string; plan: string; handed: string; editing: string }
 
 export async function projectKeys($: Engine): Promise<Keys> {
   const root = await $.session.root()
@@ -36,6 +36,7 @@ export async function projectKeys($: Engine): Promise<Keys> {
     root,
     queue: `queue:${root}`,
     taken: `taken:${root}`,
+    takenTags: `takenTags:${root}`,
     plan: `plan:${root}`,
     handed: `handed:${root}`,
     editing: `editing:${root}`,
@@ -94,12 +95,37 @@ export async function takeEditing($: Engine, key: string): Promise<Editing | und
   return editing
 }
 
-// Takes the queue (`stored`, oldest first) and the new tags out to hand them over: the
-// entries go where /aside undo finds them, the tags are marked so they are not handed over
-// again. `giveBack` undoes both when the hand-over fails.
+// What /aside undo brings back: the entries and the tags the last plan, run or clear took.
+// Each take replaces the one before it.
+export type Take = { entries: Entry[]; tagIds: string[] }
+
+export async function saveTake($: Engine, keys: Keys, entries: readonly Entry[], tagIds: readonly string[]) {
+  await saveEntries($, keys.taken, entries)
+  if (tagIds.length === 0) {
+    await $.store.delete(keys.takenTags)
+  } else {
+    await $.store.set(keys.takenTags, tagIds)
+  }
+}
+
+export async function loadTake($: Engine, keys: Keys): Promise<Take> {
+  const tagIds = ((await $.store.get(keys.takenTags)) as string[] | undefined) ?? []
+
+  return { entries: await loadEntries($, keys.taken), tagIds }
+}
+
+// Unmarks tags handed over, so the next hand-over takes them again.
+export async function unhandTags($: Engine, keys: Keys, tagIds: readonly string[]) {
+  const handed = await loadHanded($, keys.handed)
+  await $.store.set(keys.handed, handed.filter(id => !tagIds.includes(id)))
+}
+
+// Takes the queue (`stored`, oldest first) and the new tags out to hand them over: both go
+// where /aside undo finds them, and the tags are marked so they are not handed over again.
+// `giveBack` undoes all of it when the hand-over fails.
 export async function takeForHandOver($: Engine, keys: Keys, stored: readonly Entry[], tags: readonly Entry[]) {
+  await saveTake($, keys, stored, tags.map(tagId))
   if (stored.length > 0) {
-    await saveEntries($, keys.taken, stored)
     await saveEntries($, keys.queue, [])
   }
   const before = await loadHanded($, keys.handed)
@@ -109,6 +135,7 @@ export async function takeForHandOver($: Engine, keys: Keys, stored: readonly En
     giveBack: async () => {
       await saveEntries($, keys.queue, [...stored, ...(await loadEntries($, keys.queue))])
       await $.store.set(keys.handed, before)
+      await saveTake($, keys, [], [])
     },
   }
 }
