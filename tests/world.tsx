@@ -1,0 +1,249 @@
+import { expect, mock } from 'claude-code/testing'
+import type { Engine } from 'claude-code/testing'
+import type { On } from 'claude-code'
+
+export const REPORT = [
+  '# Report', //                                      1
+  '', //                                              2
+  '## Results', //                                    3
+  '', //                                              4
+  'Revenue **grew by 12%** in the third quarter, mostly', // 5
+  'thanks to [the new pricing](https://example.com/p).', //  6
+  '', //                                              7
+  '1. Costs stayed flat across all regions.', //      8
+  '<!-- ? is this the same for Poland -->', //        9
+  '', //                                              10
+  '## Źródła danych', //                              11
+  '```', //                                           12
+  '## not a heading', //                              13
+  '```', //                                           14
+].join('\n')
+
+export const REPORT_PATH = '/proj/docs/report.md'
+
+export const STEPS = [
+  { title: 'One', prompt: 'Do one.' },
+  { title: 'Two', prompt: 'Do two.' },
+  { title: 'Three', prompt: 'Do three.' },
+]
+
+// The machine under the plugin. Unless a test says otherwise: WSL with GNU grep, an empty
+// clipboard, no files and the branch main.
+export type Machine = {
+  files: Record<string, string>
+  clip: string
+  // What grep prints for any search.
+  grep: string
+  branch: string
+  system: 'wsl' | 'mac'
+  // The text selected in a transcript row.
+  selection?: string
+  // The next prompt the plugin submits is dropped beneath it, as a settings hook would.
+  isDropping?: boolean
+  // The small model's reply to each note it is asked to tidy; a note with none fails.
+  tidy?: Record<string, string>
+  // Runs while the small model thinks.
+  meanwhile?: () => Promise<unknown>
+}
+
+const SCREEN = { isFullscreen: true, columns: 120 }
+const COMPOSER = { kind: 'composer' } as const
+const VIEWPORT = { columns: 120, rows: 30 }
+
+const ran = (stdout: string, exitCode = 0) => ({
+  value: { exitCode, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false },
+})
+
+// A project at /proj with the plugin loaded, and what reaches the person and Claude:
+// `sent` the prompts Claude got, `toasts` the notices in the corner, `logged` the lines in
+// the transcript, `filled` what went into the prompt box, `asked` the notes the small model
+// was asked to tidy, `panes` the panes open.
+export const world = ($: Engine, on: On, given: Partial<Machine> = {}) => {
+  const w: Machine = { files: {}, clip: '', grep: '', branch: 'main', system: 'wsl', ...given }
+  const sent: string[] = []
+  const toasts: string[] = []
+  const logged: string[] = []
+  const filled: string[] = []
+  const asked: string[] = []
+  const panes: string[] = []
+
+  mock.store(on)
+  const clock = mock.clock(on, { now: 1000 })
+  mock.env(on, w.system === 'mac' ? { HOME: '/Users/me' } : { WSL_DISTRO_NAME: 'Ubuntu' })
+  on('session.root', () => ({ value: '/proj' }))
+  on('session.id', () => ({ value: 'session-1' }))
+  on('command.register', ($e, e) => ({ value: { command: e.name } }))
+  on('tool.register', ($e, e) => ({ value: { tool: `mcp__aside__${e.name}` } }))
+
+  on('ui.selection', () => ({ value: w.selection ? { text: w.selection, requestId: 'row-1' } : undefined }) as never)
+  on('ui.toast', ($e, e) => {
+    toasts.push(e.text)
+    return { value: undefined }
+  })
+  on('ui.log', ($e, e) => {
+    logged.push(e.text)
+    return { value: undefined } as never
+  })
+  on('ui.open', ($e, e) => {
+    if (!panes.includes(e.id)) panes.push(e.id)
+    return { value: { isPlaced: true } }
+  })
+  on('ui.close', ($e, e) => {
+    if (panes.includes(e.id)) panes.splice(panes.indexOf(e.id), 1)
+    return { value: undefined }
+  })
+  on('ui.panes', () => ({ value: panes.map(id => ({ id, title: id, isShown: true, isFocused: false, isPlaced: true })) }) as never)
+
+  on('prompt.submit', ($e, e) => {
+    if (w.isDropping && e.origin.kind === 'plugin') {
+      w.isDropping = false
+      return { drop: 'blocked by a hook' }
+    }
+    sent.push(e.text)
+    return { text: e.text }
+  })
+  on('prompt.fill', ($e, e) => {
+    filled.push(e.text)
+    return { isFilled: true } as never
+  })
+  on('model.complete', async ($e, e) => {
+    asked.push(e.prompt)
+    await w.meanwhile?.()
+    const reply = w.tidy?.[/<note>\n([\s\S]*)\n<\/note>/.exec(e.prompt)?.[1] ?? '']
+    return {
+      value: (reply === undefined
+        ? { isAnswered: false, reason: 'api-error', status: null, kind: 'unknown' }
+        : { isAnswered: true, text: reply, usage: { input_tokens: 1, output_tokens: 1 } }) as never,
+    }
+  })
+
+  on('fs.read', ($e, e) => (e.path in w.files ? { value: w.files[e.path]! } : { deny: 'ENOENT' }))
+  on('fs.exists', ($e, e) => ({ value: e.path in w.files }))
+  on('fs.list', ($e, e) => {
+    const dir = e.path.replace(/\/$/, '')
+    const names = new Map<string, 'file' | 'dir'>()
+    for (const path of Object.keys(w.files)) {
+      if (!path.startsWith(`${dir}/`)) continue
+      const [head, ...rest] = path.slice(dir.length + 1).split('/')
+      names.set(head!, rest.length > 0 ? 'dir' : 'file')
+    }
+    return { value: [...names].map(([name, kind]) => ({ name, kind, size: 100, mtimeMs: 0, isLink: false })) } as never
+  })
+  on('process.run', ($e, e) => {
+    const isMac = w.system === 'mac'
+    const missing = ran('', 127)
+    switch (e.argv[0]) {
+      case 'powershell.exe':
+        return isMac ? missing : ran(`${w.clip}\r\n`)
+      case 'pbpaste':
+        return isMac ? ran(w.clip) : missing
+      case 'git':
+        return ran(`${w.branch}\n`)
+      case 'grep':
+        // BSD grep has no -P and fails with 2.
+        return isMac ? ran('', 2) : ran(w.grep)
+      default:
+        return { deny: 'unknown command' }
+    }
+  })
+
+  on('tool.call', { tool: 'Write' }, () => ({ result: { type: 'create' } as never }))
+  on('turn.start', ($e, e) => ({ turnId: e.turnId }))
+  on('turn.complete', () => ({ text: '' }))
+
+  // Lets every timer the plugin set run: a prompt it submits, a step it starts.
+  const idle = async () => {
+    await clock.advance(100)
+    await clock.settle()
+  }
+
+  // Enter at the prompt, then the moment it takes to store what was queued.
+  const type = async (text: string, turnId?: string) => {
+    const result = await $.prompt.submit({ text, origin: COMPOSER, wait: false, ...(turnId ? { turnId } : {}) })
+    await clock.advance(2)
+    await clock.settle()
+    return result
+  }
+
+  // Enter on an entry: it must be queued, and the line it leaves in the transcript comes back.
+  const queue = async (text: string, turnId?: string) => {
+    expect(await type(text, turnId)).toEqual({ drop: 'queued' })
+    return logged.at(-1)
+  }
+
+  const aside = async (args = '') =>
+    (await $.command.run({ command: 'aside', args, origin: COMPOSER, presentation: SCREEN })).text ?? ''
+
+  // /aside as a reader takes it in: each line trimmed, the columns one space apart.
+  const shown = async (args = '') =>
+    (await aside(args))
+      .split('\n')
+      .map(line => line.trim().replace(/ {2,}/g, ' '))
+      .filter(line => line !== '')
+
+  const write = (path: string, content = 'x') => $.tool.call({ tool: 'Write', file_path: path, content } as never)
+
+  const savePlan = (steps: unknown) => $.tool.call({ tool: 'mcp__aside__plan', steps } as never)
+
+  const startTurn = (text: string, turnId: string) => $.turn.start({ text, turnId })
+
+  const endTurn = (turnId: string, reason: 'answer' | 'aborted' = 'answer') =>
+    $.turn.complete({ turnId, reason, answer: '', durationMs: 1, isAborted: reason === 'aborted' } as never)
+
+  // A turn the plugin started with the last prompt it sent, run to its end.
+  const answer = async (turnId: string) => {
+    await startTurn(sent.at(-1)!, turnId)
+    await endTurn(turnId)
+    await idle()
+  }
+
+  const mount = (component: 'AbovePrompt' | 'Pane' | 'CommandOutput', props: unknown) =>
+    $.ui.mount({
+      plugin: 'aside',
+      surface: 'terminal',
+      component,
+      props: props as never,
+      ...(component === 'Pane' ? { requestId: 'aside' } : {}),
+      viewport: VIEWPORT,
+    })
+
+  const band = () => mount('AbovePrompt', { hasSurvey: false })
+
+  const pane = () => mount('Pane', { title: 'aside', isFocused: true, bodyColumns: 100, placement: 'inline' })
+
+  // The framed listing drawn from the text a command printed.
+  const output = (text: string, command = 'aside') => mount('CommandOutput', { command, args: '', text, isErrored: false })
+
+  const pressBand = async () => {
+    const ui = await band()
+    await ui.press({ key: 'queue' })
+    await ui.unmount()
+    await idle()
+  }
+
+  return {
+    w,
+    sent,
+    toasts,
+    logged,
+    filled,
+    asked,
+    panes,
+    clock,
+    idle,
+    type,
+    queue,
+    aside,
+    shown,
+    write,
+    savePlan,
+    startTurn,
+    endTurn,
+    answer,
+    mount,
+    band,
+    pane,
+    output,
+    pressBand,
+  }
+}
