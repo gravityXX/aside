@@ -104,7 +104,7 @@ def step1(c: dict) -> str:
     rx = W - pw
     marks = [("+", "idea"), ("+?", "question"), ("+!", "change"), ("+-", "drop"), ("++", "dig deeper")]
     tile, space = 160, 20
-    legend_y = ph + 22
+    legend_y = ph + 36
     legend = "".join(
         f'  <rect x="{n * (tile + space) + 0.5}" y="{legend_y}" width="{tile - 1}" height="30" rx="15" fill="{c["panel"]}" stroke="{c["line"]}"/>\n'
         f'  <text x="{n * (tile + space) + tile / 2}" y="{legend_y + 20}" text-anchor="middle">'
@@ -132,7 +132,7 @@ def step1(c: dict) -> str:
         "Copy a sentence from a markdown preview with Ctrl+C, then type +? and a question in Claude Code: the comment is queued, "
         "pinned to docs/report.md line 42 with the copied sentence. The marks: + idea, +? question, +! change, +- drop, ++ dig deeper."
     )
-    height = legend_y + 31
+    height = legend_y + 31 + 16
     return f'''<svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" width="{W}" height="{height}" viewBox="0 0 {W} {height}" role="img" aria-label="{esc(label)}">
   <style>
     .m {{ font: 400 13.5px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fill: {c["fg"]}; }}
