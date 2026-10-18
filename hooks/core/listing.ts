@@ -71,17 +71,18 @@ export const leftOutSection = (left: readonly { entry: Entry; question: string }
   }),
 })
 
-// The plan while it has steps to do, null once every step is done.
+// The plan, with what each step done said under it; null with no plan. A plan run to its
+// end stays in the listing until the next one takes its place.
 export const planSection = (plan: Plan): ListingSection | null => {
-  const left = plan.steps.filter(step => !step.isDone).length
-  if (left === 0) {
+  if (plan.steps.length === 0) {
     return null
   }
+  const left = plan.steps.filter(step => !step.isDone).length
   const stateOf = (i: number) => (plan.active?.step === i ? 'running' : plan.steps[i]!.isDone ? 'done' : 'to do')
 
   return {
-    title: `Plan: ${left} of ${formatCount(plan.steps.length, 'step')} to do (/aside run)`,
-    rows: plan.steps.map((step, i) => ({ label: String(i + 1), word: stateOf(i), lines: [step.title], about: [] })),
+    title: left === 0 ? `Plan done: ${formatCount(plan.steps.length, 'step')}` : `Plan: ${left} of ${formatCount(plan.steps.length, 'step')} to do (/aside run)`,
+    rows: plan.steps.map((step, i) => ({ label: String(i + 1), word: stateOf(i), lines: [step.title], about: step.isDone && step.result ? [step.result] : [] })),
   }
 }
 

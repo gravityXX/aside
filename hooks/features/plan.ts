@@ -4,9 +4,9 @@ import type { Entry, Plan, Step } from '../../types'
 import type { Context } from '../context'
 import { inOrder, KINDS } from '../core/entries'
 import { describeCount, formatPlace, leftOutSection, listingText, planSection } from '../core/listing'
-import { entryPrompt, isOwnPrompt, isPlanningPrompt, PLAN_SAVED_NOTE, planningPrompt, sendPrompt, STEP_MARKER, stepPrompt } from '../core/prompts'
+import { entryPrompt, isOwnPrompt, isPlanningPrompt, PLAN_SAVED_NOTE, planningPrompt, readStepResult, sendPrompt, STEP_MARKER, stepPrompt } from '../core/prompts'
 import type { StepMode } from '../core/prompts'
-import { formatCount, shortenText } from '../core/text'
+import { formatCount, formatDuration, shortenText } from '../core/text'
 import {
   bringBackTake,
   forgetAnsweredTake,
@@ -436,25 +436,31 @@ export async function onTurnStart(ctx: Context, $: Engine, e: TurnStart[1], next
 
 type TurnEndReason = Args<'turn.complete'>['reason']
 
-// The step that ran in this turn ends: after an answer it is done, and the next one starts
-// when the plan runs as a chain; otherwise the plan stops there.
-async function finishStep($: Engine, ctx: Context, keys: Keys, plan: Plan, reason: TurnEndReason) {
+// The step that ran in this turn ends: after an answer it is done, keeping what the answer
+// said it did and how long it ran, and the next one starts when the plan runs as a chain;
+// otherwise the plan stops there.
+async function finishStep($: Engine, ctx: Context, keys: Keys, plan: Plan, e: TurnComplete[1]) {
   const active = plan.active!
   delete plan.active
-  if (reason === 'answer') {
-    plan.steps[active.step]!.isDone = true
+  if (e.reason === 'answer') {
+    const step = plan.steps[active.step]!
+    const result = readStepResult(e.answer)
+    plan.steps[active.step] = { ...step, isDone: true, ms: e.durationMs, ...(result ? { result } : {}) }
     const after = nextInRun(plan.steps, active.step, active.isChain, active.then)
     await savePlan($, keys.plan, plan)
     if (after >= 0 && active.pausedFor === undefined) {
       await startStep($, ctx, after, active.isChain, active.then?.slice(1))
     } else if (after >= 0) {
       $.ui.toast(`Plan paused after step ${active.step + 1}: ${active.pausedFor}. /aside run continues.`)
+    } else if (plan.steps.every(one => one.isDone)) {
+      const ms = plan.steps.reduce((sum, one) => sum + (one.ms ?? 0), 0)
+      $.ui.toast(`Plan done: ${formatCount(plan.steps.length, 'step')} in ${formatDuration(ms)}`)
     } else {
-      $.ui.toast(active.isChain ? 'Plan done' : `Step ${active.step + 1} done`)
+      $.ui.toast(`Step ${active.step + 1} done`)
     }
   } else {
     await savePlan($, keys.plan, plan)
-    $.ui.toast(`Plan stopped: step ${active.step + 1} ${reason === 'aborted' ? 'was interrupted' : 'did not finish'}`)
+    $.ui.toast(`Plan stopped: step ${active.step + 1} ${e.reason === 'aborted' ? 'was interrupted' : 'did not finish'}`)
   }
   await refreshBand($)
 }
@@ -506,7 +512,7 @@ export async function onTurnEnd(ctx: Context, $: Engine, e: TurnComplete[1], nex
   const plan = await loadPlan($, keys.plan)
   const isThisStep = plan.active?.turnId === e.turnId && plan.active.sessionId === (await $.session.id())
   if (isThisStep) {
-    await finishStep($, ctx, keys, plan, e.reason)
+    await finishStep($, ctx, keys, plan, e)
   } else {
     await handOverAfterAnswer($, ctx, plan, e.reason)
   }

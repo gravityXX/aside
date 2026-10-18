@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Each step of a plan ends its reply with a one-line result, which the plan keeps with the step and `/aside` shows under it. The last step of a run gets what every step done said, those before a pause included, and ends with a summary of the whole run: what each step did, what is still open and what comes next.
+- Steps are told to leave the work of later steps alone, to say so when a step is done already, and to pause the plan with `wait` when something blocks them, not only when they need your answer.
+- A plan run to its end stays in `/aside` as `Plan done` until the next plan takes its place, and the toast at its end says how long the plan took.
+
 ## 0.16.0 - 2026-10-18
 
 - The plan Claude saves shows in the transcript in the frame `/aside` draws, with each step's state in colour, in place of the plan tool's raw input. Claude is asked not to list the steps again in its reply.

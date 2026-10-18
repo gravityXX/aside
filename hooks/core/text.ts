@@ -18,3 +18,13 @@ export const relativePath = (path: string, root: string): string =>
 const PLURALS = { idea: 'ideas', comment: 'comments', tag: 'tags', step: 'steps', entry: 'entries' } as const
 
 export const formatCount = (n: number, noun: keyof typeof PLURALS): string => `${n} ${n === 1 ? noun : PLURALS[noun]}`
+
+// A step's length as the toast at the end of a plan gives it: "40 s", "23 min", "1 h 5 min".
+export const formatDuration = (ms: number): string => {
+  const minutes = Math.round(ms / 60_000)
+  if (ms < 60_000) {
+    return `${Math.max(1, Math.round(ms / 1000))} s`
+  }
+
+  return minutes < 60 ? `${minutes} min` : `${Math.floor(minutes / 60)} h${minutes % 60 > 0 ? ` ${minutes % 60} min` : ''}`
+}

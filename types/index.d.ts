@@ -23,7 +23,15 @@ export type Entry = {
   isTag?: true
 }
 
-export type Step = { title: string; prompt: string; isDone?: true }
+export type Step = {
+  title: string
+  prompt: string
+  isDone?: true
+  // What the step's answer said it did and left open (its "Result:" line), and how long it
+  // ran, kept once it is done for the summary at the end of the run.
+  result?: string
+  ms?: number
+}
 
 export type Plan = {
   steps: Step[]

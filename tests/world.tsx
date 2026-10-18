@@ -192,13 +192,15 @@ export const world = ($: Engine, on: On, given: Partial<Machine> = {}) => {
 
   const startTurn = (text: string, turnId: string) => $.turn.start({ text, turnId })
 
-  const endTurn = (turnId: string, reason: 'answer' | 'aborted' = 'answer') =>
-    $.turn.complete({ turnId, reason, answer: '', durationMs: 1, isAborted: reason === 'aborted' } as never)
+  // The end of a turn: how it ended, Claude's answer and how long it ran.
+  const endTurn = (turnId: string, reason: 'answer' | 'aborted' = 'answer', text = '', durationMs = 1) =>
+    $.turn.complete({ turnId, reason, answer: text, durationMs, isAborted: reason === 'aborted' } as never)
 
-  // A turn the plugin started with the last prompt it sent, run to its end.
-  const answer = async (turnId: string) => {
+  // A turn the plugin started with the last prompt it sent, run to its end, and what Claude
+  // answered in it.
+  const answer = async (turnId: string, text = '', durationMs = 1) => {
     await startTurn(sent.at(-1)!, turnId)
-    await endTurn(turnId)
+    await endTurn(turnId, 'answer', text, durationMs)
     await idle()
   }
 
