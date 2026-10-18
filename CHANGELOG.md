@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.13.0 - 2026-10-18
 
 - The line above the prompt keeps its `list` button while a step runs, with `stop` beside it, and shows `run plan` beside `list` whenever the plan has steps left. The list pane offers no `plan` while a step runs.
 
