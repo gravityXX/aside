@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.17.0 - 2026-10-18
 
 - Each step of a plan ends its reply with a one-line result, which the plan keeps with the step and `/aside` shows under it. The last step of a run gets what every step done said, those before a pause included, and ends with a summary of the whole run: what each step did, what is still open and what comes next.
 - Steps are told to leave the work of later steps alone, to say so when a step is done already, and to pause the plan with `wait` when something blocks them, not only when they need your answer.
