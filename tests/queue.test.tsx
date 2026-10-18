@@ -36,6 +36,10 @@ type World = {
   selection?: string
   // The next prompt the mod submits is dropped beneath it, as a settings hook or a limit would.
   isDropping?: boolean
+  // What the small model replies when asked to tidy a note; a note it has no reply for fails.
+  tidy?: Record<string, string>
+  // Runs while the small model is thinking, before its reply comes.
+  meanwhile?: () => Promise<unknown>
 }
 
 // The world beneath the plugin: a project at /proj, a store and a clock in memory, files,
@@ -44,6 +48,7 @@ const world = (on: On, w: World = { files: {}, clip: '', grep: '', branch: 'main
   const sent: string[] = []
   const toasts: string[] = []
   const filled: string[] = []
+  const asked: string[] = []
   mock.store(on)
   const clock = mock.clock(on, { now: 1000 })
   on('session.root', () => ({ value: '/proj' }))
@@ -89,6 +94,17 @@ const world = (on: On, w: World = { files: {}, clip: '', grep: '', branch: 'main
 
     return { isFilled: true } as never
   })
+  on('model.complete', async ($, e) => {
+    asked.push(e.prompt)
+    await w.meanwhile?.()
+    const reply = w.tidy?.[/<note>\n([\s\S]*)\n<\/note>/.exec(e.prompt)?.[1] ?? '']
+
+    return {
+      value: (reply === undefined
+        ? { isAnswered: false, reason: 'api-error', status: null, kind: 'unknown' }
+        : { isAnswered: true, text: reply, usage: { input_tokens: 1, output_tokens: 1 } }) as never,
+    }
+  })
   on('fs.read', ($, e) => (e.path in w.files ? { value: w.files[e.path]! } : { deny: 'ENOENT' }))
   on('fs.exists', ($, e) => ({ value: e.path in w.files }))
   on('process.run', ($, e) => {
@@ -110,7 +126,7 @@ const world = (on: On, w: World = { files: {}, clip: '', grep: '', branch: 'main
 
   current = { toasts, clock }
 
-  return { sent, toasts, filled, clock, w }
+  return { sent, toasts, filled, asked, clock, w }
 }
 
 let current: { toasts: string[]; clock: { advance: (ms: number) => Promise<void>; settle: () => Promise<void> } } | undefined
@@ -616,6 +632,51 @@ describe('the order setting', () => {
     await clock.advance(100)
     expect(sent.at(-1)).toContain('bravo')
     expect(sent.at(-1)).not.toContain('alpha')
+  })
+})
+
+describe('tidying what was typed', () => {
+  test('an entry is queued as typed, then tidied; the copied quote is neither sent nor changed', async ($, on) => {
+    const tidy = { 'moze zrobic moze nie': '<note>Może zrobić, może nie.</note>' }
+    const { asked, filled, clock } = world(on, { files: { '/proj/docs/report.md': REPORT }, clip: 'Revenue grew by 12% in the third quarter', grep: '', branch: 'main', tidy })
+    await write($, '/proj/docs/report.md')
+    await type($, '+? moze zrobic moze nie')
+    await clock.settle()
+
+    expect(asked).toEqual(['<note>\nmoze zrobic moze nie\n</note>'])
+    expect((await queue($)).text).toContain(row(1, 'question', 'Może zrobić, może nie.', 'docs/report.md:5 · "Revenue grew by 12% in the third quarter"'))
+    await queue($, 'edit 1')
+    expect(filled).toEqual(['+? Może zrobić, może nie.'])
+  })
+
+  test('a reply that is not a correction is ignored, and the typed text stays', async ($, on) => {
+    const answer = 'It is slow because the parser reads the whole config again on every call; cache it once at start-up.'
+    const tidy = { 'why so slow': `<note>${answer}</note>`, 'dark mode': 'Dark mode.' }
+    const { clock } = world(on, { files: {}, clip: '', grep: '', branch: 'main', tidy })
+    await type($, '+ why so slow')
+    await type($, '+ dark mode')
+    await type($, '+ no reply for this one')
+    await clock.settle()
+
+    expect((await queue($)).text).toBe(`3 ideas waiting\n\n${row(1, 'idea', 'why so slow')}\n${row(2, 'idea', 'dark mode')}\n${row(3, 'idea', 'no reply for this one')}`)
+  })
+
+  test('an entry gone from the queue before the reply comes is not brought back', async ($, on) => {
+    const meanwhile = () => queue($, 'clear')
+    const { clock } = world(on, { files: {}, clip: '', grep: '', branch: 'main', tidy: { 'dark mode': '<note>Dark mode.</note>' }, meanwhile })
+    await type($, '+ dark mode')
+    await clock.settle()
+
+    expect((await queue($)).text).toBe('The queue is empty.')
+  })
+
+  test('tidy off sends nothing to the model', { options: { tidy: 'off' } }, async ($, on) => {
+    const { asked, clock } = world(on, { files: {}, clip: '', grep: '', branch: 'main', tidy: { 'dark mode': '<note>Dark mode.</note>' } })
+    await type($, '+ dark mode')
+    await clock.settle()
+
+    expect(asked).toEqual([])
+    expect((await queue($)).text).toBe(`1 idea waiting\n\n${row(1, 'idea', 'dark mode')}`)
   })
 })
 

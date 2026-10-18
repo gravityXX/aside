@@ -43,6 +43,16 @@
         "oldest",
         "newest"
       ]
+    },
+    "tidy": {
+      "type": "string",
+      "title": "Tidy what you type",
+      "description": "on: a small model fixes the spelling, punctuation and wording of each entry's own text, in its language, once it is queued. The copied quote is never changed or sent. off: entries stay as typed.",
+      "default": "on",
+      "options": [
+        "on",
+        "off"
+      ]
     }
   }
 }

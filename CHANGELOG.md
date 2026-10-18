@@ -5,6 +5,7 @@
 - A new setting, `order`: `oldest` (default) keeps the queue first in, first out; `newest` makes it last in, first out. `/aside` lists, numbers and runs the queue in that order, and `pop` alone always takes the newest entry. The setting can change at any time without losing the order you set with `move`.
 - A mark at the end of a message queues it too, after a space or a line break: `why is this so slow +?` is `+? why is this so slow`. A draft you have already typed goes to the queue without retyping it.
 - The `/aside` list is tighter: the kind column is only as wide as the kinds it shows, and the line under a comment reads `↳ where · what`. The line above the prompt starts with `aside:`, as the list does.
+- A new setting, `tidy`, on by default: once an entry is queued, a small model (Haiku) fixes the spelling, punctuation and wording of what you typed, in its own language. The copied quote is never sent or changed, and the entry keeps its text as typed when no reply comes in time.
 - In the terminal the `/aside` list is drawn in a frame, each kind and step state in a theme colour, and long text wraps in its own column. The model and other surfaces still get the plain text.
 
 ## 0.7.1 - 2026-10-18
