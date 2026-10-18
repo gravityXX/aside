@@ -551,6 +551,52 @@ test('Enter is answered at once; two quick entries are both stored, in order', a
   expect((await queue($, 'list')).text).toBe(`1 idea and 1 comment waiting\n\n${row(1, 'idea', 'one')}\n${row(2, 'question', 'two')}`)
 })
 
+describe('the order setting', () => {
+  const NEWEST = { options: { order: 'newest' } }
+
+  test('newest first: the newest entry is 1, pop alone takes it, and numbers follow the list', NEWEST, async ($, on) => {
+    world(on)
+    await type($, '+ alpha')
+    await type($, '+ bravo')
+    await type($, '+? charlie')
+
+    expect((await queue($)).text).toBe(
+      `2 ideas and 1 comment waiting\n\n${row(1, 'question', 'charlie')}\n${row(2, 'idea', 'bravo')}\n${row(3, 'idea', 'alpha')}`,
+    )
+    expect((await queue($, 'pop')).text).toBe('In the prompt box, ready to send: charlie')
+    expect((await queue($, 'remove 2')).text).toBe('Removed: alpha')
+    expect((await queue($)).text).toBe(`1 idea waiting\n\n${row(1, 'idea', 'bravo')}`)
+  })
+
+  test('newest first: an edited entry comes back to its place in the list', NEWEST, async ($, on) => {
+    const { filled } = world(on)
+    await type($, '+ alpha\n+ bravo\n+ charlie')
+
+    await queue($, 'edit 2')
+    expect(filled).toEqual(['+ bravo'])
+    await type($, '+ bravo again')
+    expect((await queue($)).text).toBe(`3 ideas waiting\n\n${row(1, 'idea', 'charlie')}\n${row(2, 'idea', 'bravo again')}\n${row(3, 'idea', 'alpha')}`)
+    await queue($, 'move 3 1')
+    expect((await queue($)).text).toBe(`3 ideas waiting\n\n${row(1, 'idea', 'alpha')}\n${row(2, 'idea', 'charlie')}\n${row(3, 'idea', 'bravo again')}`)
+  })
+
+  test('newest first: run goes from the newest, and undo brings the list back as it was', NEWEST, async ($, on) => {
+    const { sent, clock } = world(on)
+    await type($, '+ alpha\n+ bravo')
+
+    expect((await queue($, 'run all')).text).toBe('Sending 2 ideas.')
+    await clock.advance(100)
+    expect(sent.at(-1)!.indexOf('bravo')).toBeLessThan(sent.at(-1)!.indexOf('alpha'))
+    expect((await queue($, 'undo')).text).toBe('Brought back 2 entries, 2 waiting.')
+    expect((await queue($)).text).toBe(`2 ideas waiting\n\n${row(1, 'idea', 'bravo')}\n${row(2, 'idea', 'alpha')}`)
+
+    expect((await queue($, 'run')).text).toContain('Running 2 entries one by one')
+    await clock.advance(100)
+    expect(sent.at(-1)).toContain('bravo')
+    expect(sent.at(-1)).not.toContain('alpha')
+  })
+})
+
 describe('tab completion', () => {
   const complete = ($: Engine, text: string) => {
     const token = /\S*$/.exec(text)![0]
