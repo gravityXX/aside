@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.9.1 - 2026-10-18
 
 - Trial entry for the automatic bump.
 
