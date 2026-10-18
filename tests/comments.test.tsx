@@ -119,7 +119,7 @@ describe('where a comment points', () => {
 
 describe('the tool output a comment comes with', () => {
   test('only what Bash and the edit tools printed counts, not a denial or a missing file', async ($, on) => {
-    const { queue, shown, startTurn } = world($, on)
+    const { queue, shown, startTurn, endTurn } = world($, on)
     on('tool.call', { tool: 'Bash' }, () => ({ result: '3 tests failed' }) as never)
     on('tool.call', { tool: 'Read' }, () => ({ result: 'File does not exist', isError: true }) as never)
     await startTurn('test it', 't1')
@@ -128,17 +128,19 @@ describe('the tool output a comment comes with', () => {
     await $.tool.call({ tool: 'Read', file_path: '/proj/nope2.md' } as never)
 
     await queue('+? why')
+    await endTurn('t1')
     expect(await shown()).toEqual(['1 comment waiting', '1 question why', '↳ after Bash · 3 tests failed'])
   })
 
   test('with nothing copied, a comment takes the last tool output of its turn, an error first', async ($, on) => {
-    const { queue, shown, startTurn } = world($, on)
+    const { queue, shown, startTurn, endTurn } = world($, on)
     on('tool.call', { tool: 'Bash' }, ($e, e) => (e.command === 'fail' ? { result: 'exit 1: boom', isError: true } : { result: 'ok' }) as never)
     await startTurn('build it', 't1')
     await $.tool.call({ tool: 'Bash', command: 'fail' } as never)
     await $.tool.call({ tool: 'Bash', command: 'pass' } as never)
 
     expect(await queue('+? why did it fail')).toBe('queued ? "why did it fail" - with the last tool output (1 waiting)')
+    await endTurn('t1')
     expect(await shown()).toEqual(['1 comment waiting', '1 question why did it fail', '↳ after Bash failed · exit 1: boom'])
 
     await startTurn('next thing', 't2')

@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- `/aside` typed while Claude is working opens the list in the pane, which shows at once and keeps up to date. Before, the list only showed once Claude finished, since Claude Code prints a command's output after the turn. Where the terminal has no room for the pane, the list goes into the transcript right away.
+
 ## 0.14.0 - 2026-10-18
 
 - `/aside run N [M ...]` counts what `/aside` shows: the steps of the plan while it has steps to do, else the entries of the queue. `/aside run 11 10` runs entries 11 and 10 one after another, in that order, and leaves the rest of the queue; `/aside run 3 1` runs those two steps of the plan. A number out of range is refused with what it counts.

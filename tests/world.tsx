@@ -38,6 +38,8 @@ export type Machine = {
   system: 'wsl' | 'mac'
   // The text selected in a transcript row.
   selection?: string
+  // The terminal is too narrow to seat a pane.
+  isNarrow?: boolean
   // The next prompt the plugin submits is dropped beneath it, as a settings hook would.
   isDropping?: boolean
   // The small model's reply to each note it is asked to tidy; a note with none fails.
@@ -85,6 +87,7 @@ export const world = ($: Engine, on: On, given: Partial<Machine> = {}) => {
     return { value: undefined } as never
   })
   on('ui.open', ($e, e) => {
+    if (w.isNarrow) return { value: { isPlaced: false, reason: 'the terminal is too narrow' } }
     if (!panes.includes(e.id)) panes.push(e.id)
     return { value: { isPlaced: true } }
   })

@@ -62,7 +62,7 @@ Requires <kbd>Claude Code</kbd> 2.1.301 or newer. The plugin API <kbd>aside</kbd
     <th colspan="2">Entries</th>
   </tr>
   <tr>
-    <td><code>/aside</code></td><td>Show the queue and the plan</td>
+    <td><code>/aside</code></td><td>Show the queue and the plan; while Claude works, in the pane</td>
     <td><code>/aside pop [N]</code></td><td>Put the newest one (or N) in the box</td>
   </tr>
   <tr>

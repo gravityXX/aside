@@ -57,6 +57,30 @@ describe('/aside', () => {
     )
   })
 
+  test('while Claude works, /aside opens the list in the pane, since its own output shows only after the turn', async ($, on) => {
+    const { panes, type, aside, startTurn, endTurn, pane } = world($, on)
+    await startTurn('build it', 't1')
+    await type('+ a', 't1')
+
+    expect(await aside()).toBe('Opened the list in the pane while Claude was working.')
+    expect(panes).toEqual(['aside'])
+    const ui = await pane()
+    expect((await ui.find({ type: 'Text', text: /^a$/ }))?.text).toBe('a')
+    await ui.unmount()
+
+    await endTurn('t1')
+    expect(await aside()).toBe('1 idea waiting\n\n  1  idea  a')
+  })
+
+  test('while Claude works and the terminal has no room for the pane, the list goes into the transcript at once', async ($, on) => {
+    const { logged, type, aside, startTurn } = world($, on, { isNarrow: true })
+    await startTurn('build it', 't1')
+    await type('+ a', 't1')
+
+    expect(await aside('list')).toBe('Wrote the list above while Claude was working.')
+    expect(logged.at(-1)).toBe('1 idea waiting\n\n  1  idea  a')
+  })
+
   test('/aside list and /aside ls show what /aside alone shows', async ($, on) => {
     const { type, aside } = world($, on)
     await type('+ a')
