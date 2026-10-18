@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.6.0 - 2026-10-18
+
+Fewer commands, each with one meaning.
+
+- `/queue` alone shows the queue and the plan; it no longer hands anything over.
+- `/queue plan` organizes the queue into steps; `/queue run` runs them, and with no plan runs the queue entry by entry; `/queue run all` sends everything at once.
+- `/queue send` and `/queue each` are gone: `run all` and `run` do what they did.
+- `/queue pop` puts the entry in the prompt box ready to send, without its `+`; `/queue pop N` takes entry N.
+- Enter on a `+` message is answered at once, like a plain prompt: the box empties straight away, and the clipboard, the search and the store run right after, one message at a time. Where each entry points is said in a dim transcript line instead of a toast.
+
 ## 0.5.1 - 2026-10-18
 
 - An idea names the task it came with only when it was queued while Claude was working; one queued at an idle prompt names none.

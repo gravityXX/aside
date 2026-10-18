@@ -340,15 +340,20 @@ export const send = (ideas: readonly Idea[], root: string): string =>
   ].join('\n\n')
 
 // One entry as a prompt of its own, for /queue each: what it says and what it is about.
-export const entryPrompt = (idea: Idea, root: string): string => {
+export const entryPrompt = (idea: Idea, root: string, withContext = true): string => {
   const file = idea.file ? `In ${relative(idea.file, root)}: ` : ''
   const spot = spotOf(idea)
   const kind = idea.kind === 'idea' ? '' : `${KINDS[idea.kind].label[0]!.toUpperCase()}${KINDS[idea.kind].label.slice(1)}`
   const head = [kind, file + spot].filter(Boolean).join(' - ')
   const tag = idea.isTag ? '\n\nThis comment is a <!-- --> tag in the file; remove the tag once it is handled.' : ''
 
-  return `${head ? `${head}:\n` : ''}${idea.text || '(no text)'}${context(idea)}${tag}`
+  return `${head ? `${head}:\n` : ''}${idea.text || '(no text)'}${withContext ? context(idea) : ''}${tag}`
 }
+
+// An entry as a prompt to send right away (/queue pop): an idea as typed, without its "+";
+// a comment with what it is about.
+export const popText = (idea: Idea, root: string): string =>
+  idea.kind === 'idea' ? idea.text : entryPrompt(idea, root, false)
 
 export const stepPrompt = (step: Step, n: number, total: number): string =>
   `${step.prompt}\n\n(Step ${n} of ${total} of the queue plan, "${step.title}", sent by the idea-queue plugin.)`
