@@ -527,6 +527,27 @@ test('Enter is answered at once; two quick entries are both stored, in order', a
   expect((await queue($, 'list')).text).toBe('1. one\n2. [?] two')
 })
 
+describe('tab completion', () => {
+  const complete = ($: Engine, text: string) => {
+    const token = /\S*$/.exec(text)![0]
+
+    return ($.prompt as unknown as { autocomplete: (e: unknown) => Promise<{ suggestions: { text: string; description?: string }[] }> })
+      .autocomplete({ text, cursor: text.length, token: token || text.slice(-1), start: text.length - token.length })
+      .then(result => result.suggestions.map(row => `${row.text}: ${row.description ?? ''}`))
+  }
+
+  test('after "/queue " Tab offers the subcommands, then the entry numbers', async ($, on) => {
+    world(on)
+    on('prompt.autocomplete', () => ({ suggestions: [] }))
+    await type($, '+ dark mode\n+? why so slow')
+
+    expect(await complete($, '/queue cl')).toEqual(['clear: empty the queue'])
+    expect(await complete($, '/queue p')).toEqual(['plan: organize the queue into steps', 'pop: put an entry in the box, ready to send'])
+    expect(await complete($, '/queue pop ')).toEqual(['1: dark mode', '2: [?] why so slow'])
+    expect(await complete($, 'just text')).toEqual([])
+  })
+})
+
 describe('the task an idea came with', () => {
   test('queued while a turn runs, an idea names its task; queued at an idle prompt, none', async ($, on) => {
     const { sent, clock } = world(on)

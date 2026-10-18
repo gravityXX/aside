@@ -57,6 +57,22 @@ const HELP = [
   '/queue scan FILE - read the tags of a file Claude did not write in this session',
 ].join('\n')
 
+// What Tab offers after "/queue ", with the dim line beside each.
+const SUBCOMMANDS: readonly (readonly [string, string])[] = [
+  ['plan', 'organize the queue into steps'],
+  ['run', 'run the plan, or the queue entry by entry'],
+  ['stop', 'stop after the current step'],
+  ['pop', 'put an entry in the box, ready to send'],
+  ['edit', 'rework an entry and queue it again'],
+  ['move', 'move an entry to another place'],
+  ['remove', 'remove an entry'],
+  ['clear', 'empty the queue'],
+  ['undo', 'bring back what plan, run or clear took'],
+  ['scan', 'read the tags of a markdown file'],
+  ['list', 'show the queue and the plan'],
+  ['help', 'show every command'],
+]
+
 // Everything belongs to the project: each root keeps its own queue and plan.
 const keys = async ($: Engine) => {
   const root = await $.session.root()
@@ -725,6 +741,34 @@ export const register: Register = (on, options) => {
       ? next(e)
       : { drop: 'queue: could not store this entry; nothing was sent' },
   )
+
+  // Tab completion after "/queue ": the subcommands, then the entry or step numbers.
+  on('prompt.autocomplete', async ($, e, next) => {
+    const typed = e.text.slice(0, e.cursor)
+    const first = /^\/queue\s+(\S*)$/.exec(typed)
+    const second = /^\/queue\s+(pop|edit|remove|rm|run|move|mv)\s+(\d*)$/.exec(typed)
+    if (!first && !second) {
+      return next(e)
+    }
+    const own = (await next(e)).suggestions
+    if (first) {
+      const word = first[1]!.toLowerCase()
+      const rows = SUBCOMMANDS.filter(([name]) => name.startsWith(word) && name !== word).map(([text, description]) => ({ text, description }))
+
+      return { suggestions: [...own, ...rows] }
+    }
+    const [, verb, digits] = second!
+    const { root, queue, plan: planKey } = await keys($)
+    const items =
+      verb === 'run'
+        ? (await loadPlan($, planKey)).steps.map((step, i) => ({ n: i + 1, label: step.title, isDone: step.isDone === true }))
+        : (await loadIdeas($, queue)).map((idea, i) => ({ n: i + 1, label: listed([idea], root).replace(/^\d+\. /, ''), isDone: false }))
+    const rows = items
+      .filter(item => !item.isDone && String(item.n).startsWith(digits!))
+      .map(item => ({ text: String(item.n), description: snippet(item.label, 60) }))
+
+    return { suggestions: [...own, ...rows] }
+  })
 
   on('prompt.change', async ($, e, next) => {
     if (justQueued !== undefined && e.origin.kind === 'engine' && e.text.trim() === justQueued) {

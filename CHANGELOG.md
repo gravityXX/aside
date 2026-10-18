@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.1 - 2026-10-18
+
+- Tab completes `/queue` subcommands, then entry numbers (`pop`, `edit`, `remove`, `move`) and plan step numbers (`run`), each with a dim description.
+
 ## 0.6.0 - 2026-10-18
 
 Fewer commands, each with one meaning.
