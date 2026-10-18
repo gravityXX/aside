@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.14.0 - 2026-10-18
 
 - `/aside run N [M ...]` counts what `/aside` shows: the steps of the plan while it has steps to do, else the entries of the queue. `/aside run 11 10` runs entries 11 and 10 one after another, in that order, and leaves the rest of the queue; `/aside run 3 1` runs those two steps of the plan. A number out of range is refused with what it counts.
 
