@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- `/aside undo` no longer brings back what Claude has already done: once the turn with a planning prompt, a `run all` or the steps of `/aside run` ends with an answer, there is nothing left to undo. A clear stays undoable until the next plan, run or clear.
+
 ## 0.10.1 - 2026-10-18
 
 - `/aside undo` brings back the tags in files that a plan or run took, so the next `/aside plan` takes them again. Each plan, run or clear replaces what undo brings back, and a hand-over that failed leaves nothing to bring back twice.

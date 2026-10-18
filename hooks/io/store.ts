@@ -27,7 +27,16 @@ export function trackFile($: Engine, path: string) {
 }
 
 // Everything belongs to the project: each root keeps its own queue and plan.
-export type Keys = { root: string; queue: string; taken: string; takenTags: string; plan: string; handed: string; editing: string }
+export type Keys = {
+  root: string
+  queue: string
+  taken: string
+  takenTags: string
+  takenBy: string
+  plan: string
+  handed: string
+  editing: string
+}
 
 export async function projectKeys($: Engine): Promise<Keys> {
   const root = await $.session.root()
@@ -37,6 +46,7 @@ export async function projectKeys($: Engine): Promise<Keys> {
     queue: `queue:${root}`,
     taken: `taken:${root}`,
     takenTags: `takenTags:${root}`,
+    takenBy: `takenBy:${root}`,
     plan: `plan:${root}`,
     handed: `handed:${root}`,
     editing: `editing:${root}`,
@@ -96,22 +106,39 @@ export async function takeEditing($: Engine, key: string): Promise<Editing | und
 }
 
 // What /aside undo brings back: the entries and the tags the last plan, run or clear took.
-// Each take replaces the one before it.
-export type Take = { entries: Entry[]; tagIds: string[] }
+// Each take replaces the one before it. A hand-over's take lasts until Claude has answered
+// it (forgetAnsweredTake); a clear's lasts until the next take.
+export type Take = { entries: Entry[]; tagIds: string[]; by: 'hand-over' | 'clear' }
 
-export async function saveTake($: Engine, keys: Keys, entries: readonly Entry[], tagIds: readonly string[]) {
-  await saveEntries($, keys.taken, entries)
-  if (tagIds.length === 0) {
+export async function saveTake($: Engine, keys: Keys, take: Take) {
+  await saveEntries($, keys.taken, take.entries)
+  if (take.tagIds.length === 0) {
     await $.store.delete(keys.takenTags)
   } else {
-    await $.store.set(keys.takenTags, tagIds)
+    await $.store.set(keys.takenTags, take.tagIds)
   }
+  await $.store.set(keys.takenBy, take.by)
 }
 
+// A take stored before takenBy existed counts as a clear's: it stays until the next take.
 export async function loadTake($: Engine, keys: Keys): Promise<Take> {
   const tagIds = ((await $.store.get(keys.takenTags)) as string[] | undefined) ?? []
+  const by = (await $.store.get(keys.takenBy)) === 'hand-over' ? 'hand-over' : 'clear'
 
-  return { entries: await loadEntries($, keys.taken), tagIds }
+  return { entries: await loadEntries($, keys.taken), tagIds, by }
+}
+
+export async function forgetTake($: Engine, keys: Keys) {
+  await saveEntries($, keys.taken, [])
+  await $.store.delete(keys.takenTags)
+  await $.store.delete(keys.takenBy)
+}
+
+// Once Claude has answered what was handed over, it is done: undo must not bring it back.
+export async function forgetAnsweredTake($: Engine, keys: Keys) {
+  if ((await $.store.get(keys.takenBy)) === 'hand-over') {
+    await forgetTake($, keys)
+  }
 }
 
 // Unmarks tags handed over, so the next hand-over takes them again.
@@ -124,7 +151,7 @@ export async function unhandTags($: Engine, keys: Keys, tagIds: readonly string[
 // where /aside undo finds them, and the tags are marked so they are not handed over again.
 // `giveBack` undoes all of it when the hand-over fails.
 export async function takeForHandOver($: Engine, keys: Keys, stored: readonly Entry[], tags: readonly Entry[]) {
-  await saveTake($, keys, stored, tags.map(tagId))
+  await saveTake($, keys, { entries: [...stored], tagIds: tags.map(tagId), by: 'hand-over' })
   if (stored.length > 0) {
     await saveEntries($, keys.queue, [])
   }
@@ -135,7 +162,7 @@ export async function takeForHandOver($: Engine, keys: Keys, stored: readonly En
     giveBack: async () => {
       await saveEntries($, keys.queue, [...stored, ...(await loadEntries($, keys.queue))])
       await $.store.set(keys.handed, before)
-      await saveTake($, keys, [], [])
+      await forgetTake($, keys)
     },
   }
 }

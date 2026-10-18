@@ -6,7 +6,7 @@ import { inOrder, KINDS } from '../core/entries'
 import { describeCount, formatPlace } from '../core/listing'
 import { entryPrompt, isOwnPrompt, planningPrompt, sendPrompt, STEP_MARKER, stepPrompt } from '../core/prompts'
 import { formatCount, shortenText } from '../core/text'
-import { loadEntries, loadPlan, projectKeys, refreshBand, savePlan, takeForHandOver } from '../io/store'
+import { forgetAnsweredTake, loadEntries, loadPlan, projectKeys, refreshBand, savePlan, takeForHandOver } from '../io/store'
 import type { Keys } from '../io/store'
 import { tagsInFiles } from './queue'
 
@@ -303,6 +303,10 @@ export async function onTurnEnd(ctx: Context, $: Engine, e: TurnComplete[1], nex
   ctx.session.isRunning = false
 
   const keys = await projectKeys($)
+  // Claude has answered what the plugin handed over, so undo has nothing to bring back.
+  if (ctx.session.isOwnTurn && e.reason === 'answer') {
+    await forgetAnsweredTake($, keys)
+  }
   const plan = await loadPlan($, keys.plan)
   const isThisStep = plan.active?.turnId === e.turnId && plan.active.sessionId === (await $.session.id())
   if (isThisStep) {
