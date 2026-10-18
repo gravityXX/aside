@@ -3,8 +3,8 @@ import { describe, expect, test } from 'claude-code/testing'
 import { REPORT, REPORT_PATH, STEPS, world } from './world'
 
 describe('the band above the prompt', () => {
-  test('the band shows what waits and offers the next move', async ($, on) => {
-    const { type, aside, savePlan, band } = world($, on)
+  test('the band shows what waits, keeps the list button, and offers the next move for the plan', async ($, on) => {
+    const { sent, type, aside, savePlan, startTurn, idle, band } = world($, on)
     on('ui.render', { component: 'AbovePrompt' }, ($e, e) => {
       const { Text } = $e.ui.resolve(e)
       return <Text>engine</Text>
@@ -12,17 +12,22 @@ describe('the band above the prompt', () => {
     const read = async () => {
       const ui = await band()
       const text = (await ui.find({ type: 'Text', text: /^aside: |engine/ }))?.text
-      const button = (await ui.find({ key: 'queue' }))?.props.label
+      const list = (await ui.find({ key: 'list' }))?.props.label
+      const action = (await ui.find({ key: 'action' }))?.props.label
       await ui.unmount()
-      return [text, button]
+      return [text, list, action]
     }
 
-    expect(await read()).toEqual(['engine', undefined])
+    expect(await read()).toEqual(['engine', undefined, undefined])
     await type('+ x\n+? y')
-    expect(await read()).toEqual(['aside: 1 idea, 1 comment · ', 'list'])
+    expect(await read()).toEqual(['aside: 1 idea, 1 comment · ', 'list', undefined])
     await aside('plan')
     await savePlan(STEPS)
-    expect(await read()).toEqual(['aside: plan: 3 of 3 steps left · ', 'run plan'])
+    expect(await read()).toEqual(['aside: plan: 3 of 3 steps left · ', 'list', 'run plan'])
+    await aside('run')
+    await idle()
+    await startTurn(sent.at(-1)!, 's1')
+    expect(await read()).toEqual(['aside: step 1/3 running · ', 'list', 'stop'])
   })
 
   test('its list button opens the list pane, and closes it on a second press', async ($, on) => {
@@ -39,11 +44,11 @@ describe('the band above the prompt', () => {
     const { sent, toasts, savePlan, startTurn, pressBand } = world($, on)
     await savePlan(STEPS)
 
-    await pressBand()
+    await pressBand('action')
     expect(sent).toHaveLength(1)
     expect(sent[0]).toContain('(Step 1 of 3 of the queue plan, "One", sent by the aside plugin.')
     await startTurn(sent[0]!, 's1')
-    await pressBand()
+    await pressBand('action')
     expect(toasts).toEqual(['Running the plan: 3 steps, from step 1. /aside stop stops after the current one.', 'The plan stops after step 1.'])
   })
 })
@@ -62,6 +67,22 @@ describe('the list pane', () => {
     await idle()
     expect(panes).toEqual([])
     expect(sent.at(-1)).toContain('Organize all of it, and only organize it')
+  })
+
+  test('while a step runs, the pane lists the queue but offers no plan', async ($, on) => {
+    const { sent, type, aside, savePlan, startTurn, pressBand, pane, idle } = world($, on)
+    await savePlan(STEPS)
+    await aside('run')
+    await idle()
+    await startTurn(sent.at(-1)!, 's1')
+    await type('+ x', 's1')
+    await pressBand()
+
+    const ui = await pane()
+    expect((await ui.find({ type: 'Text', text: /^x$/ }))?.text).toBe('x')
+    expect((await ui.find({ type: 'Text', text: /^running$/ }))?.props.color).toBe('warning')
+    expect(await ui.find({ key: 'plan' })).toBeUndefined()
+    await ui.unmount()
   })
 
   test('the pane says so when the queue is empty, and closes on its button', async ($, on) => {

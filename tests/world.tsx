@@ -214,9 +214,10 @@ export const world = ($: Engine, on: On, given: Partial<Machine> = {}) => {
   // The framed listing drawn from the text a command printed.
   const output = (text: string, command = 'aside') => mount('CommandOutput', { command, args: '', text, isErrored: false })
 
-  const pressBand = async () => {
+  // A press of the band's list button, or of the plan's button beside it ('action').
+  const pressBand = async (key: 'list' | 'action' = 'list') => {
     const ui = await band()
-    await ui.press({ key: 'queue' })
+    await ui.press({ key })
     await ui.unmount()
     await idle()
   }

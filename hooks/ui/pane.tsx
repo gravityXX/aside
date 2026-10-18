@@ -28,6 +28,8 @@ export async function drawPane(ctx: Context, $: Engine, e: PaneRender[1], next: 
   }
   const now = await readBand($)
   const sections = await currentListing($, ctx)
+  // Planning while a step runs would send a second prompt into the running plan.
+  const canPlan = now.ideas + now.comments + now.tags > 0 && now.running === undefined
   const planFromPane = async () => {
     await $.ui.close({ id: LIST_PANE })
     $.ui.toast(await handOverQueue($, ctx, 'plan'))
@@ -40,7 +42,7 @@ export async function drawPane(ctx: Context, $: Engine, e: PaneRender[1], next: 
     <Box flexDirection="column">
       {sections.some(section => section.rows.length > 0) ? listingRows(ui, sections) : <Text dimColor>The queue is empty.</Text>}
       <Box marginTop={1}>
-        {now.ideas + now.comments + now.tags > 0 ? <Button key="plan" label="plan" onPress={() => void planFromPane()} /> : null}
+        {canPlan ? <Button key="plan" label="plan" onPress={() => void planFromPane()} /> : null}
         <Text> </Text>
         <Button key="close" label="close" onPress={() => void $.ui.close({ id: LIST_PANE })} />
       </Box>

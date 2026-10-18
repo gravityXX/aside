@@ -6,20 +6,17 @@ import { runPlan, stopPlan } from '../features/plan'
 import { readBand } from '../io/store'
 import { toggleListPane } from './pane'
 
-type Action = 'stop' | 'list' | 'run plan'
+type Action = 'stop' | 'run plan'
 
 // The press does the work itself: $.command.run from here skips this plugin's own command
 // hook, and a stop is applied at once rather than when the turn ends.
-async function pressBand($: Engine, ctx: Context, action: Action) {
-  if (action === 'list') {
-    await toggleListPane($)
-    return
-  }
+async function pressAction($: Engine, ctx: Context, action: Action) {
   const said = action === 'stop' ? await stopPlan($) : await runPlan($, ctx)
   if (said !== undefined) $.ui.toast(said)
 }
 
-// The line above the prompt: what waits, where the plan is, and a button for the next move.
+// The line above the prompt: what waits and where the plan is, the list button, and beside it
+// the next move for the plan: stop while a step runs, run plan while steps are left.
 type BandRender = Parameters<MatchedHook<'ui.render', { readonly component: 'AbovePrompt' }>>
 
 export async function drawBand(ctx: Context, $: Engine, e: BandRender[1], next: BandRender[2]) {
@@ -35,14 +32,20 @@ export async function drawBand(ctx: Context, $: Engine, e: BandRender[1], next: 
   else if (left > 0) parts.push(`plan: ${left} of ${now.steps} steps left`)
   if (now.ideas) parts.push(formatCount(now.ideas, 'idea'))
   if (now.comments + now.tags) parts.push(formatCount(now.comments + now.tags, 'comment'))
-  const action: Action = now.running !== undefined ? 'stop' : waiting > 0 ? 'list' : 'run plan'
+  const action: Action | undefined = now.running !== undefined ? 'stop' : left > 0 ? 'run plan' : undefined
 
   const { Box, Button, Text } = $.ui.resolve(e)
 
   return (
     <Box>
       <Text dimColor>aside: {parts.join(', ')} · </Text>
-      <Button key="queue" label={action} onPress={() => void pressBand($, ctx, action)} />
+      <Button key="list" label="list" onPress={() => void toggleListPane($)} />
+      {action === undefined ? null : (
+        <>
+          <Text> </Text>
+          <Button key="action" label={action} onPress={() => void pressAction($, ctx, action)} />
+        </>
+      )}
     </Box>
   )
 }
