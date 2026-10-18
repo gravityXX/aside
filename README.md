@@ -47,9 +47,9 @@ Nothing reaches Claude until you say so. `/aside` shows the queue in a frame, an
 
 ### 4. Plan and run
 
-`/aside plan` has Claude organize the queue into steps and save them. The plan shows in a frame, and what Claude finds done, contradictory or unclear goes back to the queue with its question. Plan again after adding more: the steps done and still to do are kept.
+`/aside plan` has Claude turn the queue into steps, shown in a frame. Anything unclear goes back to the queue with Claude's question.
 
-`/aside run` sends the steps one after another, each once the one before ends. Each step knows where it stands in the plan, does only its own work and ends with a one-line result, shown under the step in `/aside`. A step that needs your answer pauses the plan, and the line above the prompt says so: answer it, then press <kbd>continue</kbd> or type `/aside continue`, and the run goes on as it was to. After the last step, Claude sums the run up: what was done, what is still open and what comes next.
+`/aside run` sends one step at a time, each ending with a one-line result. A step that needs you pauses the plan: answer, then press <kbd>continue</kbd>. After the last step, Claude sums the run up.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/step-4-dark.svg">
@@ -67,42 +67,27 @@ Requires <kbd>Claude Code</kbd> 2.1.301 or newer. The plugin API <kbd>aside</kbd
 
 ## Commands
 
-<table>
-  <tr>
-    <th colspan="2">Queue</th>
-    <th colspan="2">Entries</th>
-  </tr>
-  <tr>
-    <td><code>/aside</code></td><td>Show the queue and the plan; while Claude works, in the pane</td>
-    <td><code>/aside TEXT</code></td><td>Queue TEXT, as <code>+</code> would</td>
-  </tr>
-  <tr>
-    <td><code>/aside plan</code></td><td>Have Claude turn the queue into steps</td>
-    <td><code>/aside pop [N]</code></td><td>Put the newest one (or N) in the box</td>
-  </tr>
-  <tr>
-    <td><code>/aside run</code></td><td>Run the plan step by step, or the queue entry by entry</td>
-    <td><code>/aside edit N</code></td><td>Rework one and queue it again</td>
-  </tr>
-  <tr>
-    <td><code>/aside run N [M ...]</code></td><td>Run only those steps, or those entries once no step is left to do</td>
-    <td><code>/aside move N M</code></td><td>Move N to place M</td>
-  </tr>
-  <tr>
-    <td><code>/aside run all</code></td><td>Send the queue as is, no plan</td>
-    <td><code>/aside remove N [M ...]</code></td><td>Remove one, or several at once</td>
-  </tr>
-  <tr>
-    <td><code>/aside stop</code></td><td>Stop after the current step</td>
-    <td><code>/aside clear</code></td><td>Empty the queue</td>
-  </tr>
-  <tr>
-    <td><code>/aside help</code></td><td>List every command</td>
-    <td><code>/aside undo</code></td><td>Bring back what the last plan, run or clear took, before Claude answers it</td>
-  </tr>
-</table>
+```text
+/aside                 show the queue and the plan
+/aside plan            have Claude turn the queue into steps
+/aside run             run the plan step by step, or the queue entry by entry
+/aside run 3 1         run only those steps, or those entries
+/aside run all         send the queue as is, no plan
+/aside continue        go on after a step paused to ask you
+/aside stop            stop after the current step
 
-`N` is a number as `/aside` shows it; in brackets, `[N]`, you can leave it out. Tab completes every command.
+/aside TEXT            queue TEXT, as + would
+/aside pop [N]         put the newest entry, or entry N, in the prompt box
+/aside edit N          rework entry N and queue it again
+/aside move N M        move entry N to place M
+/aside remove N ...    remove one entry, or several
+/aside clear           empty the queue
+/aside undo            bring back what the last plan, run or clear took
+/aside scan FILE       read the tags of a file Claude did not write
+/aside help            list every command
+```
+
+`N` is a number as `/aside` shows it, and `[N]` may be left out. While Claude works, `/aside` opens the list in a pane. Tab completes every command.
 
 ## More
 
@@ -114,18 +99,10 @@ Requires <kbd>Claude Code</kbd> 2.1.301 or newer. The plugin API <kbd>aside</kbd
 
 <br>
 
-| | What | When |
-| --- | --- | --- |
-| **Keeps** | The queue, the plan and what `/aside undo` brings back, one set per project, in Claude Code's store for the plugin (a JSON file under `~/.claude/plugins/store/`). It writes no file of yours. | Always |
-| **Reads** | Markdown files Claude wrote or edited this session, and files you `/aside scan`, for `<!-- ? -->` tags | `/aside`, a plan or a run, and when Claude answers |
-| | The project's markdown files, to find the text you copied | A comment on copied text that names no file |
-| | The clipboard, the lines you selected in Claude's reply, the last tool output of the turn | A comment |
-| | The git branch of the project | Each entry |
-| **Runs** | `powershell.exe` with `Get-Clipboard` (WSL, Windows), `pbpaste` (macOS), `wl-paste`, `xclip` or `xsel` (Linux) | Reading the clipboard |
-| | `git rev-parse --abbrev-ref HEAD` | Each entry |
-| | `grep -rlizP` over the project's markdown files | A comment on copied text that names no file |
-| **Sends** | The entries, with what each points at, the task and branch it came with, and the tool output, as a prompt to Claude | `/aside plan`, `/aside run`, or `afterClaudeAnswers` |
-| | The text you typed, never what you copied, to Haiku through Claude Code, to be corrected | Each entry, while `tidy` is `on` |
+- **Keeps** the queue, the plan and what `/aside undo` brings back, one set per project, in Claude Code's store for the plugin (`~/.claude/plugins/store/`). It writes no file of yours.
+- **Reads** `<!-- ? -->` tags in markdown files Claude wrote or edited this session, or that you `/aside scan`; for a comment, the clipboard, the lines you selected in Claude's reply, the last tool output and the project's markdown files; the project's git branch.
+- **Runs** a clipboard reader (`powershell.exe` on WSL and Windows, `pbpaste` on macOS, `wl-paste`, `xclip` or `xsel` on Linux), `git rev-parse --abbrev-ref HEAD`, and `grep -rlizP` over the project's markdown files.
+- **Sends** the entries to Claude only on `/aside plan`, `/aside run` or `afterClaudeAnswers`, and, while `tidy` is on, the text you typed to Haiku through Claude Code, never what you copied.
 
 aside opens no network connection of its own and installs nothing.
 
@@ -136,17 +113,16 @@ aside opens no network connection of its own and installs nothing.
 
 <br>
 
-| You type or do | It queues |
-| --- | --- |
-| `why is this so slow +?` | the whole draft, as `+? why is this so slow` |
-| `+? why did this fail`, nothing copied | the question with the last tool output, an error first |
-| `+? @docs/report.md:42 why this order` | a question about line 42 of that file |
-| `+! @report.md#results shorter` | a change for the Results heading |
-| `+- #appendix` | a drop for an Appendix heading in a file written this session |
-| `<!-- ? why -->` in a markdown file | a question, and `!` a change, `-` a drop, `+` dig deeper |
-| select lines of Claude's reply | the selected lines, when nothing new is copied (fullscreen mode) |
+```text
+why is this so slow +?           the whole draft, as a question
++? why did this fail             nothing copied: the last tool output, an error first
++? @docs/report.md:42 why        line 42 of that file
++! @report.md#results shorter    the Results heading
++- #appendix                     a heading in a file Claude wrote this session
+<!-- ? why -->                   a tag in a markdown file
+```
 
-Tags count in markdown files Claude wrote or edited this session. `/aside scan FILE` adds any other file.
+In a tag, `!` is a change, `-` a drop and `+` dig deeper. Tags count in markdown files Claude wrote or edited this session; `/aside scan FILE` adds any other. In fullscreen mode, lines you select in Claude's reply count as copied.
 
 </details>
 
@@ -157,13 +133,9 @@ Tags count in markdown files Claude wrote or edited this session. `/aside scan F
 
 Change these in `/config`:
 
-| Setting | Default | Or | What it does |
-| --- | --- | --- | --- |
-| `afterClaudeAnswers` | `wait` | `plan`, `run all` | Once Claude answers: wait for you, or plan or run all by itself |
-| `order` | `oldest` | `newest` | Which entry comes first in the list and in a run |
-| `tidy` | `on` | `off` | Fix the spelling and wording of what you type |
-
-The clipboard is read with `powershell` on WSL and Windows, `pbpaste` on macOS, and `wl-paste`, `xclip` or `xsel` on Linux, only for a comment that names no line or heading.
+- `afterClaudeAnswers`: `wait` (default), `plan` or `run all`. What aside does once Claude answers.
+- `order`: `oldest` (default) or `newest`. Which entry comes first in the list and in a run.
+- `tidy`: `on` (default) or `off`. Whether a small model fixes the spelling and wording of what you type.
 
 </details>
 
