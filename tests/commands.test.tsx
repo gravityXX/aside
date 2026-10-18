@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
-import { REPORT, REPORT_PATH, world } from './world'
+import { REPORT, REPORT_PATH, STEPS, world } from './world'
 
 describe('/aside', () => {
   test('/aside alone lines the queue and the plan up in columns, and sends nothing', async ($, on) => {
@@ -23,6 +23,46 @@ describe('/aside', () => {
     )
     await idle()
     expect(sent).toEqual([])
+  })
+
+  test('what an entry is about, a second line and the step states each keep to their column', async ($, on) => {
+    const { write, type, aside, savePlan, idle } = world($, on, { files: { [REPORT_PATH]: REPORT }, clip: 'Revenue grew by 12% in the third quarter' })
+    await write(REPORT_PATH)
+    await type('+ a\nsecond line')
+    await type('+? where from')
+    await savePlan(STEPS)
+    await aside('run')
+    await idle()
+
+    expect(await aside()).toBe(
+      [
+        '1 idea and 1 comment waiting',
+        '',
+        '  1  idea      a',
+        '               second line',
+        '  2  question  where from',
+        '               ↳ docs/report.md:5 · "Revenue grew by 12% in the third quarter"',
+        '',
+        'Tags in files',
+        '',
+        '  ·  question  is this the same for Poland',
+        '               ↳ docs/report.md:9 · "Costs stayed flat across all regions."',
+        '',
+        'Plan: 3 of 3 steps to do (/aside run)',
+        '',
+        '  1  running  One',
+        '  2  to do    Two',
+        '  3  to do    Three',
+      ].join('\n'),
+    )
+  })
+
+  test('/aside list and /aside ls show what /aside alone shows', async ($, on) => {
+    const { type, aside } = world($, on)
+    await type('+ a')
+
+    expect(await aside('list')).toBe(await aside())
+    expect(await aside('ls')).toBe(await aside())
   })
 
   test('/aside TEXT queues TEXT as + would, and answers with the line alone', async ($, on) => {
@@ -134,6 +174,7 @@ describe('changing entries', () => {
     await type('+ a\n+ b\n+? c')
 
     expect(await shown('move 3 1')).toEqual(['2 ideas and 1 comment waiting', '1 question c', '2 idea a', '3 idea b'])
+    expect(await shown()).toEqual(['2 ideas and 1 comment waiting', '1 question c', '2 idea a', '3 idea b'])
     expect(await aside('move 9 1')).toBe('Give two places from 1 to 3: /aside move 3 1')
   })
 })
@@ -162,6 +203,7 @@ describe('the order setting', () => {
     await type('+ bravo again')
     expect(await shown()).toEqual(['3 ideas waiting', '1 idea charlie', '2 idea bravo again', '3 idea alpha'])
     expect(await shown('move 3 1')).toEqual(['3 ideas waiting', '1 idea alpha', '2 idea charlie', '3 idea bravo again'])
+    expect(await shown()).toEqual(['3 ideas waiting', '1 idea alpha', '2 idea charlie', '3 idea bravo again'])
   })
 
   test('newest first: run goes from the newest, and undo brings the list back as it was', NEWEST, async ($, on) => {

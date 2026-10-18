@@ -296,18 +296,21 @@ describe('when Claude answers', () => {
     await idle()
 
     expect(sent).toHaveLength(1)
+    expect(sent[0]).toContain('Ideas:\n1. dark mode (branch main)')
     expect(sent[0]).toContain('Work through all of it now')
   })
 
   test('a saved plan with steps to do holds the automatic hand-over back', { options: { afterClaudeAnswers: 'plan' } }, async ($, on) => {
-    const { sent, toasts, type, aside, savePlan, startTurn, endTurn, idle } = world($, on)
+    const { sent, toasts, logged, type, aside, savePlan, startTurn, endTurn, idle } = world($, on)
     await savePlan([{ title: 'One', prompt: 'Do one.' }])
     await startTurn('build', 't1')
     await type('+ c', 't1')
+    const said = logged.length
     await endTurn('t1')
     await idle()
     expect(sent).toEqual([])
     expect(toasts).toEqual([])
+    expect(logged.slice(said)).toEqual([])
 
     await aside('plan')
     await idle()
