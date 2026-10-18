@@ -19,13 +19,15 @@ Want to queue prompts without interrupting Claude, or send something only after 
 
 ### 1. Note it while Claude works
 
-Start a message with `+`: it goes to the queue, not to Claude. To comment on something, copy it first, from anywhere. No paste: aside reads the clipboard.
+**To comment on something, copy it first** (<kbd>Ctrl</kbd>+<kbd>C</kbd> or <kbd>&#x2318;</kbd>+<kbd>C</kbd>), from anywhere: VS Code, a terminal, a web page. Then start a message with `+`. It goes to the queue, not to Claude, and takes what you copied along. No paste needed.
 
 ```text
 > + cache the parsed config     idea
 > +! make it a table            change
 > +- not needed here            drop
 > ++ compare with 2024          dig deeper
+
+  (copied with Ctrl+C: "Revenue grew by 12% in Q3.")
 > +? where is this from         question
   queued ? docs/report.md:42 "Revenue grew by 12% in Q3." (5 waiting)
 ```
