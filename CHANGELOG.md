@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Trial entry for the automatic bump.
+
 ## 0.9.0 - 2026-10-18
 
 - The setting `whenTurnEnds` is now `afterClaudeAnswers`, and its value `send` is now `run all`, as the command it stands for. A value set under the old name is not carried over: set `afterClaudeAnswers` again in `/config`.
