@@ -1,12 +1,17 @@
 # aside
 
-Note ideas and comments while Claude works, without interrupting it. Hand them over when you are ready.
+A prompt queue for Claude Code. Note ideas and comments while Claude works, without interrupting it, and hand them over when you are ready.
 
 <p>
   <a href="https://github.com/gravityXX/aside/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/gravityXX/aside/ci.yml?branch=main&style=flat-square&label=CI&color=555"></a>
   <img alt="Version" src="https://img.shields.io/github/package-json/v/gravityXX/aside?filename=.claude-plugin%2Fplugin.json&style=flat-square&label=version&color=555">
-  <img alt="License" src="https://img.shields.io/github/license/gravityXX/aside?style=flat-square&color=555">
+  <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-555?style=flat-square"></a>
 </p>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/how-it-works-dark.svg">
+  <img alt="While Claude works on your task, your ideas and comments go to a queue instead of to Claude. When it is done you answer it as usual, and /aside plan hands the queue over as steps." src="assets/how-it-works-light.svg">
+</picture>
 
 ## How it works
 
@@ -87,11 +92,11 @@ Requires Claude Code 2.1.301 or newer. The plugin API aside builds on is in earl
 <details>
 <summary>Other ways to comment</summary>
 
-Copy from anywhere: VS Code, a terminal, a markdown preview, a web page, a PDF. Any way of copying works; only what lands on the clipboard counts.
+<br>
 
-Text found in a markdown file of the project (five words or more) is pinned to its line. Anything else is kept as a quote, marked (not in a file).
+**Copy from anywhere.** VS Code, a terminal, a markdown preview, a web page, a PDF: whatever lands on the clipboard counts. Text found in a markdown file of the project (five words or more) is pinned to its line. Anything else is kept as a quote.
 
-Name the place yourself, right after the mark:
+**Name the place yourself,** right after the mark:
 
 ```text
 +? @docs/report.md:42 why this order
@@ -99,20 +104,31 @@ Name the place yourself, right after the mark:
 +- #appendix
 ```
 
-On Claude's own reply in the terminal, select the lines with the mouse (fullscreen mode) instead of copying. With nothing copied or selected, or copied text no file holds, a comment carries the last tool output of the turn (an error first), so `+? why did this fail` arrives with its error.
+**Select instead of copying.** On Claude's own reply in the terminal (fullscreen mode), select the lines with the mouse.
 
-In markdown files Claude wrote or edited this session, tags count too: `<!-- ? question -->`, `<!-- ! change -->`, `<!-- - drop -->`, `<!-- + dig deeper -->`. `/aside scan FILE` adds any other file.
+**Ask about a failure.** With nothing copied or selected, a comment carries the last tool output of the turn, an error first, so `+? why did this fail` arrives with its error.
+
+**Leave tags in a file.** In markdown files Claude wrote or edited this session, these count as comments too. `/aside scan FILE` adds any other file.
+
+```markdown
+<!-- ? question -->
+<!-- ! change -->
+<!-- - drop -->
+<!-- + dig deeper -->
+```
 
 </details>
 
 <details>
 <summary>Settings, platforms and privacy</summary>
 
-`/config` has one setting, `whenTurnEnds`: what happens to the queue when Claude finishes a turn. `wait` (default) keeps it until you run `/aside plan` or `/aside run`, `plan` turns it into a plan at once, `send` sends it to be done at once. Neither hands it over while a saved plan still has steps to do.
+<br>
 
-The clipboard is read with `powershell.exe` on WSL, `pbpaste` on macOS, `wl-paste`, `xclip` or `xsel` on Linux and `powershell` on Windows. It is read only for a comment that names no line or heading, never for a plain `+` idea.
+**One setting.** `/config` has `whenTurnEnds`: what happens to the queue when Claude finishes a turn. `wait` (default) keeps it until you run `/aside plan` or `/aside run`, `plan` turns it into a plan at once, `send` sends it to be done at once. Neither hands it over while a saved plan still has steps to do.
 
-The queue stays on your machine, one per project. Nothing reaches Claude until you run `/aside plan` or `/aside run`, or `whenTurnEnds` hands it over.
+**Clipboard.** Read with `powershell.exe` on WSL, `pbpaste` on macOS, `wl-paste`, `xclip` or `xsel` on Linux and `powershell` on Windows. Only for a comment that names no line or heading, never for a plain `+` idea.
+
+**Privacy.** The queue stays on your machine, one per project. Nothing reaches Claude until you run `/aside plan` or `/aside run`, or `whenTurnEnds` hands it over.
 
 </details>
 
