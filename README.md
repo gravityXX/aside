@@ -29,7 +29,7 @@
 
 ### 2. Answer Claude as usual
 
-Your reply goes to Claude. By default the queue just waits, in a line above the prompt. Its <kbd>list</kbd> button opens a pane with the queue, the tags in files and the plan, and <kbd>plan</kbd> to organize them. Beside it, <kbd>run plan</kbd> shows while the plan has steps left, and <kbd>stop</kbd> while a step runs. `/aside` opens the same pane while Claude works.
+Your reply goes to Claude. By default the queue just waits, in a line above the prompt. Its <kbd>list</kbd> button opens a pane with the queue, the tags in files and the plan, and <kbd>plan</kbd> to organize them. Beside it, <kbd>run plan</kbd> shows while the plan has steps left, <kbd>continue</kbd> after a step paused it, and <kbd>stop</kbd> while a step runs. `/aside` opens the same pane while Claude works.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/step-2-dark.svg">
@@ -49,7 +49,7 @@ Nothing reaches Claude until you say so. `/aside` shows the queue in a frame, an
 
 `/aside plan` has Claude organize the queue into steps and save them. The plan shows in a frame, and what Claude finds done, contradictory or unclear goes back to the queue with its question. Plan again after adding more: the steps done and still to do are kept.
 
-`/aside run` sends the steps one after another, each once the one before ends. Each step knows where it stands in the plan, does only its own work and ends with a one-line result, shown under the step in `/aside`. A step that needs your answer pauses the plan: answer it, then `/aside run` goes on. After the last step, Claude sums the run up: what was done, what is still open and what comes next.
+`/aside run` sends the steps one after another, each once the one before ends. Each step knows where it stands in the plan, does only its own work and ends with a one-line result, shown under the step in `/aside`. A step that needs your answer pauses the plan, and the line above the prompt says so: answer it, then press <kbd>continue</kbd> or type `/aside continue`, and the run goes on as it was to. After the last step, Claude sums the run up: what was done, what is still open and what comes next.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/step-4-dark.svg">

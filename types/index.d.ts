@@ -40,9 +40,12 @@ export type Plan = {
   // pausedFor what Claude asked for when it paused the plan from this step, and then the
   // steps still to run after it when /aside run named them (in place of the chain).
   active?: { step: number; isChain: boolean; turnId?: string; sessionId: string; pausedFor?: string; then?: number[] }
+  // A run a step paused with the wait tool: the step that paused it, why, and how the run
+  // was to go on (as a chain, or with the steps /aside run named), until it goes on or stops.
+  paused?: { step: number; reason: string; isChain: boolean; then?: number[] }
 }
 
-export type Band = { ideas: number; comments: number; tags: number; steps: number; done: number; running?: number }
+export type Band = { ideas: number; comments: number; tags: number; steps: number; done: number; running?: number; paused?: number }
 
 declare module 'claude-code' {
   interface PluginState {

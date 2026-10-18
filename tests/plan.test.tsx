@@ -421,12 +421,69 @@ describe('running the plan', () => {
     await endTurn('s1')
     await idle()
     expect(sent).toHaveLength(1)
-    expect(toasts).toEqual(['Plan paused after step 1: needs your yes on the design. /aside run continues.'])
-    expect(await shown()).toEqual(['The queue is empty.', 'Plan: 2 of 3 steps to do (/aside run)', '1 done One', '2 to do Two', '3 to do Three'])
+    expect(toasts).toEqual(['Plan paused after step 1: needs your yes on the design. /aside continue goes on.'])
+    expect(await shown()).toEqual([
+      'The queue is empty.',
+      'Plan paused after step 1 (needs your yes on the design), 2 of 3 steps to do (/aside continue)',
+      '1 done One',
+      '2 to do Two',
+      '3 to do Three',
+    ])
 
-    expect(await aside('run')).toBe('Running the plan: 2 steps, from step 2. /aside stop stops after the current one.')
+    expect(await aside('run')).toBe('Going on with the plan from step 2. /aside stop stops after the current one.')
     await idle()
     expect(sent[1]).toContain('Do two.')
+  })
+
+  test('a paused run of chosen steps goes on with the steps it named, and /aside continue does what run does', async ($, on) => {
+    const { sent, toasts, aside, shown, savePlan, startTurn, endTurn, answer, idle } = world($, on)
+    await savePlan([...STEPS, { title: 'Four', prompt: 'Do four.' }])
+    await aside('run 3 1 2')
+    await idle()
+    await startTurn(sent[0]!, 's3')
+    await $.tool.call({ tool: 'mcp__aside__wait', reason: 'which config to cache' } as never)
+    await endTurn('s3')
+    await idle()
+    expect(sent).toHaveLength(1)
+
+    expect(await aside('continue')).toBe('Going on with the plan from step 1: steps 1, 2. /aside stop stops after the current one.')
+    await idle()
+    await answer('s1')
+    await answer('s2')
+    expect(sent.map(text => text.split('\n')[0])).toEqual(['Do three.', 'Do one.', 'Do two.'])
+    expect(toasts.at(-1)).toBe('Step 2 done')
+    expect((await shown()).slice(1)).toEqual(['Plan: 1 of 4 steps to do (/aside run)', '1 done One', '2 done Two', '3 done Three', '4 to do Four'])
+  })
+
+  test('/aside stop drops a paused run, and /aside run then starts again from the first step to do', async ($, on) => {
+    const { sent, aside, shown, savePlan, startTurn, endTurn, idle } = world($, on)
+    await savePlan(STEPS)
+    await aside('run 3 1')
+    await idle()
+    await startTurn(sent[0]!, 's3')
+    await $.tool.call({ tool: 'mcp__aside__wait', reason: 'x' } as never)
+    await endTurn('s3')
+
+    expect(await aside('stop')).toBe('Dropped the paused run. /aside run starts the plan again from its first step to do.')
+    expect((await shown())[1]).toBe('Plan: 2 of 3 steps to do (/aside run)')
+    expect(await aside('stop')).toBe('Nothing is running.')
+    expect(await aside('run')).toBe('Running the plan: 2 steps, from step 1. /aside stop stops after the current one.')
+  })
+
+  test('a step run by its number after a pause starts a run of its own, and the pause is gone', async ($, on) => {
+    const { sent, aside, shown, savePlan, startTurn, endTurn, answer, idle } = world($, on)
+    await savePlan(STEPS)
+    await aside('run')
+    await idle()
+    await startTurn(sent[0]!, 's1')
+    await $.tool.call({ tool: 'mcp__aside__wait', reason: 'x' } as never)
+    await endTurn('s1')
+
+    expect(await aside('run 3')).toBe('Running step 3: Three')
+    await idle()
+    await answer('s3')
+    expect(sent).toHaveLength(2)
+    expect((await shown())[1]).toBe('Plan: 1 of 3 steps to do (/aside run)')
   })
 
   test('the wait tool is refused outside a step of the plan', async ($, on) => {
