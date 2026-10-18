@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Each step of a plan tells Claude where it stands: the titles of the steps done and still to do, and that the next one is sent by itself. A step that needs your answer pauses the plan with the plugin's new `wait` tool: the step finishes, the next one waits, and `/aside run` goes on from there.
+
 ## 0.11.0 - 2026-10-18
 
 - `/aside remove` takes several numbers at once: `/aside remove 1 2 3` removes those three entries, or none when one of the numbers is out of range.

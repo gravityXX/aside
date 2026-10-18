@@ -70,10 +70,9 @@ async function releaseStep($: Engine, index: number, why: string) {
 
 // Runs step `index` of the plan; with `isChain`, the next one follows when it ends. A stop
 // that lands before its prompt goes out keeps it from going out at all.
-async function startStep($: Engine, index: number, isChain: boolean) {
+async function startStep($: Engine, ctx: Context, index: number, isChain: boolean) {
   const keys = await projectKeys($)
   const plan = await loadPlan($, keys.plan)
-  const step = plan.steps[index]!
   plan.active = { step: index, isChain, sessionId: await $.session.id() }
   await savePlan($, keys.plan, plan)
   await refreshBand($)
@@ -83,7 +82,7 @@ async function startStep($: Engine, index: number, isChain: boolean) {
       const now = await loadPlan($, keys.plan)
       const isStillDue = now.active?.step === index && now.active.turnId === undefined
 
-      return isStillDue ? stepPrompt(step, index + 1, plan.steps.length) : undefined
+      return isStillDue ? stepPrompt(plan.steps, index, isChain, ctx.session.waitTool) : undefined
     },
     why => releaseStep($, index, why),
   )
@@ -94,7 +93,7 @@ const takeOverNote = (plan: Plan) => (plan.active ? ` (another session had step 
 
 // /aside run on the saved plan: step `n`, or the plan from its first step not done.
 // Undefined when no step is named and every step is done, so the queue runs entry by entry instead.
-export async function runPlan($: Engine, n?: number): Promise<string | undefined> {
+export async function runPlan($: Engine, ctx: Context, n?: number): Promise<string | undefined> {
   const keys = await projectKeys($)
   const plan = await loadPlan($, keys.plan)
   if (plan.active && plan.active.sessionId === (await $.session.id())) {
@@ -108,7 +107,7 @@ export async function runPlan($: Engine, n?: number): Promise<string | undefined
     if (n < 1 || n > plan.steps.length) {
       return `Give a step from 1 to ${plan.steps.length}, as /aside shows them.`
     }
-    await startStep($, n - 1, false)
+    await startStep($, ctx, n - 1, false)
 
     return `Running step ${n}: ${plan.steps[n - 1]!.title}${note}`
   }
@@ -116,7 +115,7 @@ export async function runPlan($: Engine, n?: number): Promise<string | undefined
   if (first < 0) {
     return undefined
   }
-  await startStep($, first, true)
+  await startStep($, ctx, first, true)
   const left = plan.steps.filter(step => !step.isDone).length
 
   return `Running the plan: ${formatCount(left, 'step')}, from step ${first + 1}. /aside stop stops after the current one.${note}`
@@ -139,7 +138,7 @@ export async function runEntries($: Engine, ctx: Context): Promise<string> {
   await takeForHandOver($, keys, stored, tags)
   await savePlan($, keys.plan, { steps })
   await refreshBand($, 0)
-  await startStep($, 0, true)
+  await startStep($, ctx, 0, true)
 
   return `Running ${formatCount(steps.length, 'entry')} one by one. /aside stop stops after the current one.${note}`
 }
@@ -234,6 +233,43 @@ export async function savePlanFromTool(ctx: Context, $: Engine, e: PlanToolCall[
   }
 }
 
+// The tool a step pauses the plan with when it needs the person's answer before the next one.
+export async function registerWaitTool($: Engine): Promise<string> {
+  const registered = await $.tool.register({
+    name: 'wait',
+    description:
+      "Pauses the user's aside plan after the step you are working on, so the user can answer you before the next step is sent. " +
+      "Call it only from a step of the aside plan that needs the user's answer or decision, then end your reply with the question.",
+    inputSchema: {
+      type: 'object',
+      properties: { reason: { type: 'string', description: 'what you need from the user, in a few words' } },
+      required: ['reason'],
+    },
+    isDeferred: false,
+  })
+
+  return registered.tool
+}
+
+// The step finishes as usual; the next one waits for /aside run.
+export async function pausePlanFromTool(ctx: Context, $: Engine, e: PlanToolCall[1], next: PlanToolCall[2]) {
+  if (e.tool !== ctx.session.waitTool) {
+    return next(e)
+  }
+  const keys = await projectKeys($)
+  const plan = await loadPlan($, keys.plan)
+  const active = plan.active
+  if (!active || active.turnId === undefined || active.sessionId !== (await $.session.id())) {
+    return { deny: 'no step of the aside plan is running; call this tool only from a step of the plan' }
+  }
+  const reason = (e as unknown as { reason?: unknown }).reason
+  active.isChain = false
+  active.pausedFor = typeof reason === 'string' && reason.trim() !== '' ? shortenText(reason, 120) : 'it needs your answer'
+  await savePlan($, keys.plan, plan)
+
+  return { result: 'The plan pauses after this step. End your reply with your question; the user continues with /aside run.' }
+}
+
 // The turn of a plan step: remember which, so its end runs the next one.
 async function bindStepTurn($: Engine, turnId: string) {
   const keys = await projectKeys($)
@@ -261,7 +297,7 @@ type TurnEndReason = Args<'turn.complete'>['reason']
 
 // The step that ran in this turn ends: after an answer it is done, and the next one starts
 // when the plan runs as a chain; otherwise the plan stops there.
-async function finishStep($: Engine, keys: Keys, plan: Plan, reason: TurnEndReason) {
+async function finishStep($: Engine, ctx: Context, keys: Keys, plan: Plan, reason: TurnEndReason) {
   const active = plan.active!
   delete plan.active
   if (reason === 'answer') {
@@ -269,7 +305,9 @@ async function finishStep($: Engine, keys: Keys, plan: Plan, reason: TurnEndReas
     const after = plan.steps.findIndex((step, i) => i > active.step && !step.isDone)
     await savePlan($, keys.plan, plan)
     if (active.isChain && after >= 0) {
-      await startStep($, after, true)
+      await startStep($, ctx, after, true)
+    } else if (active.pausedFor !== undefined && after >= 0) {
+      $.ui.toast(`Plan paused after step ${active.step + 1}: ${active.pausedFor}. /aside run continues.`)
     } else {
       $.ui.toast(active.isChain ? 'Plan done' : `Step ${active.step + 1} done`)
     }
@@ -310,7 +348,7 @@ export async function onTurnEnd(ctx: Context, $: Engine, e: TurnComplete[1], nex
   const plan = await loadPlan($, keys.plan)
   const isThisStep = plan.active?.turnId === e.turnId && plan.active.sessionId === (await $.session.id())
   if (isThisStep) {
-    await finishStep($, keys, plan, e.reason)
+    await finishStep($, ctx, keys, plan, e.reason)
   } else {
     await handOverAfterAnswer($, ctx, plan, e.reason)
   }

@@ -118,8 +118,25 @@ export const entryPrompt = (entry: Entry, root: string, withContext = true): str
 export const popPrompt = (entry: Entry, root: string): string =>
   entry.kind === 'idea' ? entry.text : entryPrompt(entry, root, false)
 
-export const stepPrompt = (step: Step, n: number, total: number): string =>
-  `${step.prompt}\n\n(Step ${n} of ${total} of the queue plan, "${step.title}", ${STEP_MARKER}.)`
+// A step of the plan as the prompt that runs it: the step's own prompt, then, in a plan of
+// several, where it stands, so Claude does this step alone and knows how to pause the plan.
+export const stepPrompt = (steps: readonly Step[], index: number, isChain: boolean, waitTool: string): string => {
+  const step = steps[index]!
+  const head = `${step.prompt}\n\n(Step ${index + 1} of ${steps.length} of the queue plan, "${step.title}", ${STEP_MARKER}.`
+  if (steps.length === 1) {
+    return `${head})`
+  }
+  const stateOf = (one: Step, i: number) => (i === index ? 'this one' : one.isDone ? 'done' : 'to do')
+  const map = steps.map((one, i) => `${i + 1} ${shortenText(one.title, 60)} (${stateOf(one, i)})`).join(' · ')
+  const isLast = !steps.some((one, i) => i > index && !one.isDone)
+  const next = !isChain
+    ? 'Do this step only.'
+    : isLast
+      ? 'Do this step only; it is the last one.'
+      : `Do this step only; the next one is sent when you answer. If you need my answer first, call the ${waitTool} tool and stop.`
+
+  return `${head}\nPlan: ${map}.\n${next})`
+}
 
 // What the small model is told when it tidies the text of an entry; the quote is never sent.
 export const TIDY_SYSTEM = [

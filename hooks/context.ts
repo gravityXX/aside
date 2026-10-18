@@ -18,6 +18,8 @@ export type Session = {
   // The plan tool's full name as the engine registered it: its prefix comes from where the
   // plugin was loaded from (a marketplace install, a --plugin-dir folder), so it is never assumed.
   planTool: string
+  // The same for the tool a step pauses the plan with.
+  waitTool: string
   // The main loop's current (or last) turn, and whether it was the plugin's own.
   turnId?: string
   isOwnTurn: boolean
@@ -45,6 +47,7 @@ export const createContext = (options: Parameters<Register>[1]): Context => ({
   },
   session: {
     planTool: 'mcp__aside__plan',
+    waitTool: 'mcp__aside__wait',
     isOwnTurn: false,
     isRunning: false,
     writes: Promise.resolve(),

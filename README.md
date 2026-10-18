@@ -70,7 +70,7 @@ Requires <kbd>Claude Code</kbd> 2.1.301 or newer. The plugin API <kbd>aside</kbd
     <td><code>/aside edit N</code></td><td>Rework one and queue it again</td>
   </tr>
   <tr>
-    <td><code>/aside run [N]</code></td><td>Run the steps, or step N</td>
+    <td><code>/aside run [N]</code></td><td>Run the steps in turn (Claude can pause to ask you), or step N</td>
     <td><code>/aside move N M</code></td><td>Move N to place M</td>
   </tr>
   <tr>
