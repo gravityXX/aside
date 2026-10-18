@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.11.0 - 2026-10-18
 
 - `/aside remove` takes several numbers at once: `/aside remove 1 2 3` removes those three entries, or none when one of the numbers is out of range.
 - `/aside undo` no longer brings back what Claude has already done: once the turn with a planning prompt, a `run all` or the steps of `/aside run` ends with an answer, there is nothing left to undo. A clear stays undoable until the next plan, run or clear.
