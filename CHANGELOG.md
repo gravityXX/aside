@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.0 - 2026-10-18
+
+- The setting `whenTurnEnds` is now `afterClaudeAnswers`, and its value `send` is now `run all`, as the command it stands for. A value set under the old name is not carried over: set `afterClaudeAnswers` again in `/config`.
+
 ## 0.8.1 - 2026-10-18
 
 - `/aside plan` only organizes: Claude is told to use no tool but the plan tool and to leave questions for their steps, instead of answering them at once.

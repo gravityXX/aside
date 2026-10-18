@@ -764,7 +764,7 @@ describe('the task an idea came with', () => {
 })
 
 describe('when a turn ends', () => {
-  test('whenTurnEnds: plan hands the queue over by itself, but not after its own turn', { options: { whenTurnEnds: 'plan' } }, async ($, on) => {
+  test('afterClaudeAnswers: plan hands the queue over by itself, but not after its own turn', { options: { afterClaudeAnswers: 'plan' } }, async ($, on) => {
     const { sent, clock } = world(on)
     await type($, 'build the parser')
     await $.turn.start({ text: 'build the parser', turnId: 't1' })
@@ -780,7 +780,7 @@ describe('when a turn ends', () => {
     expect(sent.filter(text => text.includes('Organize all of it'))).toHaveLength(1)
   })
 
-  test('a saved plan with steps to do holds the automatic hand-over back', { options: { whenTurnEnds: 'plan' } }, async ($, on) => {
+  test('a saved plan with steps to do holds the automatic hand-over back', { options: { afterClaudeAnswers: 'plan' } }, async ($, on) => {
     const { sent, toasts, clock } = world(on)
     await $.tool.call({ tool: 'mcp__aside__plan', steps: [{ title: 'One', prompt: 'Do one.' }] } as never)
     await $.turn.start({ text: 'build', turnId: 't1' })
@@ -794,6 +794,16 @@ describe('when a turn ends', () => {
     await clock.advance(100)
     expect(sent[0]).toContain('The saved plan still has these steps to do. Keep them')
     expect(sent[0]).toContain('1. One: Do one.')
+  })
+
+  test('afterClaudeAnswers: run all sends the queue as it is', { options: { afterClaudeAnswers: 'run all' } }, async ($, on) => {
+    const { sent, clock } = world(on)
+    await $.turn.start({ text: 'build', turnId: 't1' })
+    await type($, '+ dark mode', 't1')
+    await ends($, 't1')
+    await clock.advance(100)
+    expect(sent.at(-1)).toContain('dark mode')
+    expect(sent.at(-1)).not.toContain('Organize all of it')
   })
 
   test('the default waits for /aside', async ($, on) => {
