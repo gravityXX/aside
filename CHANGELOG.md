@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.18.3 - 2026-10-18
 
 - On WSL without `WSL_DISTRO_NAME`, as in an ssh login or a systemd service, comments read the clipboard again: `powershell.exe` is now tried on every system first, and a reader that is not installed is passed over at once.
 - A `+` sent from a phone or the web through Remote Control is queued, where it used to go to Claude, and a comment sent that way does not read this machine's clipboard.
