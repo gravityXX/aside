@@ -1,6 +1,6 @@
 # aside
 
-A prompt queue for Claude Code. Note ideas and comments while Claude works, without interrupting it, and hand them over when you are ready.
+**aside** is a prompt queue for Claude Code. Note ideas and comments while Claude works, without interrupting it, and hand them over when you are ready.
 
 <p>
   <a href="https://github.com/gravityXX/aside/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/gravityXX/aside/ci.yml?branch=main&style=flat-square&label=CI&color=555"></a>
@@ -13,7 +13,7 @@ A prompt queue for Claude Code. Note ideas and comments while Claude works, with
   <img alt="While Claude works on your task, your ideas and comments go to a queue instead of to Claude. When it is done you answer it as usual, and /aside plan hands the queue over as steps." src="assets/how-it-works-light.svg">
 </picture>
 
-Want to queue prompts without interrupting Claude, or send something only after it finishes? That is what aside is for.
+Want to queue prompts without interrupting Claude, or send something only after it finishes? That is what **aside** is for.
 
 ## How it works
 
@@ -60,7 +60,7 @@ Nothing reaches Claude until you say so: look at the list, then plan, run or pop
 /plugin install aside@aside
 ```
 
-Requires Claude Code 2.1.301 or newer. The plugin API aside builds on is in early access and may change between releases.
+Requires Claude Code 2.1.301 or newer. The plugin API **aside** builds on is in early access and may change between releases.
 
 ## Commands
 
