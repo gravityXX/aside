@@ -1,13 +1,11 @@
 # idea-queue
 
-Park ideas and comments while Claude works, then turn them into an ordered plan of prompts and run it step by step.
-
-While a task runs, new ideas keep coming: something to fix next, a question about the report an agent just wrote, a section you would drop. Typing them in interrupts the task or piles new threads onto it. idea-queue keeps them out of the conversation until you ask for them.
+Ideas keep coming while Claude works. Park them without interrupting it, then run them as a plan.
 
 ```text
-+ add a dark mode toggle                 an idea, queued, Claude never sees it
-+? where does this number come from      a question about the fragment you just copied
-/queue                                   Claude groups everything into a plan of prompts
++ add a dark mode toggle                 queued; Claude keeps working
++? where does this number come from      a question about the text you just copied
+/queue plan                              Claude turns the queue into steps
 /queue run                               the steps run one after another
 ```
 
@@ -18,33 +16,54 @@ While a task runs, new ideas keep coming: something to fix next, a question abou
 /plugin install idea-queue@idea-queue
 ```
 
-idea-queue is a hooks-module plugin and needs Claude Code 2.1.301 or newer. That plugin API is in early access and may change between releases.
+Needs Claude Code 2.1.301 or newer.
 
-## Queue ideas
+## Park an idea
 
-A message that starts with `+` is stored instead of sent, mid-task included. The task keeps running and the line below your message says what was queued.
+Start a message with `+`. It goes into the queue instead of to Claude, even mid-task, and the prompt box is ready for the next one.
 
 ```text
 + rename the config loader
 + cache the parsed config
 ```
 
-When every line starts with `+`, each line is its own entry. Otherwise the whole message is one entry. A pasted diff is not mistaken for an idea. `/queue add tests for the parser` queues the same way, for when a command is closer to hand. Text that happens to look like a command (`/queue run 3`) is queued with `/queue + run 3`.
-
 ## Comment on what Claude wrote
 
-Agents often leave a report or a plan in a markdown file that you read in a preview, which you cannot edit. Select a fragment there, copy it, and type a comment with a mark:
+Reading a report Claude left? Copy a sentence from it and type a comment. idea-queue finds that sentence in the file and pins your comment to its line.
 
-| Mark | Meaning      | Example                          |
-| ---- | ------------ | -------------------------------- |
-| `+?` | question     | `+? where does this number come from` |
-| `+!` | change       | `+! make this a table`           |
-| `+-` | drop         | `+- drop this section`           |
-| `++` | dig deeper   | `++ compare with last year`      |
+| Mark | Means     | Example                               |
+| ---- | --------- | ------------------------------------- |
+| `+?` | question  | `+? where does this number come from` |
+| `+!` | change    | `+! make this a table`                |
+| `+-` | drop      | `+- drop this section`                |
+| `++` | go deeper | `++ compare with last year`           |
 
-idea-queue reads the clipboard, finds the fragment in the markdown files written in the session (by Claude or its subagents) or anywhere under the project, and pins the comment to that file and line. The match runs on words, so markup, line wraps and list numbers do not get in the way. When no file holds the copied text, the comment keeps it as a loose quote and says so. A comment on Claude's own reply works without copying: select the lines with the mouse in the terminal (fullscreen mode). A clipboard unchanged since the previous comment counts as stale, and then the selection wins. With nothing copied, a comment takes the last tool output of the turn, a failure first, so `+? why did this fail` arrives with the error it is about.
+## Plan and run
 
-Pin a comment yourself, without the clipboard, right after the mark:
+- `/queue plan` - Claude reads the queue, answers the questions, merges what belongs together and writes one prompt per step. Nothing runs yet.
+- `/queue run` - the steps run one by one. With no plan, each entry is a step.
+- `/queue run all` - for a few small things: everything in one message, at once.
+
+A bar above the prompt shows what waits and what runs, with a button for the next move.
+
+## Commands
+
+| Command          | What it does                                   |
+| ---------------- | ---------------------------------------------- |
+| `/queue`         | Show the queue and the plan                    |
+| `/queue plan`    | Turn the queue into steps                      |
+| `/queue run`     | Run the steps, or the entries, in order        |
+| `/queue stop`    | Stop after the current step                    |
+| `/queue pop [N]` | Put an entry in the prompt box, ready to send  |
+| `/queue edit N`  | Rework an entry and queue it again             |
+| `/queue clear`   | Empty the queue (`/queue undo` brings it back) |
+
+Tab completes them. `/queue help` lists the rest: `move`, `remove`, `run N`, `scan`.
+
+<details>
+<summary>Pinning a comment yourself</summary>
+
+Right after the mark, name the place instead of copying:
 
 ```text
 +? @docs/report.md:42 why this order
@@ -52,76 +71,36 @@ Pin a comment yourself, without the clipboard, right after the mark:
 +- #appendix
 ```
 
-In an editor you can also leave tags in the file. `/queue` reads them from the files written in the session, or from any file after `/queue scan FILE`:
+With nothing copied, a comment takes the lines you selected in Claude's reply (fullscreen mode), or the last command output, so `+? why did this fail` arrives with its error.
 
-```markdown
-<!-- ? is this the same for Poland -->
-<!-- ! do this as a table -->
-<!-- - drop this -->
-<!-- + expand -->
-```
+In an editor, tags in a markdown file count too: `<!-- ? question -->`, `<!-- ! change -->`, `<!-- - drop -->`, `<!-- + go deeper -->`.
 
-## Plan and run
+</details>
 
-Two words do the work:
+<details>
+<summary>Settings</summary>
 
-- `/queue plan` hands everything over in one message. Claude answers the questions straight away, merges related items into one step, keeps unrelated ones apart, orders them, writes a self-contained prompt for each step and saves the steps with the plugin's `plan` tool. Nothing runs yet.
-- `/queue run` sends the steps one by one: each step starts when the one before has finished. With no plan, every entry is a step of its own. The band above the prompt shows `step 2/4 running` with a stop button. `/queue stop` lets the current step finish and stops there. An interrupted step stops the plan.
+`/config` has one setting, `whenTurnEnds`: what happens to the queue when Claude finishes a turn.
 
-For two or three small things a plan is a needless stop: `/queue run all` sends everything in one message, to be done at once.
+- `wait` (default) - keep it until you run `/queue plan` or `/queue run`.
+- `plan` - turn it into a plan at once.
+- `send` - send it to be done at once.
 
-## Commands
+</details>
 
-| Command            | What it does                                                    |
-| ------------------ | --------------------------------------------------------------- |
-| `/queue`           | Show the queue, the tags found in files and the plan            |
-| `/queue plan`      | Have Claude organize the queue into steps                       |
-| `/queue run`       | Run the plan step by step; with no plan, entry by entry         |
-| `/queue run N`     | Run step N of the plan alone                                    |
-| `/queue run all`   | Send everything in one message, no plan                         |
-| `/queue stop`      | Stop after the current step                                     |
-| `/queue TEXT`      | Queue TEXT, as `+ TEXT` would                                   |
-| `/queue pop [N]`   | Put the last entry, or entry N, in the prompt box, ready to send |
-| `/queue edit N`    | Put entry N in the prompt box to rework it and queue it again   |
-| `/queue move N M`  | Move entry N to place M                                         |
-| `/queue remove N`  | Remove entry N                                                  |
-| `/queue clear`     | Empty the queue                                                 |
-| `/queue undo`      | Bring back what `plan`, `run` or `clear` last took              |
-| `/queue scan FILE` | Read the tags of a file Claude did not write in this session    |
-| `/queue help`      | Show this list                                                  |
+<details>
+<summary>Platforms and privacy</summary>
 
-Tab completes the subcommands after `/queue `, and the entry or step numbers after `pop`, `edit`, `remove`, `move` and `run`. `/queue` runs at once even while Claude works, so `stop` lands in time. The prompts it sends wait for the turn to end.
+The clipboard is read with `powershell.exe` on WSL, `pbpaste` on macOS, `wl-paste`, `xclip` or `xsel` on Linux and `powershell` on Windows. It is read only for a comment that names no place, never for a plain `+` idea.
 
-## Settings
+The queue stays on your machine, one per project. Nothing reaches Claude until you run `/queue plan` or `/queue run`.
 
-`/config` lists one setting, `whenTurnEnds`: what happens to the queue when Claude finishes a turn.
+The plugin API it uses is in early access and may change between Claude Code releases.
 
-- `wait` (default) - keep it until you run `/queue plan` or `/queue run`; a toast says what waits.
-- `plan` - hand it over as a plan at once.
-- `send` - hand it over to be done at once.
+</details>
 
-The plugin's own turns (a plan, a step) never set it off, and neither does a turn that ends while the saved plan still has steps to do: run or finish those first.
-
-Each project keeps its own queue and plan, across sessions. Each idea remembers the task that was running and the git branch, so the plan knows what "fix this too" refers to.
-
-## Platforms
-
-| Platform      | Clipboard                                  | Project search          |
-| ------------- | ------------------------------------------ | ----------------------- |
-| WSL           | `powershell.exe` (the Windows clipboard)   | GNU grep                |
-| Linux         | `wl-paste` (Wayland), `xclip` or `xsel`    | GNU grep                |
-| macOS         | `pbpaste`                                  | built-in walk           |
-| Windows       | `powershell`                               | built-in walk           |
-
-Where GNU grep is missing, the plugin walks the project itself, skipping dot folders and `node_modules`. That is slower on very large trees. Without a clipboard tool, comments still work with `@file`, `#heading` and tags.
-
-## Privacy
-
-- The clipboard is read only for a comment (`+?`, `+!`, `+-`, `++`) that names no place of its own, never for a plain `+` idea.
-- The queue is stored on your machine, in the plugin's own store under the Claude Code configuration folder.
-- Nothing reaches the model until you run `/queue plan` or `/queue run`.
-
-## Development
+<details>
+<summary>Development</summary>
 
 ```sh
 claude plugin validate .
@@ -129,7 +108,9 @@ claude plugin test .
 claude --plugin-dir .
 ```
 
-`claude --plugin-dir .` loads the plugin from this folder for one session and reloads it on save. The tests use the engine's own test kit and need no account. For a type check, start a session with the plugin loaded once, then run `npx -p typescript tsc -p .` against the types Claude Code writes to `.claude-plugin/types/`.
+`--plugin-dir` loads the plugin from this folder for one session and reloads it on save. The tests need no account.
+
+</details>
 
 ## License
 
