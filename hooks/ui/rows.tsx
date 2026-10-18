@@ -1,6 +1,15 @@
-import type { Elements } from 'claude-code'
+import type { Elements, RenderSurface } from 'claude-code'
 
 import type { ListingSection } from '../core/listing'
+
+// Where aside draws: the terminal and Claude Code Desktop. VS Code attaches no surface yet and
+// the mobile app draws nothing a plugin draws, so there the engine draws its own.
+const SURFACES: readonly RenderSurface[] = ['terminal', 'desktop']
+
+export const isDrawnOn = (surface: RenderSurface) => SURFACES.includes(surface)
+
+// The elements aside draws with; Box and Text are the same on every surface.
+export type Drawing = Pick<Elements['terminal'], 'Box' | 'Text'>
 
 // The colour of each kind and step state, from the theme, so it suits light and dark alike.
 const WORD_COLOURS: Record<string, string> = {
@@ -16,7 +25,7 @@ const WORD_COLOURS: Record<string, string> = {
 // The sections of a listing in columns: number, kind or state in its colour, then the text,
 // wrapped in its own column, and what it is about. Each line is drawn trimmed and blank ones
 // are left out, as they are when the listing is read back from the printed text.
-export const listingRows = ({ Box, Text }: Elements['terminal'], sections: readonly ListingSection[]) =>
+export const listingRows = ({ Box, Text }: Drawing, sections: readonly ListingSection[]) =>
   sections.map((section, i) => {
     const width = Math.max(0, ...section.rows.map(row => row.word.length))
 
