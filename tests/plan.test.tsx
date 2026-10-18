@@ -422,13 +422,13 @@ describe('running the plan', () => {
     expect(toasts).toEqual(['Plan done: 3 steps in 24 min'])
     expect(await shown()).toEqual([
       'The queue is empty.',
-      'Plan done: 3 steps',
+      'Plan done: 3 steps in 24 min',
       '1 done One',
-      '↳ one is in place.',
+      '↳ 40 s · one is in place.',
       '2 done Two',
-      '↳ two works, one question is open.',
+      '↳ 20 min · two works, one question is open.',
       '3 done Three',
-      '↳ three is done.',
+      '↳ 3 min · three is done.',
     ])
   })
 

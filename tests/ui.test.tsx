@@ -23,11 +23,11 @@ describe('the band above the prompt', () => {
     expect(await read()).toEqual(['aside: 1 idea, 1 comment · ', 'list', undefined])
     await aside('plan')
     await savePlan(STEPS)
-    expect(await read()).toEqual(['aside: plan: 3 of 3 steps left · ', 'list', 'run plan'])
+    expect(await read()).toEqual(['aside: plan ▱▱▱ 0/3 · ', 'list', 'run plan'])
     await aside('run')
     await idle()
     await startTurn(sent.at(-1)!, 's1')
-    expect(await read()).toEqual(['aside: step 1/3 running · ', 'list', 'stop'])
+    expect(await read()).toEqual(['aside: plan ▱▱▱ 0/3 · step 1 running · ', 'list', 'stop'])
   })
 
   test('the band keeps its text and both buttons on one line, the plan running or not', async ($, on) => {
@@ -59,7 +59,7 @@ describe('the band above the prompt', () => {
     await endTurn('s1')
 
     const ui = await band()
-    expect((await ui.find({ type: 'Text', text: /^aside: / }))?.text).toBe('aside: plan paused after step 1 · ')
+    expect((await ui.find({ type: 'Text', text: /^aside: / }))?.text).toBe('aside: plan ▰▱▱ 1/3 · paused after step 1 · ')
     expect((await ui.find({ key: 'action' }))?.props.label).toBe('continue')
     await ui.unmount()
     await pressBand('action')
@@ -238,7 +238,7 @@ describe('the plan tool in the transcript', () => {
     const ui = await mount('ToolUse', row(result))
     expect(await ui.drawn()).toMatchObject({ type: 'Box', props: { borderStyle: 'round' } })
     expect((await ui.find({ type: 'Text', text: 'Plan: 1 of 1 step to do (/aside run)' }))?.props.bold).toBe(true)
-    expect((await ui.find({ type: 'Text', text: /^to do$/ }))?.text).toBe('to do')
+    expect((await ui.find({ type: 'Text', text: '○' }))?.props.dimColor).toBe(true)
     expect((await ui.find({ type: 'Text', text: /^idea$/ }))?.props.color).toBe('suggestion')
     expect((await ui.find({ type: 'Text', text: '↳ What is b for?' }))?.props.dimColor).toBe(true)
     await ui.unmount()
@@ -307,4 +307,39 @@ describe('where aside draws', () => {
       await pane.unmount()
     })
   }
+})
+
+describe('the plan drawn as a line of steps', () => {
+  for (const surface of ['terminal', 'desktop'] as const) {
+    test(`on ${surface}, each step has its mark in its state's colour, what it took under it, and a double line where it paused`, async ($, on) => {
+      const { sent, aside, savePlan, startTurn, endTurn, answer, wait, idle, mount } = world($, on)
+      await savePlan([...STEPS, { title: 'Four', prompt: 'Do four.' }])
+      await aside('run')
+      await idle()
+      await answer('s1', 'Result: one is in place.', 8 * 60_000)
+      await startTurn(sent.at(-1)!, 's2')
+      await wait('needs your yes')
+      await endTurn('s2', 'answer', 'Result: two asks first.', 5 * 60_000)
+
+      const ui = await mount('CommandOutput', { command: 'aside', args: '', text: await aside(), isErrored: false }, surface)
+      expect((await ui.find({ type: 'Text', text: /^Plan paused after step 2/ }))?.text).toBe(
+        'Plan paused after step 2 (needs your yes), 2 of 4 steps to do (/aside continue) · 13 min so far',
+      )
+      expect((await ui.find({ type: 'Text', text: '●' }))?.props.color).toBe('success')
+      expect((await ui.find({ type: 'Text', text: '○' }))?.props.dimColor).toBe(true)
+      expect((await ui.find({ type: 'Text', text: '↳ 8 min · one is in place.' }))?.props.dimColor).toBe(true)
+      expect((await ui.find({ type: 'Text', text: '║' }))?.text).toBe('║')
+      expect((await ui.find({ type: 'Text', text: 'paused here: /aside continue' }))?.text).toBe('paused here: /aside continue')
+      await ui.unmount()
+    })
+  }
+
+  test('the band shows a long plan in ten marks at most', async ($, on) => {
+    const { savePlan, band } = world($, on)
+    await savePlan(Array.from({ length: 12 }, (_, i) => ({ title: `Step ${i + 1}`, prompt: `Do ${i + 1}.` })))
+
+    const ui = await band()
+    expect((await ui.find({ type: 'Text', text: /^aside: / }))?.text).toBe('aside: plan ▱▱▱▱▱▱▱▱▱▱ 0/12 · ')
+    await ui.unmount()
+  })
 })

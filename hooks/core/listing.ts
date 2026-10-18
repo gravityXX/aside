@@ -1,6 +1,6 @@
 import type { Entry, Plan } from '../../types'
 import { KINDS } from './entries'
-import { formatCount, relativePath, shortenText } from './text'
+import { formatCount, formatDuration, relativePath, shortenText } from './text'
 
 // The /aside listing as data: sections of a title and rows, each row a number (or a
 // bullet), a kind or a step's state, its lines of text and what it is about.
@@ -82,15 +82,23 @@ export const planSection = (plan: Plan): ListingSection | null => {
 
   const paused = plan.paused && !plan.active ? plan.paused : undefined
   const toDo = `${left} of ${formatCount(plan.steps.length, 'step')} to do`
+  // How long each step done ran, when its turn said; the plan's time is theirs together.
+  const timeOf = (step: Plan['steps'][number]) => (step.isDone && step.ms !== undefined && step.ms > 0 ? formatDuration(step.ms) : '')
+  const ms = plan.steps.reduce((sum, step) => sum + (step.isDone && step.ms ? step.ms : 0), 0)
+  const soFar = ms > 0 ? ` · ${formatDuration(ms)} so far` : ''
 
   return {
     title:
       left === 0
-        ? `Plan done: ${formatCount(plan.steps.length, 'step')}`
+        ? `Plan done: ${formatCount(plan.steps.length, 'step')}${ms > 0 ? ` in ${formatDuration(ms)}` : ''}`
         : paused
-          ? `Plan paused after step ${paused.step + 1} (${paused.reason}), ${toDo} (/aside continue)`
-          : `Plan: ${toDo} (/aside run)`,
-    rows: plan.steps.map((step, i) => ({ label: String(i + 1), word: stateOf(i), lines: [step.title], about: step.isDone && step.result ? [step.result] : [] })),
+          ? `Plan paused after step ${paused.step + 1} (${paused.reason}), ${toDo} (/aside continue)${soFar}`
+          : `Plan: ${toDo} (/aside run)${soFar}`,
+    rows: plan.steps.map((step, i) => {
+      const about = [timeOf(step), step.isDone ? (step.result ?? '') : ''].filter(Boolean).join(' · ')
+
+      return { label: String(i + 1), word: stateOf(i), lines: [step.title], about: about ? [about] : [] }
+    }),
   }
 }
 

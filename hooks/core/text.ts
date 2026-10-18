@@ -46,3 +46,11 @@ export const describeError = (error: unknown): string => {
 // The same for a hook that failed, as its .catch handler hears it.
 export const describeFailure = (failure: HookFailure): string =>
   failure.message === undefined && failure.kind === 'timeout' ? 'it took too long' : describeError(failure.message ?? 'an unknown error')
+
+// How far a plan is, as the line above the prompt shows it: "▰▰▱▱ 2/4", ten marks at most.
+export const formatProgress = (done: number, total: number): string => {
+  const marks = Math.min(total, 10)
+  const filled = total === 0 ? 0 : Math.round((done / total) * marks)
+
+  return `${'▰'.repeat(filled)}${'▱'.repeat(marks - filled)} ${done}/${total}`
+}

@@ -1,7 +1,7 @@
 import type { EngineInterface as Engine, MatchedHook } from 'claude-code'
 
 import type { Context } from '../context'
-import { describeError, formatCount } from '../core/text'
+import { describeError, formatCount, formatProgress } from '../core/text'
 import { runPlan, stopPlan } from '../features/plan'
 import { toggleListPane } from '../features/queue'
 import { readBand } from '../io/store'
@@ -35,9 +35,10 @@ export async function drawBand(ctx: Context, $: Engine, e: BandRender[1], next: 
   }
 
   const parts: string[] = []
-  if (now.running !== undefined) parts.push(`step ${now.running}/${now.steps} running`)
-  else if (now.paused !== undefined) parts.push(`plan paused after step ${now.paused}`)
-  else if (left > 0) parts.push(`plan: ${left} of ${now.steps} steps left`)
+  const plan = `plan ${formatProgress(now.done, now.steps)}`
+  if (now.running !== undefined) parts.push(`${plan} · step ${now.running} running`)
+  else if (now.paused !== undefined) parts.push(`${plan} · paused after step ${now.paused}`)
+  else if (left > 0) parts.push(plan)
   if (now.ideas) parts.push(formatCount(now.ideas, 'idea'))
   if (now.comments + now.tags) parts.push(formatCount(now.comments + now.tags, 'comment'))
   const action: Action | undefined =
