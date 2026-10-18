@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.18.1 - 2026-10-18
 
 - On Linux, a clipboard reader that runs but fails, such as `wl-paste` with no Wayland session, no longer leaves comments without the clipboard: aside tries the next reader, and asks the first one again next time.
 - A typed entry the store cannot take is not lost. It goes back into the prompt box when the box is empty; otherwise the transcript line gives it whole, with the reason. An entry taken out with `/aside edit` stays taken until it is stored again.
