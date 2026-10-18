@@ -5,8 +5,20 @@ import { REPORT, REPORT_PATH, STEPS, world } from './world'
 const MARKER = '(Composed by the aside plugin from my queued notes, not typed by me as a message.)'
 
 // The lines under each step of a plan of several, as Claude reads them.
-const NEXT = 'Do this step only; the next one is sent when you answer. If you need my answer first, call the mcp__aside__wait tool and stop.'
-const LAST = 'Do this step only; it is the last one.'
+const RESULT = 'End your reply with one line that starts "Result: " and says in one sentence what you did and what is still open.'
+const NEXT = [
+  'Do this step only, not the work of the steps after it; the next one is sent when you answer. If it is done already, say so.',
+  'If you need my answer first, or something blocks this step, call the mcp__aside__wait tool and stop.',
+  RESULT,
+].join('\n')
+const ALONE = `Do this step only, not the work of the other steps. If it is done already, say so.\n${RESULT}`
+// The last step of a run, with what the steps done said.
+const last = (...said: string[]) =>
+  [
+    'Do this step only; it is the last one of this run. If it is done already, say so.',
+    ...(said.length > 0 ? ['What the steps done said:', ...said] : []),
+    'Write the "Result: " line for this step, then end your reply with "## Summary of the run": one line per step of the plan on what was done, then what is still open (questions, anything paused, skipped or blocked), then what to do next.',
+  ].join('\n')
 
 describe('handing the queue over', () => {
   test('/aside plan sends the queue as one planning prompt: ideas, then comments by file', async ($, on) => {
@@ -293,7 +305,7 @@ describe('handing the queue over', () => {
         '',
         '(Step 3 of 3 of the queue plan, "is this the same for Poland", sent by the aside plugin.',
         'Plan: 1 dark mode (done) · 2 as a table (done) · 3 is this the same for Poland (this one).',
-        `${LAST})`,
+        `${last('1 dark mode: no result kept', '2 as a table: no result kept')})`,
       ].join('\n'),
     ])
   })
@@ -313,16 +325,25 @@ describe('running the plan', () => {
 
     expect(await aside('run')).toBe('Running the plan: 3 steps, from step 1. /aside stop stops after the current one.')
     await idle()
-    await answer('s1')
-    await answer('s2')
-    await answer('s3')
+    await answer('s1', 'Did one.\n\nResult: one is in place.', 40_000)
+    await answer('s2', 'Did two.\n\n**Result:** two works, one question is open.', 20 * 60_000)
+    await answer('s3', 'Result: three is done.\n\n## Summary of the run\n1 One: in place.', 3 * 60_000)
     expect(sent).toEqual([
       `Do one.\n\n(Step 1 of 3 of the queue plan, "One", sent by the aside plugin.\nPlan: 1 One (this one) · 2 Two (to do) · 3 Three (to do).\n${NEXT})`,
       `Do two.\n\n(Step 2 of 3 of the queue plan, "Two", sent by the aside plugin.\nPlan: 1 One (done) · 2 Two (this one) · 3 Three (to do).\n${NEXT})`,
-      `Do three.\n\n(Step 3 of 3 of the queue plan, "Three", sent by the aside plugin.\nPlan: 1 One (done) · 2 Two (done) · 3 Three (this one).\n${LAST})`,
+      `Do three.\n\n(Step 3 of 3 of the queue plan, "Three", sent by the aside plugin.\nPlan: 1 One (done) · 2 Two (done) · 3 Three (this one).\n${last('1 One: one is in place.', '2 Two: two works, one question is open.')})`,
     ])
-    expect(toasts).toEqual(['Plan done'])
-    expect(await shown()).toEqual(['The queue is empty.'])
+    expect(toasts).toEqual(['Plan done: 3 steps in 24 min'])
+    expect(await shown()).toEqual([
+      'The queue is empty.',
+      'Plan done: 3 steps',
+      '1 done One',
+      '↳ one is in place.',
+      '2 done Two',
+      '↳ two works, one question is open.',
+      '3 done Three',
+      '↳ three is done.',
+    ])
   })
 
   test('with every step done, /aside run N runs entry N alone, and the rest stay', async ($, on) => {
@@ -348,7 +369,7 @@ describe('running the plan', () => {
     await answer('e1')
     await answer('e2')
     expect(sent.map(text => text.split('\n')[0])).toEqual(['c (branch main)', 'a (branch main)'])
-    expect(await shown()).toEqual(['1 idea waiting', '1 idea b'])
+    expect(await shown()).toEqual(['1 idea waiting', '1 idea b', 'Plan done: 2 steps', '1 done c', '2 done a'])
   })
 
   test('while the plan has steps to do, /aside run 3 1 runs those steps in that order, then stops', async ($, on) => {
@@ -361,7 +382,7 @@ describe('running the plan', () => {
     await answer('s1')
     expect(sent).toEqual([
       `Do three.\n\n(Step 3 of 3 of the queue plan, "Three", sent by the aside plugin.\nPlan: 1 One (to do) · 2 Two (to do) · 3 Three (this one).\n${NEXT})`,
-      `Do one.\n\n(Step 1 of 3 of the queue plan, "One", sent by the aside plugin.\nPlan: 1 One (this one) · 2 Two (to do) · 3 Three (done).\n${LAST})`,
+      `Do one.\n\n(Step 1 of 3 of the queue plan, "One", sent by the aside plugin.\nPlan: 1 One (this one) · 2 Two (to do) · 3 Three (done).\n${last('3 Three: no result kept')})`,
     ])
     expect(toasts).toEqual(['Step 1 done'])
     expect(await shown()).toEqual(['The queue is empty.', 'Plan: 1 of 3 steps to do (/aside run)', '1 done One', '2 to do Two', '3 done Three'])
@@ -384,7 +405,7 @@ describe('running the plan', () => {
     await idle()
 
     expect(sent).toEqual([
-      'Do two.\n\n(Step 2 of 3 of the queue plan, "Two", sent by the aside plugin.\nPlan: 1 One (to do) · 2 Two (this one) · 3 Three (to do).\nDo this step only.)',
+      `Do two.\n\n(Step 2 of 3 of the queue plan, "Two", sent by the aside plugin.\nPlan: 1 One (to do) · 2 Two (this one) · 3 Three (to do).\n${ALONE})`,
     ])
   })
 
@@ -643,5 +664,53 @@ describe('organizing the queue again', () => {
     const saved = await savePlan([{ title: 'One', prompt: 'Do one.' }], [{ item: 1, question: 'What?' }])
     expect(saved.result).toBe('Plan: 1 of 1 step to do (/aside run)\n\n  1  to do  One')
     expect(await shown()).toEqual(['The queue is empty.', 'Plan: 1 of 1 step to do (/aside run)', '1 to do One'])
+  })
+})
+
+describe('what a run keeps', () => {
+  test('each step keeps the result its answer gives, in markdown too, or else its last paragraph, and /aside shows it under the step', async ($, on) => {
+    const { aside, shown, savePlan, answer, idle } = world($, on)
+    await savePlan(STEPS)
+    await aside('run')
+    await idle()
+    await answer('s1', 'Done.\n\n- **Result**: one is in place, nothing open.')
+    await answer('s2', 'There is no result line here.\n\nThe last paragraph says what happened.')
+
+    expect(await shown()).toEqual([
+      'The queue is empty.',
+      'Plan: 1 of 3 steps to do (/aside run)',
+      '1 done One',
+      '↳ one is in place, nothing open.',
+      '2 done Two',
+      '↳ The last paragraph says what happened.',
+      '3 running Three',
+    ])
+  })
+
+  test('the last step of a run gets what every step done said, those before a pause included', async ($, on) => {
+    const { sent, toasts, aside, savePlan, answer, idle } = world($, on)
+    await savePlan([...STEPS, { title: 'Four', prompt: 'Do four.' }])
+    await aside('run 1')
+    await idle()
+    await answer('s1', 'Result: one is in place.')
+
+    await aside('run')
+    await idle()
+    expect(sent.at(-1)).toBe(
+      `Do two.\n\n(Step 2 of 4 of the queue plan, "Two", sent by the aside plugin.\nPlan: 1 One (done) · 2 Two (this one) · 3 Three (to do) · 4 Four (to do).\n${NEXT})`,
+    )
+    await answer('s2', 'Result: two works.')
+    await answer('s3', 'Result: three is half done; the tests wait.')
+    expect(sent.at(-1)).toBe(
+      [
+        'Do four.',
+        '',
+        '(Step 4 of 4 of the queue plan, "Four", sent by the aside plugin.',
+        'Plan: 1 One (done) · 2 Two (done) · 3 Three (done) · 4 Four (this one).',
+        `${last('1 One: one is in place.', '2 Two: two works.', '3 Three: three is half done; the tests wait.')})`,
+      ].join('\n'),
+    )
+    await answer('s4', 'Result: four is done.', 65 * 60_000)
+    expect(toasts.at(-1)).toBe('Plan done: 4 steps in 1 h 5 min')
   })
 })

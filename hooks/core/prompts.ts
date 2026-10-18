@@ -133,8 +133,21 @@ export const popPrompt = (entry: Entry, root: string): string =>
 // How a step stands in its run: run on its own, with more steps to come, or the last one.
 export type StepMode = 'alone' | 'more' | 'last'
 
+const RESULT_LINE = 'End your reply with one line that starts "Result: " and says in one sentence what you did and what is still open.'
+
+// What the steps done so far said, for the last step of a run to sum the plan up from.
+const resultsSoFar = (steps: readonly Step[], index: number): string[] => {
+  const done = steps.map((one, i) => ({ one, n: i + 1 })).filter(({ one, n }) => n !== index + 1 && one.isDone)
+
+  return done.length === 0
+    ? []
+    : ['What the steps done said:', ...done.map(({ one, n }) => `${n} ${shortenText(one.title, 60)}: ${one.result ?? 'no result kept'}`)]
+}
+
 // A step of the plan as the prompt that runs it: the step's own prompt, then, in a plan of
-// several, where it stands, so Claude does this step alone and knows how to pause the plan.
+// several, where it stands and how to go about it: this step alone, a pause when it needs
+// the person or is blocked, and a result line the plugin keeps. The last step of a run gets
+// what the steps done said, and ends the run with a summary of the whole plan.
 export const stepPrompt = (steps: readonly Step[], index: number, mode: StepMode, waitTool: string): string => {
   const step = steps[index]!
   const head = `${step.prompt}\n\n(Step ${index + 1} of ${steps.length} of the queue plan, "${step.title}", ${STEP_MARKER}.`
@@ -143,13 +156,37 @@ export const stepPrompt = (steps: readonly Step[], index: number, mode: StepMode
   }
   const stateOf = (one: Step, i: number) => (i === index ? 'this one' : one.isDone ? 'done' : 'to do')
   const map = steps.map((one, i) => `${i + 1} ${shortenText(one.title, 60)} (${stateOf(one, i)})`).join(' · ')
-  const next = {
-    alone: 'Do this step only.',
-    last: 'Do this step only; it is the last one.',
-    more: `Do this step only; the next one is sent when you answer. If you need my answer first, call the ${waitTool} tool and stop.`,
+  const lines = {
+    alone: ['Do this step only, not the work of the other steps. If it is done already, say so.', RESULT_LINE],
+    more: [
+      'Do this step only, not the work of the steps after it; the next one is sent when you answer. If it is done already, say so.',
+      `If you need my answer first, or something blocks this step, call the ${waitTool} tool and stop.`,
+      RESULT_LINE,
+    ],
+    last: [
+      'Do this step only; it is the last one of this run. If it is done already, say so.',
+      ...resultsSoFar(steps, index),
+      'Write the "Result: " line for this step, then end your reply with "## Summary of the run": one line per step of the plan on what was done, then what is still open (questions, anything paused, skipped or blocked), then what to do next.',
+    ],
   }[mode]
 
-  return `${head}\nPlan: ${map}.\n${next})`
+  return `${head}\nPlan: ${map}.\n${lines.join('\n')})`
+}
+
+// A step's "Result:" line, plain or in markdown ("**Result:** ...").
+const RESULT_PATTERN = /^[\s>*_-]*result[*_]*\s*:[*_\s]*(.+?)[*_\s]*$/i
+
+// What a step's answer says it did, as the plan keeps it: its last "Result:" line, or its
+// last paragraph when Claude left the line out. Undefined for an empty answer.
+export const readStepResult = (answer: string): string | undefined => {
+  const marked = answer
+    .split('\n')
+    .map(line => RESULT_PATTERN.exec(line)?.[1])
+    .filter(found => found !== undefined)
+    .at(-1)
+  const text = marked ?? answer.split(/\n\s*\n/).map(part => part.trim()).filter(Boolean).at(-1)
+
+  return text ? shortenText(text, 200) : undefined
 }
 
 // What the small model is told when it tidies the text of an entry; the quote is never sent.
