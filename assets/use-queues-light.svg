@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" width="880" height="214" viewBox="0 0 880 214" role="img" aria-label="Three queues: the global list, +g, this project's queue and a named queue, +@work. /aside g here 1 brings an idea from the global list into this project's queue and /aside g add 1 sends one back; /aside q work here 1 and /aside q work add 1 do the same with the queue named work. They wait in every project, counted above the prompt.">
+  <style>
+    .lab { font: 600 13px -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #59636e; }
+    .t { font: 500 13px -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #1f2328; }
+    .s { font: 400 12px -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #59636e; }
+    .m { font: 500 12.5px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fill: #1f2328; }
+    .ms { font: 500 11.5px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fill: #59636e; }
+    .k { font: 700 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fill: #1f2328; }
+    .a { fill: #9a6700; font-weight: 700; }
+    .f { fill: #818b98; }
+  </style>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#818b98"/>
+    </marker>
+  </defs>
+  <text x="0" y="40" class="lab">The global list, +g</text>
+  <rect x="0.5" y="52" width="193" height="118" rx="8" fill="#f6f8fa" stroke="#d1d9e0"/>
+  <rect x="14" y="68" width="166" height="28" rx="14" fill="#fff8c5" stroke="#d4a72c"/><text x="97.0" text-anchor="middle" y="87" class="m">read the RFC</text>
+  <rect x="14" y="112" width="166" height="28" rx="14" fill="#fff8c5" stroke="#d4a72c"/><text x="97.0" text-anchor="middle" y="131" class="m">try zellij</text>
+  <text x="343" y="40" class="lab">This project's queue</text>
+  <rect x="343.5" y="52" width="193" height="118" rx="8" fill="#f6f8fa" stroke="#d1d9e0"/>
+  <rect x="357" y="68" width="166" height="28" rx="14" fill="#fff8c5" stroke="#d4a72c"/><text x="440.0" text-anchor="middle" y="87" class="m">dark mode</text>
+  <rect x="357" y="112" width="166" height="28" rx="14" fill="#fff8c5" stroke="#d4a72c"/><text x="440.0" text-anchor="middle" y="131" class="m">fix the login bug</text>
+  <text x="686" y="40" class="lab">A named queue, +@work</text>
+  <rect x="686.5" y="52" width="193" height="118" rx="8" fill="#f6f8fa" stroke="#d1d9e0"/>
+  <rect x="700" y="68" width="166" height="28" rx="14" fill="#fff8c5" stroke="#d4a72c"/><text x="783.0" text-anchor="middle" y="87" class="m">ask for a budget</text>
+  <rect x="700" y="112" width="166" height="28" rx="14" fill="#fff8c5" stroke="#d4a72c"/><text x="783.0" text-anchor="middle" y="131" class="m">book a room</text>
+  <path d="M200 92 H337" stroke="#818b98" stroke-width="1.5" fill="none" marker-end="url(#a)"/>
+  <path d="M337 132 H200" stroke="#818b98" stroke-width="1.5" fill="none" marker-end="url(#a)"/>
+  <path d="M680 92 H543" stroke="#818b98" stroke-width="1.5" fill="none" marker-end="url(#a)"/>
+  <path d="M543 132 H680" stroke="#818b98" stroke-width="1.5" fill="none" marker-end="url(#a)"/>
+  <text x="268.5" y="84" class="ms" text-anchor="middle">/aside g here 1</text>
+  <text x="268.5" y="150" class="ms" text-anchor="middle">/aside g add 1</text>
+  <text x="611.5" y="84" class="ms" text-anchor="middle">/aside q work here 1</text>
+  <text x="611.5" y="150" class="ms" text-anchor="middle">/aside q work add 1</text>
+  <text x="440.0" y="200" class="s" text-anchor="middle">they wait in every project; the line above the prompt counts them, as in 1 global, 2 @work</text>
+</svg>

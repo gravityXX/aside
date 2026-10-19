@@ -46,6 +46,8 @@ Nothing reaches Claude until you say so. `/aside` shows the queue in a frame, an
 ![/aside plan has Claude save the queue as steps and /aside run sends them one after another. Above the prompt: step 2 of 3 running, with list and stop buttons. The plan shows step 1 done with its result under it, step 2 running and step 3 to do; after the last step Claude ends with a summary of the run.](assets/step-4-light.svg#gh-light-mode-only)
 ![/aside plan has Claude save the queue as steps and /aside run sends them one after another. Above the prompt: step 2 of 3 running, with list and stop buttons. The plan shows step 1 done with its result under it, step 2 running and step 3 to do; after the last step Claude ends with a summary of the run.](assets/step-4-dark.svg#gh-dark-mode-only)
 
+Every situation <kbd>aside</kbd> handles, with diagrams of how it works, is in [docs/use-cases.md](docs/use-cases.md).
+
 ## Install
 
 ```text

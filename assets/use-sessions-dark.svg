@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" width="880" height="220" viewBox="0 0 880 220" role="img" aria-label="Three sessions: A and B in project X, C in project Y. They share Claude Code's store on this machine, which holds each project's queue and plan, and the global list and named queues, one key per idea, which every project shares.">
+  <style>
+    .lab { font: 600 13px -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #9198a1; }
+    .t { font: 500 13px -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #f0f6fc; }
+    .s { font: 400 12px -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #9198a1; }
+    .m { font: 500 12.5px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fill: #f0f6fc; }
+    .ms { font: 500 11.5px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fill: #9198a1; }
+    .k { font: 700 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fill: #f0f6fc; }
+    .a { fill: #d4a72c; font-weight: 700; }
+    .f { fill: #656c76; }
+  </style>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#656c76"/>
+    </marker>
+  </defs>
+  <rect x="0.5" y="0.5" width="271" height="83" rx="10" fill="#151b23" stroke="#3d444d"/>
+  <path d="M0.5 32 V10.5 a10 10 0 0 1 10 -10 H261.5 a10 10 0 0 1 10 10 V32 Z" fill="#1c232c"/>
+  <line x1="0.5" y1="32" x2="271.5" y2="32" stroke="#3d444d"/>
+  <text x="136.0" y="21" class="t" text-anchor="middle">Session A · project X</text>
+  <text x="24" y="62" class="m"><tspan class="f">❯ </tspan><tspan class="a">+</tspan> dark mode</text>
+  <path d="M136 88 V118" stroke="#656c76" stroke-width="1.5" fill="none" marker-end="url(#a)"/>
+  <rect x="304.5" y="0.5" width="271" height="83" rx="10" fill="#151b23" stroke="#3d444d"/>
+  <path d="M304.5 32 V10.5 a10 10 0 0 1 10 -10 H565.5 a10 10 0 0 1 10 10 V32 Z" fill="#1c232c"/>
+  <line x1="304.5" y1="32" x2="575.5" y2="32" stroke="#3d444d"/>
+  <text x="440.0" y="21" class="t" text-anchor="middle">Session B · project X</text>
+  <text x="328" y="62" class="m"><tspan class="f">❯ </tspan><tspan class="a"></tspan>/aside run</text>
+  <path d="M440 88 V118" stroke="#656c76" stroke-width="1.5" fill="none" marker-end="url(#a)"/>
+  <rect x="608.5" y="0.5" width="271" height="83" rx="10" fill="#151b23" stroke="#3d444d"/>
+  <path d="M608.5 32 V10.5 a10 10 0 0 1 10 -10 H869.5 a10 10 0 0 1 10 10 V32 Z" fill="#1c232c"/>
+  <line x1="608.5" y1="32" x2="879.5" y2="32" stroke="#3d444d"/>
+  <text x="744.0" y="21" class="t" text-anchor="middle">Session C · project Y</text>
+  <text x="632" y="62" class="m"><tspan class="f">❯ </tspan><tspan class="a">+g</tspan> read the RFC</text>
+  <path d="M744 88 V118" stroke="#656c76" stroke-width="1.5" fill="none" marker-end="url(#a)"/>
+  <rect x="0.5" y="122" width="879" height="96" rx="8" fill="#151b23" stroke="#bb8009" stroke-dasharray="4 3"/>
+  <text x="16" y="144" class="lab">Claude Code's store, shared by every session on this machine</text>
+  <rect x="16" y="158" width="272" height="44" rx="6" fill="#0d1117" stroke="#3d444d"/><text x="152.0" y="185" class="t" text-anchor="middle">project X: its queue and plan</text>
+  <rect x="304" y="158" width="272" height="44" rx="6" fill="#0d1117" stroke="#3d444d"/><text x="440.0" y="185" class="t" text-anchor="middle">global list and named queues</text>
+  <rect x="592" y="158" width="272" height="44" rx="6" fill="#0d1117" stroke="#3d444d"/><text x="728.0" y="185" class="t" text-anchor="middle">project Y: its queue and plan</text>
+</svg>
