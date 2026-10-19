@@ -141,7 +141,7 @@ To change something yourself, fork the repository, work on a branch and open a p
 
 ## Support
 
-aside is free, and building it took a lot of time and everything I know about Claude Code. If it saves you time, star the repository so others can find it, or [sponsor its development](https://github.com/sponsors/gravityXX).
+aside is free, and I put time and effort into it. If it saves you time, star the repository so others can find it, or [sponsor its development and more useful skills to come](https://github.com/sponsors/gravityXX).
 
 Thank you to everyone who reports a problem, suggests an idea or sends a fix. Enjoy your queue.
 
