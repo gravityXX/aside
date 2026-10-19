@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.21.0 - 2026-10-19
 
 - `/aside export` saves what `/aside` shows, the queue, the tags in files and the plan, to `aside.md` in the project as Markdown, a heading for each part over its lines as `/aside` shows them, or to the file named, as in `/aside export notes/queue.md`. It writes over an earlier export but never over another file, and the queue stays as it is. A comment's copied text is still found in its own file rather than in an export that quotes it, and an export holds no tags of its own.
 
