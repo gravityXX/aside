@@ -255,6 +255,14 @@ describe('the order setting', () => {
   })
 })
 
+describe('/aside help', () => {
+  test('/aside help says what /aside undo brings back: a clear, or a plan or run Claude has not answered', async ($, on) => {
+    const { aside } = world($, on)
+
+    expect((await aside('help')).split('\n')).toContain('/aside undo - bring back what the last clear, or an unanswered plan or run, took')
+  })
+})
+
 describe('tab completion', () => {
   const complete = ($: Engine, text: string) => {
     const token = /\S*$/.exec(text)![0]
@@ -274,6 +282,7 @@ describe('tab completion', () => {
     await type('+ dark mode\n+? why so slow')
 
     expect(await complete($, '/aside cl')).toEqual(['clear: empty the queue'])
+    expect(await complete($, '/aside u')).toEqual(['undo: bring back what the last clear, or an unanswered plan or run, took'])
     expect(await complete($, '/aside p')).toEqual(['plan: organize the queue into steps', 'pop: put an entry in the box, ready to send'])
     expect(await complete($, '/aside pop ')).toEqual(['1: dark mode', '2: question: why so slow'])
     expect(await complete($, '/aside remove 1 ')).toEqual(['1: dark mode', '2: question: why so slow'])
