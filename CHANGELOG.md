@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.25.1 - 2026-10-19
 
 - A step that asks you something no longer counts as done after its first reply: it waits for your answer, and your answer and the turns that follow belong to it. The line above the prompt says `step 2 running` while Claude works on it and `step 2 waits for you` in between, with <kbd>continue</kbd>, where it used to say `paused after step 2`. `/aside` shows the step as `waiting`, with its time and what it said so far, and `/aside continue` ends it, keeping the time of all its turns and what the last one said, then runs the next step, from any session, after `/clear` too. The last step of a run can wait too, and sums the run up only once `continue` ends it, in one more short turn, rather than in the reply that asked. `/aside stop` on a step that waits ends it as it stands, and a turn cut short never loses a step that `continue` or `stop` ended.
 
