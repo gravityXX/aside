@@ -70,33 +70,73 @@ const describeQueue = (entries: readonly Entry[], root: string): string[] => {
   return sections
 }
 
-// The queue handed over to be organized into steps, saved through the plan tool `tool`. The
-// steps still to do come whole and numbered S1, S2, apart from the items, so Claude keeps
-// their prompts as they are and never takes a step for an item.
-export const planningPrompt = (entries: readonly Entry[], root: string, pending: readonly Step[], tool: string): string => {
-  const sections = describeQueue(entries, root)
-  if (pending.length > 0) {
-    sections.push(
-      [
-        'The saved plan still has these steps to do. Keep them: merge them with the new items into one plan, and keep the prompt of each step word for word unless you merge an item into it. The steps already done stay at the top of the plan by themselves, so save only the steps to do.',
-        ...pending.map((step, i) => `S${i + 1}. ${step.title}\n   ${step.prompt.replace(/\n/g, '\n   ')}`),
-      ].join('\n'),
-    )
-  }
-  sections.push(
+// The steps still to do, whole and numbered S1, S2, apart from the items, so the planner
+// keeps their prompts as they are and never takes a step for an item.
+const pendingSection = (pending: readonly Step[]): string[] =>
+  pending.length === 0
+    ? []
+    : [
+        [
+          'The saved plan still has these steps to do. Keep them: merge them with the new items into one plan, and keep the prompt of each step word for word unless you merge an item into it. The steps already done stay at the top of the plan by themselves, so save only the steps to do.',
+          ...pending.map((step, i) => `S${i + 1}. ${step.title}\n   ${step.prompt.replace(/\n/g, '\n   ')}`),
+        ].join('\n'),
+      ]
+
+// How to organize the items, the same for Claude in the session and for a model outside it;
+// `leftOut` says where an item left out goes.
+const organizeRules = (leftOut: string): string[] => [
+  '- merge related items into one step and keep unrelated ones apart; a question is an item like any other, answered when its step runs;',
+  '- order the steps so whatever the rest depends on comes first, and say why in a few words;',
+  '- for each step, write a prompt I could send you as it is; it must stand on its own, file paths included;',
+  `- leave items that look done, contradictory or unclear out of the steps: ${leftOut}, with its number and your question, and they go back to my queue;`,
+  '- when a step handles a comment that is a <!-- --> tag in a file, the step removes that tag.',
+]
+
+// The queue handed over to be organized into steps, saved through the plan tool `tool`.
+export const planningPrompt = (entries: readonly Entry[], root: string, pending: readonly Step[], tool: string): string =>
+  [
+    ...describeQueue(entries, root),
+    ...pendingSection(pending),
     [
       `${ORGANIZE_ONLY}: do none of it and answer none of it yet. Use no tool but the ${tool} tool, so read nothing, run nothing and change nothing.`,
-      '- merge related items into one step and keep unrelated ones apart; a question is an item like any other, answered when its step runs;',
-      '- order the steps so whatever the rest depends on comes first, and say why in a few words;',
-      '- for each step, write a prompt I could send you as it is; it must stand on its own, file paths included;',
-      '- leave items that look done, contradictory or unclear out of the steps: pass each to the tool as unclear, with its number and your question, and they go back to my queue;',
-      '- when a step handles a comment that is a <!-- --> tag in a file, the step removes that tag.',
+      ...organizeRules('pass each to the tool as unclear'),
       `Then save the steps with the ${tool} tool and stop: I see the saved plan in a frame and run it with /aside run (all, in order) or /aside run N.`,
     ].join('\n'),
-  )
-  sections.push(COMPOSED_MARKER)
+    COMPOSED_MARKER,
+  ].join('\n\n')
 
-  return sections.join('\n\n')
+// The system prompt of the model that organizes the queue outside the conversation.
+export const PLANNER_SYSTEM =
+  'You organize the notes a developer queued while Claude Code worked into a plan of steps that Claude Code then runs one by one. ' +
+  'You see only the notes. Answer with one JSON object and nothing else.'
+
+// The same queue for a model of its own, which answers with the plan as JSON; the plugin
+// saves it. The steps it writes go to Claude in the session, so they speak to Claude.
+export const planningRequest = (entries: readonly Entry[], root: string, pending: readonly Step[]): string =>
+  [
+    ...describeQueue(entries, root),
+    ...pendingSection(pending),
+    [
+      `${ORGANIZE_ONLY}, as a plan of steps for Claude Code to run; "you" in the notes is Claude:`,
+      ...organizeRules('list each under unclear'),
+      'Answer with this JSON object alone, no other text: {"steps": [{"title": "a few words", "prompt": "the whole prompt"}], "unclear": [{"item": 3, "question": "..."}]}',
+    ].join('\n'),
+  ].join('\n\n')
+
+// The plan in a planner's reply: its JSON object, inside a code fence or not; undefined when
+// the reply holds none. What the object says is checked where it is saved.
+export const readPlanReply = (reply: string): { steps?: unknown; unclear?: unknown } | undefined => {
+  const start = reply.indexOf('{')
+  const end = reply.lastIndexOf('}')
+  if (start === -1 || end < start) {
+    return undefined
+  }
+  try {
+    const value: unknown = JSON.parse(reply.slice(start, end + 1))
+    return typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as { steps?: unknown; unclear?: unknown }) : undefined
+  } catch {
+    return undefined
+  }
 }
 
 // What Claude reads under the plan it saved, which the user sees drawn in a frame.

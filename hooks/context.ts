@@ -4,6 +4,12 @@ import type { Entry } from '../types'
 import type { Order } from './core/entries'
 import type { ClipboardState } from './io/host'
 
+// What organizes the queue on /aside plan: Claude in this conversation, or one call to a
+// model of its own outside it.
+export type PlanModel = 'session' | 'sonnet' | 'haiku' | 'opus'
+
+const PLAN_MODELS: readonly PlanModel[] = ['session', 'sonnet', 'haiku', 'opus']
+
 export type Settings = {
   readonly order: Order
   // Whether a small model tidies each entry's own text once it is stored.
@@ -11,6 +17,7 @@ export type Settings = {
   // What aside does by itself when Claude finishes answering: wait for /aside, or hand the
   // queue over at once, as /aside plan or /aside run all would.
   readonly afterAnswer: 'wait' | 'plan' | 'send'
+  readonly planModel: PlanModel
 }
 
 export type ToolOutput = { text: string; turnId: string | undefined; isError: boolean }
@@ -36,6 +43,12 @@ export type Session = {
   // planning prompt numbered them, that turn once it starts, and whether Claude saved a plan.
   // A reload loses it, and the take then waits for /aside undo as it did before.
   planning?: { items: Entry[]; turnId?: string; isSaved: boolean }
+  // The model organizing the queue outside the conversation right now: one at a time, so a
+  // second plan never saves over the first one's.
+  planner?: Exclude<PlanModel, 'session'>
+  // The entries being tidied now: a planner waits for them, or it would plan an entry under
+  // the text it had before.
+  tidies: Set<Promise<void>>
   // Writes of typed entries, one after another, so two quick ones never overwrite each other.
   writes: Promise<unknown>
   clipboard: ClipboardState
@@ -49,6 +62,7 @@ export const createContext = (options: Parameters<Register>[1]): Context => ({
     order: options.order === 'newest' ? 'newest' : 'oldest',
     tidy: options.tidy !== 'off',
     afterAnswer: options.afterClaudeAnswers === 'plan' ? 'plan' : options.afterClaudeAnswers === 'run all' ? 'send' : 'wait',
+    planModel: PLAN_MODELS.find(model => model === options.planModel) ?? 'session',
   },
   session: {
     planTool: 'mcp__aside__plan',
@@ -56,6 +70,7 @@ export const createContext = (options: Parameters<Register>[1]): Context => ({
     isOwnTurn: false,
     isRunning: false,
     writes: Promise.resolve(),
+    tidies: new Set(),
     clipboard: {},
   },
 })

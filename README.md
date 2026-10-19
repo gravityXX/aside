@@ -85,7 +85,7 @@ Requires <kbd>Claude Code</kbd> 2.1.301 or newer. The plugin API <kbd>aside</kbd
 ## More
 
 > [!IMPORTANT]
-> **The queue stays on your machine**, one per project. Nothing reaches Claude's conversation until you run `/aside plan` or `/aside run`, or `afterClaudeAnswers` does. With `tidy` on, the text you type goes to Haiku to be corrected. What you copied never does.
+> **The queue stays on your machine**, one per project. Nothing reaches Claude's conversation until you run `/aside plan` or `/aside run`, or `afterClaudeAnswers` does. With `tidy` on, the text you type goes to Haiku to be corrected; what you copied never does. With `planModel` on a model, `/aside plan` sends the queue to that model in place of the conversation.
 
 <details>
 <summary>What aside reads, runs and sends</summary>
@@ -95,7 +95,7 @@ Requires <kbd>Claude Code</kbd> 2.1.301 or newer. The plugin API <kbd>aside</kbd
 - **Keeps** the queue, the plan and what `/aside undo` brings back, one set per project, in Claude Code's store for the plugin (`~/.claude/plugins/store/`). It writes a file only when you run `/aside export`, and never over one it did not write.
 - **Reads** `<!-- ? -->` tags in markdown files Claude wrote or edited this session, or that you `/aside scan`; for a comment, the clipboard, the lines you selected in Claude's reply, the last tool output and the project's markdown files; the project's git branch.
 - **Runs** a clipboard reader (`powershell.exe` on WSL and Windows, `pbpaste` on macOS, `wl-paste`, `xclip` or `xsel` on Linux), `git rev-parse --abbrev-ref HEAD`, and `grep -rlizP` over the project's markdown files.
-- **Sends** the entries to Claude only on `/aside plan`, `/aside run` or `afterClaudeAnswers`, and, while `tidy` is on, the text you typed to Haiku through Claude Code, never what you copied.
+- **Sends** the entries to Claude only on `/aside plan`, `/aside run` or `afterClaudeAnswers`, with what you copied, and to the model `planModel` names instead on `/aside plan`; while `tidy` is on, the text you typed goes to Haiku through Claude Code, never what you copied.
 
 aside opens no network connection of its own and installs nothing.
 
@@ -127,6 +127,7 @@ In a tag, `!` is a change, `-` a drop and `+` dig deeper. Tags count in markdown
 Change these in `/config`:
 
 - `afterClaudeAnswers`: `wait` (default), `plan` or `run all`. What aside does once Claude answers.
+- `planModel`: `session` (default), `sonnet`, `haiku` or `opus`. Who organizes the queue on `/aside plan`: Claude in this conversation, knowing the work so far, or one call to that model outside it, which adds nothing to the conversation and runs while Claude works, but sees only the queue.
 - `order`: `oldest` (default) or `newest`. Which entry comes first in the list and in a run.
 - `tidy`: `on` (default) or `off`. Whether a small model fixes the spelling and wording of what you type.
 

@@ -1,10 +1,23 @@
 import type { Args, CatchHandler, EngineInterface as Engine, Hook, MatchedHook } from 'claude-code'
 
 import type { Entry, Plan, Step } from '../../types'
-import type { Context } from '../context'
+import type { Context, PlanModel } from '../context'
 import { inOrder, KINDS } from '../core/entries'
 import { describeCount, formatPlace, leftOutSection, listingText, planSection } from '../core/listing'
-import { entryPrompt, isOwnPrompt, isPlanningPrompt, PLAN_SAVED_NOTE, planningPrompt, readStepResult, sendPrompt, STEP_MARKER, stepPrompt } from '../core/prompts'
+import {
+  entryPrompt,
+  isOwnPrompt,
+  isPlanningPrompt,
+  PLAN_SAVED_NOTE,
+  PLANNER_SYSTEM,
+  planningPrompt,
+  planningRequest,
+  readPlanReply,
+  readStepResult,
+  sendPrompt,
+  STEP_MARKER,
+  stepPrompt,
+} from '../core/prompts'
 import type { StepMode } from '../core/prompts'
 import { describeError, describeFailure, formatCount, formatDuration, shortenText } from '../core/text'
 import {
@@ -12,15 +25,18 @@ import {
   forgetAnsweredTake,
   giveBackItems,
   loadEntries,
+  loadHanded,
   loadPlan,
   projectKeys,
   refreshBand,
   savePlan,
   takeChosen,
   takeForHandOver,
+  takePlanned,
+  tagId,
 } from '../io/store'
 import type { Keys } from '../io/store'
-import { tagsInFiles } from './queue'
+import { openListPane, tagsInFiles } from './queue'
 
 // Submits the prompt `compose` gives as the person's own, or nothing when it gives none. It
 // goes out from a timer, since neither a command's hook nor a turn's end may submit one while
@@ -45,10 +61,18 @@ function submitLater($: Engine, compose: () => Promise<string | undefined>, onFa
   })
 }
 
+// Who asked for a hand-over: a command answers with the whole text, while the pane's button
+// and the end of Claude's answer say one line in a toast.
+export type Asker = 'command' | 'pane' | 'answer'
+
 // Hands the queue and the new file tags over: as one planning prompt ('plan'), or as it
 // is, to be done now ('send'). A prompt dropped beneath gives everything back. Nothing goes
-// while a step of the plan runs here, since the prompt would land in the middle of it.
-export async function handOverQueue($: Engine, ctx: Context, mode: 'plan' | 'send'): Promise<string> {
+// while a step of the plan runs here, since the prompt would land in the middle of it. With
+// planModel on a model, 'plan' goes to that model instead (planOutside).
+export async function handOverQueue($: Engine, ctx: Context, mode: 'plan' | 'send', asker: Asker = 'command'): Promise<string> {
+  if (mode === 'plan' && ctx.settings.planModel !== 'session') {
+    return planOutside($, ctx, ctx.settings.planModel, asker)
+  }
   const keys = await projectKeys($)
   const running = await runningHere($, await loadPlan($, keys.plan))
   if (running) {
@@ -395,20 +419,139 @@ export async function savePlanFromTool(ctx: Context, $: Engine, e: PlanToolCall[
   if (old.active && old.active.sessionId === (await $.session.id())) {
     return { deny: `step ${old.active.step + 1} of the current plan is running; the user stops it with /aside stop first` }
   }
-  // A plan with steps still to do keeps those done, first, as the planning prompt told
-  // Claude; a plan run to its end makes way for the new one.
-  const done = old.steps.some(step => !step.isDone) ? old.steps.filter(step => step.isDone) : []
-  const plan: Plan = { steps: [...done, ...steps] }
   // The items left out go back before the plan is saved, so a plan is never saved with items
   // still missing; a call made again after a failure gives back none twice.
   const left = unclear.map(({ item, question }) => ({ entry: items[item - 1]!, question }))
   await giveBackItems($, keys, left.map(one => one.entry))
-  await savePlan($, keys.plan, plan)
+  const plan = await savePlanSteps($, keys, steps)
   if (planning) planning.isSaved = true
   await refreshBand($, left.some(one => one.entry.isTag) ? (await tagsInFiles($, true)).length : undefined)
   const sections = [planSection(plan)!, ...(left.length > 0 ? [leftOutSection(left, keys.root)] : [])]
 
   return { result: listingText(sections), context: [PLAN_SAVED_NOTE] }
+}
+
+// Saves `steps` as the plan. A plan with steps still to do keeps those done, first, as the
+// planning prompt said; a plan run to its end makes way for the new one.
+async function savePlanSteps($: Engine, keys: Keys, steps: readonly Step[]): Promise<Plan> {
+  const old = await loadPlan($, keys.plan)
+  const done = old.steps.some(step => !step.isDone) ? old.steps.filter(step => step.isDone) : []
+  const plan: Plan = { steps: [...done, ...steps] }
+  await savePlan($, keys.plan, plan)
+
+  return plan
+}
+
+const PLANNER_NAMES: Record<Exclude<PlanModel, 'session'>, string> = { sonnet: 'Sonnet', haiku: 'Haiku', opus: 'Opus' }
+
+// Why a planner's call gave no plan, in a few words.
+const describeNoPlan = (reply: Awaited<ReturnType<Engine['model']['complete']>> | string): string => {
+  if (typeof reply === 'string') {
+    return reply
+  }
+  if (reply.isAnswered) {
+    return 'its answer held no plan'
+  }
+  switch (reply.reason) {
+    case 'aborted':
+      return 'it took too long'
+    case 'empty-reply':
+      return 'it answered nothing'
+    default:
+      return `the call failed${reply.status ? ` (${reply.status})` : ''}`
+  }
+}
+
+// Whether the queue and the plan are still what a planner was given: every entry in the
+// queue as it was, no tag handed over since, and the plan the same, a step run or a plan saved
+// meanwhile included.
+async function isAsGiven($: Engine, keys: Keys, before: Plan, items: readonly Entry[]): Promise<boolean> {
+  const queue = await loadEntries($, keys.queue)
+  const handed = new Set(await loadHanded($, keys.handed))
+  const isThere = (item: Entry) =>
+    item.isTag ? !handed.has(tagId(item)) : queue.some(entry => entry.at === item.at && entry.kind === item.kind && entry.text === item.text)
+
+  return items.every(isThere) && JSON.stringify(await loadPlan($, keys.plan)) === JSON.stringify(before)
+}
+
+// /aside plan on a model of its own: one call outside the conversation organizes the queue
+// and the new tags, and the plugin saves the plan it answers with. The queue stays as it is
+// until then. Commands may run while it thinks, so the plan is saved only over the queue and
+// the plan it was given; anything changed, nothing is saved. One planner at a time, set
+// before anything is awaited, so two quick asks never both run.
+async function planOutside($: Engine, ctx: Context, model: Exclude<PlanModel, 'session'>, asker: Asker): Promise<string> {
+  const name = PLANNER_NAMES[model]
+  if (ctx.session.planner) {
+    return `${PLANNER_NAMES[ctx.session.planner]} is still organizing the queue.`
+  }
+  ctx.session.planner = model
+  try {
+    // An entry tidied while the planner thinks would not be found again as it was given.
+    await Promise.allSettled([...ctx.session.tidies])
+    const keys = await projectKeys($)
+    const before = await loadPlan($, keys.plan)
+    const running = await runningHere($, before)
+    if (running) {
+      return running
+    }
+    const items = [...inOrder(await loadEntries($, keys.queue), ctx.settings.order), ...(await tagsInFiles($, true))]
+    if (items.length === 0) {
+      return 'The queue is empty. Start a message with "+" to add an idea, or "+?" to comment on a copied fragment.'
+    }
+    if (asker !== 'command') $.ui.toast(`${name} is organizing ${describeCount(items)}.`)
+    // What the person sees of an answer outside a command goes into the transcript too, so the
+    // planner's questions stay there.
+    const answerWith = (line: string, text: string) => {
+      if (asker === 'command') return text
+      $.ui.log(text)
+      return line
+    }
+
+    const pending = before.steps.filter(step => !step.isDone)
+    const ask = { model, system: PLANNER_SYSTEM, prompt: planningRequest(items, keys.root, pending), maxTokens: 16_000, effort: 'medium' as const, timeoutMs: 180_000 }
+    const reply = await $.model.complete(ask).catch((error: unknown) => describeError(error))
+    const answer = typeof reply !== 'string' && reply.isAnswered ? readPlanReply(reply.text) : undefined
+    const unclear = answer ? parseUnclear(answer.unclear, items.length) : null
+    const left = (unclear ?? []).map(({ item, question }) => ({ entry: items[item - 1]!, question }))
+    if (answer && unclear && left.length > 0 && Array.isArray(answer.steps) && answer.steps.length === 0) {
+      const asks = `${name} made no plan, and asks about ${formatCount(left.length, 'entry')}; the queue is as it was.`
+      return answerWith(asks, `${asks}\n\n${listingText([leftOutSection(left, keys.root)])}`)
+    }
+    const steps = parseSteps(answer?.steps)
+    if (steps === null || unclear === null) {
+      const why = answer && steps !== null ? 'the items it left out were named wrong' : describeNoPlan(reply)
+      return `${name} gave no plan (${why}); the queue is as it was.`
+    }
+    if (!(await isAsGiven($, keys, before, items))) {
+      return `The queue or the plan changed while ${name} planned; nothing was saved. /aside plan tries again.`
+    }
+
+    // The plan first: should the queue's write fail after it, the entries are in both, not lost.
+    let plan: Plan
+    try {
+      plan = await savePlanSteps($, keys, steps)
+    } catch (error) {
+      return `Could not save ${name}'s plan (${describeError(error)}); the queue is as it was.`
+    }
+    const kept = await takePlanned($, keys, items.filter(item => !left.some(one => one.entry === item))).then(
+      () => '',
+      (error: unknown) => ` Its entries stay in the queue too (${describeError(error)}).`,
+    )
+    await refreshBand($, (await tagsInFiles($, true)).length)
+    const sections = [planSection(plan)!, ...(left.length > 0 ? [leftOutSection(left, keys.root)] : [])]
+    const text = listingText(sections)
+    // While Claude works, the command's own text shows only after the turn: the pane, or else
+    // the transcript, shows the plan now.
+    if (asker === 'command' && ctx.session.isRunning) {
+      const opened = await openListPane($).catch((error: unknown) => ({ isPlaced: false, reason: describeError(error) }))
+      if (!opened.isPlaced) $.ui.log(text)
+    }
+    const line = left.length > 0 ? `${sections[0]!.title}; ${formatCount(left.length, 'entry')} left in the queue, with a question.` : sections[0]!.title
+
+    return kept ? answerWith(`${line.replace(/\.?$/, '.')}${kept}`, `${text}\n\n${kept.trim()}`) : answerWith(line, text)
+  } finally {
+    delete ctx.session.planner
+  }
 }
 
 // The tool a step pauses the plan with when it needs the person's answer before the next one.
@@ -527,6 +670,14 @@ async function handOverAfterAnswer($: Engine, ctx: Context, plan: Plan, reason: 
   const isPending = plan.steps.some(step => !step.isDone)
   const { afterAnswer } = ctx.settings
   if (!plan.active && waiting > 0 && afterAnswer !== 'wait' && reason === 'answer' && !ctx.session.isOwnTurn && !isPending) {
+    if (afterAnswer === 'plan' && ctx.settings.planModel !== 'session') {
+      // A planner's call may take a while, and the turn's end does not wait for it: the plan's
+      // title, or why there is none, comes as a toast once it is saved.
+      $.clock.after(0, async () => {
+        $.ui.toast(await handOverQueue($, ctx, 'plan', 'answer').catch((error: unknown) => `Could not organize the queue: ${describeError(error)}`))
+      })
+      return
+    }
     $.ui.toast(await handOverQueue($, ctx, afterAnswer))
   }
 }

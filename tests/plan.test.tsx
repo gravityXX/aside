@@ -947,3 +947,325 @@ describe('what a run keeps', () => {
     expect(toasts.at(-1)).toBe('Plan done: 4 steps in 1 h 5 min')
   })
 })
+
+describe('planning on a model of its own', () => {
+  const SONNET = { options: { planModel: 'sonnet' } }
+  const PLAN = '```json\n{"steps": [{"title": "Dark mode", "prompt": "Add a dark mode."}], "unclear": [{"item": 2, "question": "Which login bug?"}]}\n```'
+
+  test('with planModel sonnet, one call to Sonnet organizes the queue outside the conversation, and /aside plan shows the plan', SONNET, async ($, on) => {
+    const { w, sent, planned, type, aside, shown } = world($, on)
+    await type('+ dark mode')
+    await type('+ fix the login bug')
+    w.planReply = PLAN
+
+    expect(await aside('plan')).toBe(
+      ['Plan: 1 of 1 step to do (/aside run)', '', '  1  to do  Dark mode', '', 'Not in the plan, back in the queue', '', '  ·  idea  fix the login bug', '           ↳ Which login bug?'].join('\n'),
+    )
+    expect(sent).toEqual([])
+    expect(planned.map(call => call.model)).toEqual(['sonnet'])
+    expect(planned[0]!.prompt).toContain('Ideas:\n1. dark mode (branch main)\n2. fix the login bug (branch main)')
+    expect(planned[0]!.prompt).toContain('Answer with this JSON object alone')
+    expect(await shown()).toEqual(['1 idea waiting', '1 idea fix the login bug', 'Plan: 1 of 1 step to do (/aside run)', '1 to do Dark mode'])
+  })
+
+  test('a planner that gives no plan leaves the queue as it was and says why', SONNET, async ($, on) => {
+    const { w, type, aside, shown } = world($, on)
+    await type('+ dark mode')
+
+    expect(await aside('plan')).toBe('Sonnet gave no plan (the call failed); the queue is as it was.')
+    w.planReply = 'Sorry, I would rather not.'
+    expect(await aside('plan')).toBe('Sonnet gave no plan (its answer held no plan); the queue is as it was.')
+    w.planReply = '{"steps": [], "unclear": []}'
+    expect(await aside('plan')).toBe('Sonnet gave no plan (its answer held no plan); the queue is as it was.')
+    expect(await shown()).toEqual(['1 idea waiting', '1 idea dark mode'])
+  })
+
+  test('the planner keeps the steps still to do and the plan keeps those done first', SONNET, async ($, on) => {
+    const { w, sent, planned, type, aside, shown, savePlan, answer, idle } = world($, on)
+    await savePlan(STEPS)
+    await aside('run 1')
+    await idle()
+    await answer('s1')
+    await type('+ dark mode')
+    w.planReply = '{"steps": [{"title": "Two", "prompt": "Do two."}, {"title": "Three and dark mode", "prompt": "Do three, then add a dark mode."}]}'
+
+    await aside('plan')
+    expect(sent).toHaveLength(1)
+    expect(planned[0]!.prompt).toContain('S1. Two\n   Do two.\nS2. Three\n   Do three.')
+    expect((await shown()).slice(-3)).toEqual(['1 done One', '2 to do Two', '3 to do Three and dark mode'])
+  })
+
+  test('while Claude works, the plan shows in the list pane at once', SONNET, async ($, on) => {
+    const { w, panes, type, aside, startTurn } = world($, on)
+    await startTurn('build the parser', 't1')
+    await type('+ dark mode', 't1')
+    w.planReply = '{"steps": [{"title": "Dark mode", "prompt": "Add a dark mode."}]}'
+
+    expect(await aside('plan')).toBe(['Plan: 1 of 1 step to do (/aside run)', '', '  1  to do  Dark mode'].join('\n'))
+    expect(panes).toEqual(['aside'])
+  })
+
+  test('afterClaudeAnswers plan with planModel haiku plans by itself once Claude answers, and says so in a toast', { options: { afterClaudeAnswers: 'plan', planModel: 'haiku' } }, async ($, on) => {
+    const { w, sent, planned, toasts, logged, panes, type, startTurn, endTurn, idle } = world($, on)
+    w.planReply = '{"steps": [{"title": "Dark mode", "prompt": "Add a dark mode."}]}'
+    await startTurn('build the parser', 't1')
+    await type('+ dark mode', 't1')
+    await endTurn('t1')
+    await idle()
+
+    expect(planned.map(call => call.model)).toEqual(['haiku'])
+    expect(sent).toEqual([])
+    expect(toasts).toEqual(['Haiku is organizing 1 idea.', 'Plan: 1 of 1 step to do (/aside run)'])
+    expect(logged.at(-1)).toBe(['Plan: 1 of 1 step to do (/aside run)', '', '  1  to do  Dark mode'].join('\n'))
+    expect(panes).toEqual([])
+  })
+
+  test('the planner is asked in full words, with its own system prompt, and its plan leaves nothing for undo', SONNET, async ($, on) => {
+    const { w, planned, type, aside } = world($, on)
+    await type('+ dark mode')
+    w.planReply = '{"steps": [{"title": "Dark mode", "prompt": "Add a dark mode."}]}'
+
+    await aside('plan')
+    expect(planned[0]!.system).toBe(
+      'You organize the notes a developer queued while Claude Code worked into a plan of steps that Claude Code then runs one by one. You see only the notes. Answer with one JSON object and nothing else.',
+    )
+    expect(planned[0]!.prompt).toBe(
+      [
+        'My queue, collected while you were working, oldest first.',
+        '',
+        'Ideas:',
+        '1. dark mode (branch main)',
+        '',
+        'Organize all of it, and only organize it, as a plan of steps for Claude Code to run; "you" in the notes is Claude:',
+        '- merge related items into one step and keep unrelated ones apart; a question is an item like any other, answered when its step runs;',
+        '- order the steps so whatever the rest depends on comes first, and say why in a few words;',
+        '- for each step, write a prompt I could send you as it is; it must stand on its own, file paths included;',
+        '- leave items that look done, contradictory or unclear out of the steps: list each under unclear, with its number and your question, and they go back to my queue;',
+        '- when a step handles a comment that is a <!-- --> tag in a file, the step removes that tag.',
+        'Answer with this JSON object alone, no other text: {"steps": [{"title": "a few words", "prompt": "the whole prompt"}], "unclear": [{"item": 3, "question": "..."}]}',
+      ].join('\n'),
+    )
+    expect(await aside('undo')).toBe('Nothing to bring back.')
+  })
+
+  test('one planner at a time: a second /aside plan while it thinks is refused', SONNET, async ($, on) => {
+    const { w, type, aside } = world($, on)
+    await type('+ dark mode')
+    w.planReply = '{"steps": [{"title": "Dark mode", "prompt": "Add a dark mode."}]}'
+    let second = ''
+    w.meanwhile = async () => {
+      w.meanwhile = undefined
+      second = await aside('plan')
+    }
+
+    await aside('plan')
+    expect(second).toBe('Sonnet is still organizing the queue.')
+  })
+
+  test('the queue stays as it is while the planner thinks: an entry typed, a clear and an undo then lose nothing', SONNET, async ($, on) => {
+    const { w, type, aside, shown } = world($, on)
+    await type('+ dark mode')
+    w.meanwhile = async () => {
+      w.meanwhile = undefined
+      await type('+ other')
+      await aside('clear')
+      await aside('undo')
+    }
+
+    expect(await aside('plan')).toBe('Sonnet gave no plan (the call failed); the queue is as it was.')
+    expect(await shown()).toEqual(['2 ideas waiting', '1 idea dark mode', '2 idea other'])
+    w.planReply = '{"steps": [{"title": "Dark mode", "prompt": "Add a dark mode."}]}'
+    w.meanwhile = async () => {
+      w.meanwhile = undefined
+      await type('+ third')
+    }
+    await aside('plan')
+    expect((await shown()).slice(0, 3)).toEqual(['1 idea waiting', '1 idea third', 'Plan: 1 of 1 step to do (/aside run)'])
+  })
+
+  test('a step started while the planner thinks keeps its plan, and the queue stays', SONNET, async ($, on) => {
+    const { w, sent, type, aside, savePlan, idle } = world($, on)
+    await savePlan(STEPS)
+    await type('+ dark mode')
+    w.planReply = '{"steps": [{"title": "New", "prompt": "Do new."}]}'
+    w.meanwhile = async () => {
+      w.meanwhile = undefined
+      await aside('run 1')
+      await idle()
+    }
+
+    expect(await aside('plan')).toBe('The queue or the plan changed while Sonnet planned; nothing was saved. /aside plan tries again.')
+    expect(sent).toHaveLength(1)
+  })
+
+  test('a plan saved while the planner thinks is not saved over', SONNET, async ($, on) => {
+    const { w, type, aside, savePlan, shown } = world($, on)
+    await type('+ dark mode')
+    w.planReply = '{"steps": [{"title": "New", "prompt": "Do new."}]}'
+    w.meanwhile = async () => {
+      w.meanwhile = undefined
+      await savePlan(STEPS)
+    }
+
+    expect(await aside('plan')).toBe('The queue or the plan changed while Sonnet planned; nothing was saved. /aside plan tries again.')
+    expect((await shown()).slice(-3)).toEqual(['1 to do One', '2 to do Two', '3 to do Three'])
+  })
+
+  test('a planner that only asks about the entries leaves them all in the queue, with its questions', SONNET, async ($, on) => {
+    const { w, type, aside, shown } = world($, on)
+    await type('+ dark mode')
+    w.planReply = '{"steps": [], "unclear": [{"item": 1, "question": "Which colours?"}]}'
+
+    expect(await aside('plan')).toBe(
+      ['Sonnet made no plan, and asks about 1 entry; the queue is as it was.', '', 'Not in the plan, back in the queue', '', '  ·  idea  dark mode', '           ↳ Which colours?'].join('\n'),
+    )
+    w.planReply = '{"steps": [{"title": "Dark mode", "prompt": "Add a dark mode."}], "unclear": [{"item": 9, "question": "?"}]}'
+    expect(await aside('plan')).toBe('Sonnet gave no plan (the items it left out were named wrong); the queue is as it was.')
+    expect(await shown()).toEqual(['1 idea waiting', '1 idea dark mode'])
+  })
+
+  test('a store that refuses the plan leaves the queue as it was and says why', SONNET, async ($, on) => {
+    const { w, type, aside, shown } = world($, on)
+    await type('+ dark mode')
+    w.planReply = '{"steps": [{"title": "Dark mode", "prompt": "Add a dark mode."}]}'
+    w.refuseWrite = 1
+
+    expect(await aside('plan')).toBe("Could not save Sonnet's plan (the store is full); the queue is as it was.")
+    expect(await shown()).toEqual(['1 idea waiting', '1 idea dark mode'])
+  })
+
+  test('the pane\'s plan button says the planner\'s plan in one line', SONNET, async ($, on) => {
+    const { w, toasts, type, pressBand, pane, idle } = world($, on)
+    await type('+ dark mode\n+ fix the login bug')
+    w.planReply = PLAN
+    await pressBand()
+
+    const ui = await pane()
+    await ui.press({ key: 'plan' })
+    await ui.unmount()
+    await idle()
+    expect(toasts.at(-1)).toBe('Plan: 1 of 1 step to do (/aside run); 1 entry left in the queue, with a question.')
+  })
+
+  test('an entry that leaves the queue while the planner thinks makes it save nothing: removed, or sent with run all', SONNET, async ($, on) => {
+    const { w, sent, type, aside, shown, idle } = world($, on)
+    await type('+ dark mode')
+    w.planReply = '{"steps": [{"title": "Dark mode", "prompt": "Add a dark mode."}]}'
+    w.meanwhile = async () => {
+      w.meanwhile = undefined
+      await aside('remove 1')
+    }
+    expect(await aside('plan')).toBe('The queue or the plan changed while Sonnet planned; nothing was saved. /aside plan tries again.')
+    expect(await shown()).toEqual(['The queue is empty.'])
+
+    await type('+ dark mode')
+    w.meanwhile = async () => {
+      w.meanwhile = undefined
+      await aside('run all')
+      await idle()
+    }
+    expect(await aside('plan')).toBe('The queue or the plan changed while Sonnet planned; nothing was saved. /aside plan tries again.')
+    expect(sent).toHaveLength(1)
+    expect(await shown()).toEqual(['The queue is empty.'])
+  })
+
+  test('a tag handed over while the planner thinks makes it save nothing', SONNET, async ($, on) => {
+    const { w, sent, write, aside, idle } = world($, on, { files: { [REPORT_PATH]: REPORT } })
+    await write(REPORT_PATH)
+    w.planReply = '{"steps": [{"title": "Poland", "prompt": "Check Poland."}]}'
+    w.meanwhile = async () => {
+      w.meanwhile = undefined
+      await aside('run all')
+      await idle()
+    }
+
+    expect(await aside('plan')).toBe('The queue or the plan changed while Sonnet planned; nothing was saved. /aside plan tries again.')
+    expect(sent).toHaveLength(1)
+  })
+
+  test('a step run to its end while the planner thinks makes it save nothing', SONNET, async ($, on) => {
+    const { w, type, aside, savePlan, answer, idle, shown } = world($, on)
+    await savePlan([{ title: 'One', prompt: 'Do one.' }])
+    await type('+ dark mode')
+    w.planReply = '{"steps": [{"title": "One", "prompt": "Do one."}, {"title": "Dark mode", "prompt": "Add a dark mode."}]}'
+    w.meanwhile = async () => {
+      w.meanwhile = undefined
+      await aside('run')
+      await idle()
+      await answer('s1')
+    }
+
+    expect(await aside('plan')).toBe('The queue or the plan changed while Sonnet planned; nothing was saved. /aside plan tries again.')
+    expect((await shown()).slice(-2)).toEqual(['Plan done: 1 step', '1 done One'])
+  })
+
+  test('the planner waits for an entry still being tidied, and plans it as tidied', { options: { planModel: 'sonnet' } }, async ($, on) => {
+    const { w, planned, clock, type, aside, shown } = world($, on, { tidy: { 'dark mod': '<note>Dark mode.</note>' } })
+    let release = () => {}
+    const held = new Promise<void>(resolve => {
+      release = resolve
+    })
+    w.meanwhile = async () => {
+      w.meanwhile = undefined
+      await held
+    }
+    await type('+ dark mod')
+    w.planReply = '{"steps": [{"title": "Dark mode", "prompt": "Add a dark mode."}]}'
+
+    const planning = aside('plan')
+    await clock.settle()
+    release()
+    await planning
+    expect(planned[0]!.prompt).toContain('1. Dark mode.')
+    expect((await shown()).slice(0, 1)).toEqual(['The queue is empty.'])
+  })
+
+  test('two asks at once start one planner', SONNET, async ($, on) => {
+    const { w, planned, type, aside } = world($, on)
+    await type('+ dark mode')
+    w.planReply = '{"steps": [{"title": "Dark mode", "prompt": "Add a dark mode."}]}'
+
+    const answers = await Promise.all([aside('plan'), aside('plan')])
+    expect(answers[1]).toBe('Sonnet is still organizing the queue.')
+    expect(planned).toHaveLength(1)
+  })
+
+  test('a tag the planner planned shows as handed over, and one it asked about stays new', SONNET, async ($, on) => {
+    const notes = ['# Notes', '<!-- ? why this -->', '', '<!-- ? and that -->'].join('\n')
+    const { w, write, aside, shown } = world($, on, { files: { '/proj/notes.md': notes } })
+    await write('/proj/notes.md')
+    w.planReply = '{"steps": [{"title": "Why", "prompt": "Answer why."}], "unclear": [{"item": 2, "question": "Which one?"}]}'
+
+    await aside('plan')
+    expect((await shown()).filter(line => line.startsWith('↳ notes.md'))).toEqual(['↳ notes.md:2 · "# Notes" · handed over', '↳ notes.md:4 · "# Notes"'])
+  })
+
+  test('while Claude works on a narrow terminal, the plan goes into the transcript at once', { options: { planModel: 'sonnet' } }, async ($, on) => {
+    const { w, logged, type, aside, startTurn } = world($, on, { isNarrow: true })
+    await startTurn('build the parser', 't1')
+    await type('+ dark mode', 't1')
+    w.planReply = '{"steps": [{"title": "Dark mode", "prompt": "Add a dark mode."}]}'
+
+    await aside('plan')
+    expect(logged.at(-1)).toBe(['Plan: 1 of 1 step to do (/aside run)', '', '  1  to do  Dark mode'].join('\n'))
+  })
+
+  test('from the pane, the planner\'s questions go into the transcript, and undo then has nothing to bring back', SONNET, async ($, on) => {
+    const { w, toasts, logged, type, aside, pressBand, pane, idle } = world($, on)
+    await type('+ a')
+    await aside('clear')
+    await type('+ dark mode')
+    w.planReply = '{"steps": [], "unclear": [{"item": 1, "question": "Which colours?"}]}'
+    await pressBand()
+
+    const ui = await pane()
+    await ui.press({ key: 'plan' })
+    await ui.unmount()
+    await idle()
+    expect(toasts.slice(-2)).toEqual(['Sonnet is organizing 1 idea.', 'Sonnet made no plan, and asks about 1 entry; the queue is as it was.'])
+    expect(logged.at(-1)).toContain('↳ Which colours?')
+    w.planReply = '{"steps": [{"title": "Dark mode", "prompt": "Add a dark mode."}]}'
+    await aside('plan')
+    expect(await aside('undo')).toBe('Nothing to bring back.')
+  })
+})
