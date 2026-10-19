@@ -1,6 +1,6 @@
 # Contributing
 
-Issues and pull requests are welcome. Pull requests need a passing CI run (`validate` and `test`) before they can be merged.
+Issues and pull requests are welcome. Pull requests need a passing CI run (`validate` and `test`, on Linux and on Windows) before they can be merged.
 
 ## Develop
 

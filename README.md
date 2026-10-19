@@ -126,7 +126,7 @@ Change these in `/config`:
 ## More
 
 > [!IMPORTANT]
-> **The queue stays on your machine**, one per project. Nothing reaches Claude's conversation until you run `/aside plan` or `/aside run`, or `afterClaudeAnswers` does. With `tidy` on, the text you type goes to Haiku to be corrected; what you copied never does. With `planModel` on a model, `/aside plan` sends the queue to that model in place of the conversation.
+> **The queue stays on your machine**, one per project, beside one global list for ideas that belong to no project. Nothing reaches Claude's conversation until you run `/aside plan` or `/aside run`, or `afterClaudeAnswers` does. With `tidy` on, the text you type goes to Haiku to be corrected; what you copied never does. With `planModel` on a model, `/aside plan` sends the queue to that model in place of the conversation.
 
 <details>
 <summary>What <kbd>aside</kbd> reads, runs and sends</summary>
