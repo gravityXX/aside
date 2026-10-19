@@ -150,14 +150,18 @@ export const world = ($: Engine, on: On, given: Partial<Machine> = {}) => {
     }
   })
 
-  // The kit runs on Linux and resolves a Windows path ("C:\\x") against its own folder; a
-  // Windows machine would read it as it is, so the folder the kit put before it is taken off.
-  // A path the plugin built under the project is left alone.
-  const onDisk = (path: string) => (path.startsWith('/proj/') ? path : path.replace(/^.*\/(?=[A-Za-z]:[\\/])/, ''))
+  // The kit hands a file hook the path as the system it runs on spells it. On Linux it resolves
+  // a Windows path ("C:\\x") against its own folder, which a Windows machine would read as it
+  // is, so that folder is taken off. On Windows it puts its drive before a path under the
+  // project ("C:\\proj\\docs"), which is turned back into the project's own "/proj/docs".
+  const onDisk = (path: string) => {
+    if (/^[A-Za-z]:\\proj(?:\\|$)/.test(path)) return path.slice(2).replace(/\\/g, '/')
+    return path.startsWith('/proj/') ? path : path.replace(/^.*\/(?=[A-Za-z]:[\\/])/, '')
+  }
   on('fs.read', ($e, e) => (onDisk(e.path) in w.files ? { value: w.files[onDisk(e.path)]! } : { deny: 'ENOENT' }))
   on('fs.exists', ($e, e) => ({ value: onDisk(e.path) in w.files }))
   on('fs.list', ($e, e) => {
-    const dir = e.path.replace(/\/$/, '')
+    const dir = onDisk(e.path).replace(/\/$/, '')
     const names = new Map<string, 'file' | 'dir'>()
     for (const path of Object.keys(w.files)) {
       if (!path.startsWith(`${dir}/`)) continue
