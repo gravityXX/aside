@@ -30,7 +30,7 @@ export async function drawBand(ctx: Context, $: Engine, e: BandRender[1], next: 
   const now = await readBand($)
   const waiting = now.ideas + now.comments + now.tags
   const left = now.steps - now.done
-  if (!isDrawnOn(e.surface) || e.props.hasSurvey || (waiting === 0 && left === 0 && now.running === undefined)) {
+  if (!isDrawnOn(e.surface) || e.props.hasSurvey || (waiting === 0 && left === 0 && now.running === undefined && !now.global)) {
     return next(e)
   }
 
@@ -41,6 +41,8 @@ export async function drawBand(ctx: Context, $: Engine, e: BandRender[1], next: 
   else if (left > 0) parts.push(plan)
   if (now.ideas) parts.push(formatCount(now.ideas, 'idea'))
   if (now.comments + now.tags) parts.push(formatCount(now.comments + now.tags, 'comment'))
+  // A reminder of the ideas that wait for no project: /aside g lists them.
+  if (now.global) parts.push(`${now.global} global`)
   const action: Action | undefined =
     now.running !== undefined ? 'stop' : now.paused !== undefined ? 'continue' : left > 0 ? 'run plan' : undefined
 

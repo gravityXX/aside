@@ -55,6 +55,12 @@ export const queueSection = (entries: readonly Entry[], root: string): ListingSe
     ? { title: 'The queue is empty.', rows: [] }
     : { title: summarizeQueue(entries), rows: entries.map((entry, i) => entryRow(entry, root, String(i + 1))) }
 
+// The global list, as /aside g shows it: ideas that belong to no project.
+export const globalSection = (entries: readonly Entry[]): ListingSection => ({
+  title: `${formatCount(entries.length, 'idea')} on the global list`,
+  rows: entries.map((entry, i) => entryRow(entry, '', String(i + 1))),
+})
+
 // The tags in files, each marked once an earlier /aside handed it over.
 export const tagsSection = (tags: readonly Entry[], root: string, isHandedOver: (tag: Entry) => boolean): ListingSection => ({
   title: 'Tags in files',

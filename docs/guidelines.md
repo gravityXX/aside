@@ -17,7 +17,7 @@ How the code in this repository is designed, written, tested and released. Read 
 
 - **`hooks/register.tsx`** - every hook the plugin has, each handing its event to the function that does the work.
 - **`hooks/ui/`** - what the person sees: the band above the prompt (`band`), the list pane (`pane`), the framed `/aside` output (`output`) and the rows they share (`rows`).
-- **`hooks/features/`** - what the plugin does: `capture` (a typed `+` to a stored entry), `queue` (the listing and the commands on entries), `plan` (handing the queue over, the steps) and `commands` (`/aside`, its help and Tab). Within the layer `commands` imports the others and `plan` imports `queue`.
+- **`hooks/features/`** - what the plugin does: `capture` (a typed `+` to a stored entry), `queue` (the listing and the commands on entries), `plan` (handing the queue over, the steps), `global` (the global list: ideas for no project) and `commands` (`/aside`, its help and Tab). Within the layer `commands` imports the others, `plan` imports `queue` and `global` imports `capture`.
 - **`hooks/context.ts`** - the settings and the session's state, made once per load and passed to the hooks.
 - **`hooks/io/`** - the only files that reach the engine's store and the machine: `store` and `host`.
 - **`hooks/core/`** - plain functions on text, with no `$`: `text`, `markdown`, `entries`, `listing` and `prompts`.
@@ -49,7 +49,7 @@ Each value lives where its lifetime fits:
 - **Atoms** (`band`, `files` in `io/store.ts`) - values a drawing reads. They last the session, survive a reload, and a write redraws every drawing that read them.
 - **`$.store`** - the queue, the plan and what undo brings back. It lasts across sessions and every session on the machine shares it.
 
-5. Store keys are made per project root by `projectKeys`; never a bare key.
+5. Store keys are made per project root by `projectKeys`; never a bare key. The one exception is the global list, ideas that belong to no project: one key per idea under `GLOBAL_IDEA` in `io/store.ts`, so sessions in different projects add and take them without writing over each other's.
 6. What belongs to one session names it, since the store is shared (`Plan.active.sessionId`).
 7. Stored data from the last release must still load. A new field is optional; renaming or removing one needs code that reads the old shape.
 8. A flag in stored data is `isX?: true`, left out when false.

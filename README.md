@@ -83,6 +83,17 @@ Requires <kbd>Claude Code</kbd> 2.1.301 or newer, whose plugin API is still in e
 /aside help            list every command
 ```
 
+```text
++g TEXT                put an idea on the global list, which belongs to no project
+read it later +g       the whole draft, onto the global list
+/aside g               show the global list
+/aside here N ...      move ideas N of the global list to the end of this queue
+/aside global N ...    move ideas N of this queue to the global list
+/aside g remove N ...  remove from the global list; g edit N, g pop [N] and g move N M as for the queue
+```
+
+The global list waits in every project: the line above the prompt counts it, `/aside` leaves it out, and plan and run take only this queue, so `/aside here` brings an idea in first. Several sessions can add to it at once. `/aside undo` does not bring back what left it.
+
 `N` is a number as `/aside` shows it, and `[N]` may be left out. `FILE` is one word ending in `.md`. While Claude works, `/aside` opens the list in a pane. Tab completes every command.
 
 <details>
@@ -122,7 +133,7 @@ Change these in `/config`:
 
 <br>
 
-- **Keeps** the queue, the plan and what `/aside undo` brings back, one set per project, in Claude Code's store for the plugin (`~/.claude/plugins/store/`). It writes a file only when you run `/aside export`, and never over one it did not write.
+- **Keeps** the queue, the plan and what `/aside undo` brings back, one set per project, and the global list, shared by all projects, in Claude Code's store for the plugin (`~/.claude/plugins/store/`). It writes a file only when you run `/aside export`, and never over one it did not write.
 - **Reads** `<!-- ? -->` tags in markdown files Claude wrote or edited this session, or that you `/aside scan`; for a comment, the clipboard, the lines you selected in Claude's reply, the last tool output and the project's markdown files; the project's git branch.
 - **Runs** a clipboard reader (`powershell.exe` on WSL and Windows, `pbpaste` on macOS, `wl-paste`, `xclip` or `xsel` on Linux), `git rev-parse --abbrev-ref HEAD`, and `grep -rlizP` over the project's markdown files.
 - **Sends** the entries to Claude only on `/aside plan`, `/aside run` or `afterClaudeAnswers`, with what you copied, and to the model `planModel` names instead on `/aside plan`; while `tidy` is on, the text you typed goes to Haiku through Claude Code, never what you copied.

@@ -265,6 +265,9 @@ export const world = ($: Engine, on: On, given: Partial<Machine> = {}) => {
 
   const write = (path: string, content = 'x') => $.tool.call({ tool: 'Write', file_path: path, content } as never)
 
+  // A write another session makes to the store all sessions share.
+  const fromAnotherSession = (key: string, value: unknown) => store.set(key, structuredClone(value))
+
   // Claude saving a plan with the plan tool, and the items it leaves out, if any.
   const savePlan = (steps: unknown, unclear?: unknown) =>
     $.tool.call({ tool: 'mcp__aside__plan', steps, ...(unclear === undefined ? {} : { unclear }) } as never)
@@ -332,6 +335,7 @@ export const world = ($: Engine, on: On, given: Partial<Machine> = {}) => {
     aside,
     shown,
     write,
+    fromAnotherSession,
     savePlan,
     wait,
     startTurn,

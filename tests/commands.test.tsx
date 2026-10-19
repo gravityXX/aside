@@ -281,6 +281,20 @@ describe('tab completion', () => {
     expect(await complete($, '/aside run 2 ')).toEqual(['1: dark mode', '2: question: why so slow'])
     expect(await complete($, 'just text')).toEqual([])
   })
+
+  test('after "/aside here " Tab offers the numbers of the global list', async ($, on) => {
+    const { type } = world($, on)
+    on('prompt.autocomplete', () => ({ suggestions: [] }))
+    await type('+g read the RFC\n+g learn Rust')
+
+    expect(await complete($, '/aside h')).toEqual(['here: move global ideas into this queue', 'help: show every command'])
+    expect(await complete($, '/aside here ')).toEqual(['1: read the RFC', '2: learn Rust'])
+    expect(await complete($, '/aside g r')).toEqual(['remove: remove ideas from the global list'])
+    expect(await complete($, '/aside g remove 1 ')).toEqual(['1: read the RFC', '2: learn Rust'])
+    expect(await complete($, '/aside g edit 1 ')).toEqual([])
+    await type('+ dark mode\n+? why so slow')
+    expect(await complete($, '/aside global ')).toEqual(['1: dark mode'])
+  })
 })
 
 describe('exporting the list', () => {
