@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.22.0 - 2026-10-19
 
 - The `planModel` setting picks who organizes the queue on `/aside plan`. `session`, the default, is Claude in this conversation, as before. `sonnet`, `haiku` or `opus` hand it to one call to that model outside the conversation: the plan comes back as the command's answer, or as a toast after Claude answers with `afterClaudeAnswers` on `plan`, nothing is added to the conversation, and it can run while Claude works. The queue stays as it is until the plan is saved, one such call runs at a time, and when that model gives no plan, or the queue or the plan changed while it thought, nothing is saved and aside says why.
 
