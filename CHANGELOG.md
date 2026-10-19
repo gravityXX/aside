@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- `/aside export` saves what `/aside` shows, the queue, the tags in files and the plan, to `aside.md` in the project as Markdown, a heading for each part over its lines as `/aside` shows them, or to the file named, as in `/aside export notes/queue.md`. It writes over an earlier export but never over another file, and the queue stays as it is. A comment's copied text is still found in its own file rather than in an export that quotes it, and an export holds no tags of its own.
+
 ## 0.20.1 - 2026-10-19
 
 - On Windows, a file is one file however its path is written: with `\` or `/`, in any letter case, or as `.\docs\report.md`. A tag no longer shows twice when its file is scanned under two of these, a file Claude writes shows by its path in the project rather than in full, in a project at the root of a drive too, and the plan keeps the comments on one file together. Queues, tags handed over and `/aside undo` saved by 0.20.0 read the same way. A Windows path outside the project shows with forward slashes, as in `C:/notes/todo.md`.

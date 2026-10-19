@@ -112,14 +112,45 @@ const formatRow = (row: ListingRow, width: number): string => {
   return `${head}${row.lines.join(`\n${indent}`)}${about}`
 }
 
-export const listingText = (sections: readonly ListingSection[]): string =>
-  sections
-    .map(section => {
-      const width = Math.max(0, ...section.rows.map(row => row.word.length))
+// A section's rows in columns, the words as wide as the longest.
+const sectionRows = (section: ListingSection): string => {
+  const width = Math.max(0, ...section.rows.map(row => row.word.length))
 
-      return section.rows.length === 0 ? section.title : `${section.title}\n\n${section.rows.map(row => formatRow(row, width)).join('\n')}`
-    })
-    .join('\n\n')
+  return section.rows.map(row => formatRow(row, width)).join('\n')
+}
+
+export const listingText = (sections: readonly ListingSection[]): string =>
+  sections.map(section => (section.rows.length === 0 ? section.title : `${section.title}\n\n${sectionRows(section)}`)).join('\n\n')
+
+// The first line of every file /aside export writes. An earlier export may be written over,
+// and a copied fragment is never pinned to one, as what it quotes are copies.
+export const EXPORT_MARKER = '<!-- aside export -->'
+
+export const isExportText = (text: string) => text.startsWith(EXPORT_MARKER)
+
+// The listing as /aside export writes it: the marker and when it was made, then each section
+// as a heading over its rows in a code block, exactly as /aside shows them. In a code block
+// nothing in an entry (HTML, backticks, a tag) is read as Markdown; the fence is longer than
+// any run of backticks the rows hold, so none of them closes it.
+export const listingMarkdown = (sections: readonly ListingSection[], made: string): string => {
+  const heading = (title: string) => `## ${title.replace(/&(?=#?\w+;)/g, '&amp;').replace(/</g, '&lt;')}`
+  const block = (section: ListingSection) => {
+    const rows = sectionRows(section)
+    const fence = '`'.repeat(Math.max(3, ...[...rows.matchAll(/`+/g)].map(run => run[0].length + 1)))
+
+    return ['', `${fence}text`, rows, fence]
+  }
+
+  return [
+    EXPORT_MARKER,
+    '',
+    '# aside',
+    '',
+    `Exported ${made}.`,
+    ...sections.flatMap(section => ['', heading(section.title), ...(section.rows.length > 0 ? block(section) : [])]),
+    '',
+  ].join('\n')
+}
 
 const ROW_WORDS = [...Object.values(KINDS).map(kind => kind.label), 'running', 'done', 'to do']
 const ROW_PATTERN = new RegExp(`^ {0,2}(\\d+|·)  (${ROW_WORDS.join('|')}) {2,}(\\S.*)$`)

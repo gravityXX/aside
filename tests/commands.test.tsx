@@ -282,3 +282,176 @@ describe('tab completion', () => {
     expect(await complete($, 'just text')).toEqual([])
   })
 })
+
+describe('exporting the list', () => {
+  test('/aside export writes what /aside shows to aside.md as Markdown, and the queue stays', async ($, on) => {
+    const { w, write, type, aside, shown, savePlan } = world($, on, {
+      files: { [REPORT_PATH]: REPORT },
+      clip: 'Revenue grew by 12% in the third quarter',
+    })
+    await write(REPORT_PATH)
+    await type('+ keep <!-- ? this --> as text\n  and a second line')
+    await type('+? where from')
+    await savePlan([{ title: 'One', prompt: 'Do one.' }])
+    const before = await shown()
+
+    expect(await aside('export')).toBe('Exported 1 idea and 1 comment, 1 tag and the plan of 1 step to aside.md.')
+    expect(w.files['/proj/aside.md']!.split('\n')).toEqual([
+      '<!-- aside export -->',
+      '',
+      '# aside',
+      '',
+      'Exported 1970-01-01 00:00 UTC.',
+      '',
+      '## 1 idea and 1 comment waiting',
+      '',
+      '```text',
+      '  1  idea      keep <!-- ? this --> as text',
+      '                 and a second line',
+      '  2  question  where from',
+      '               ↳ docs/report.md:5 · "Revenue grew by 12% in the third quarter"',
+      '```',
+      '',
+      '## Tags in files',
+      '',
+      '```text',
+      '  ·  question  is this the same for Poland',
+      '               ↳ docs/report.md:9 · "Costs stayed flat across all regions."',
+      '```',
+      '',
+      '## Plan: 1 of 1 step to do (/aside run)',
+      '',
+      '```text',
+      '  1  to do  One',
+      '```',
+      '',
+    ])
+    expect(await shown()).toEqual(before)
+  })
+
+  test('/aside export FILE writes there, over an earlier export but never over another file', async ($, on) => {
+    const { w, type, aside } = world($, on, { files: { '/proj/notes.md': '# My notes' } })
+    await type('+ a')
+
+    expect(await aside('export notes/queue.md')).toBe('Exported 1 idea to notes/queue.md.')
+    await type('+ b')
+    expect(await aside('export notes/queue.md')).toBe('Exported 2 ideas to notes/queue.md.')
+    expect(w.files['/proj/notes/queue.md']).toContain('  2  idea  b')
+    expect(await aside('export notes.md')).toBe('notes.md is not an aside export; name another file: /aside export FILE')
+    expect(w.files['/proj/notes.md']).toBe('# My notes')
+  })
+
+  test('a heading keeps the words Claude gave it, as typed', async ($, on) => {
+    const { w, sent, aside, savePlan, startTurn, endTurn, wait, idle } = world($, on)
+    await savePlan(STEPS)
+    await aside('run')
+    await idle()
+    await startTurn(sent[0]!, 's1')
+    await wait('needs <your> yes & a name')
+    await endTurn('s1')
+    await idle()
+
+    await aside('export')
+    expect(w.files['/proj/aside.md']!.split('\n')[8]).toBe('## Plan paused after step 1 (needs &lt;your> yes & a name), 2 of 3 steps to do (/aside continue)')
+  })
+
+  test('code and backticks in an entry stay as typed: no fence in it closes the block it is in', async ($, on) => {
+    const { w, type, aside } = world($, on)
+    await type(['+ this fails:', '````', 'use <div> and ``` here', '````'].join('\n'))
+
+    expect(await aside('export')).toBe('Exported 1 idea to aside.md.')
+    expect(w.files['/proj/aside.md']!.split('\n').slice(8)).toEqual([
+      '`````text',
+      '  1  idea  this fails:',
+      '           ````',
+      '           use <div> and ``` here',
+      '           ````',
+      '`````',
+      '',
+    ])
+  })
+
+  test('/aside export takes a full path, in the project or out of it, on Windows too', async ($, on) => {
+    const { w, type, aside } = world($, on)
+    await type('+ a')
+
+    expect(await aside('export /proj/out/list.md')).toBe('Exported 1 idea to out/list.md.')
+    expect(await aside('export /tmp/list.md')).toBe('Exported 1 idea to /tmp/list.md.')
+    expect(Object.keys(w.files)).toEqual(['/proj/out/list.md', '/tmp/list.md'])
+  })
+
+  test('on Windows, /aside export takes a path with backslashes, but none without its drive', async ($, on) => {
+    const { w, type, aside } = world($, on, { system: 'windows' })
+    await type('+ a')
+
+    expect(await aside('export C:\\proj\\out\\list.md')).toBe('Exported 1 idea to out/list.md.')
+    for (const name of ['/c/Users/me/notes.md', '\\notes.md', 'D:notes.md', 'notes:v2.md']) {
+      expect(await aside(`export ${name}`)).toBe(`${name} is not a full Windows path; name the file in the project or with its drive, such as C:\\notes\\queue.md.`)
+    }
+    expect(Object.keys(w.files)).toEqual(['/proj/out/list.md'])
+  })
+
+  test('/aside export refuses a path it would put in the wrong place, and a sentence is queued', async ($, on) => {
+    const { w, type, aside, shown } = world($, on)
+    await type('+ a')
+
+    for (const name of ['~/notes.md', '$HOME/notes.md', '%USERPROFILE%\\notes.md']) {
+      expect(await aside(`export ${name}`)).toBe('Name a file in the project or by its full path, as ~, $HOME and %USERPROFILE% are not expanded: /aside export notes/queue.md')
+    }
+    for (const name of ['C:\\notes.md', 'notes\\queue.md']) {
+      expect(await aside(`export ${name}`)).toBe(`${name} is spelled as on Windows; name the file as this system does, such as notes/queue.md.`)
+    }
+    expect(Object.keys(w.files)).toEqual([])
+    await aside('export the notes to report.md')
+    expect((await shown()).slice(-1)).toEqual(['2 idea export the notes to report.md'])
+  })
+
+  test('an export is no file to read tags from, nor one a copied fragment comes from', async ($, on) => {
+    const { write, queue, aside, shown } = world($, on, { files: { [REPORT_PATH]: REPORT }, clip: 'Revenue grew by 12% in the third quarter' })
+    await write(REPORT_PATH)
+    expect(await queue('+? where from')).toBe('queued ? docs/report.md:5 "Revenue grew by 12% in the th…" (1 waiting)')
+    await aside('export')
+    await write('/proj/aside.md')
+
+    expect(await queue('+? and this')).toBe('queued ? docs/report.md:5 "Revenue grew by 12% in the th…" (2 waiting)')
+    expect(await aside('scan aside.md')).toBe('aside.md is an aside export; its tags are read from the files it lists.')
+    expect((await shown()).filter(line => line.startsWith('·'))).toEqual(['· question is this the same for Poland'])
+  })
+
+  test('a tag in an exported entry is no tag in the list, whatever its number', async ($, on) => {
+    const { write, type, aside, shown } = world($, on)
+    for (let i = 1; i <= 9; i++) await type(`+ idea ${i}`)
+    await type(['+ the tag looks like this:', '```', '<!-- ? why -->', '```'].join('\n'))
+    await aside('export')
+    await write('/proj/aside.md')
+
+    expect((await shown()).some(line => line.startsWith('Tags in files'))).toBe(false)
+  })
+
+  test('with nothing to export, or a disk that refuses the write, /aside export says so', async ($, on) => {
+    const { w, type, aside } = world($, on)
+
+    expect(await aside('export')).toBe('Nothing to export: the queue is empty.')
+    expect(w.files['/proj/aside.md']).toBeUndefined()
+    await type('+ a')
+    w.isReadOnly = true
+    expect(await aside('export')).toBe('Could not write aside.md: EACCES: permission denied.')
+  })
+
+  test('a copied fragment is found by grep in its own file, not in an export that quotes it', async ($, on) => {
+    const { w, queue, aside } = world($, on, { files: { [REPORT_PATH]: REPORT }, grep: REPORT_PATH, clip: 'Revenue grew by 12% in the third quarter' })
+    expect(await queue('+? where from')).toBe('queued ? docs/report.md:5 "Revenue grew by 12% in the th…" (1 waiting)')
+    await aside('export')
+    w.grep = `/proj/aside.md\n${REPORT_PATH}`
+
+    expect(await queue('+? and this')).toBe('queued ? docs/report.md:5 "Revenue grew by 12% in the th…" (2 waiting)')
+  })
+
+  test('a copied fragment is found by a walk in its own file, not in an export that quotes it', async ($, on) => {
+    const { queue, aside } = world($, on, { system: 'mac', files: { [REPORT_PATH]: REPORT }, clip: 'Revenue grew by 12% in the third quarter' })
+    expect(await queue('+? where from')).toBe('queued ? docs/report.md:5 "Revenue grew by 12% in the th…" (1 waiting)')
+    await aside('export')
+
+    expect(await queue('+? and this')).toBe('queued ? docs/report.md:5 "Revenue grew by 12% in the th…" (2 waiting)')
+  })
+})
