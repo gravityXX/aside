@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.25.2 - 2026-10-19
 
 - `/aside help`, its Tab hint and the README say what `/aside undo` brings back: what the last clear took, or a plan or run Claude has not answered yet. They used to promise any plan or run, which Claude's answer had already made final.
 
