@@ -63,6 +63,56 @@ describe('handing the queue over', () => {
     )
   })
 
+  test('on Windows, comments an earlier release stored under two spellings of one file are one group of the plan', async ($, on) => {
+    const stored = {
+      'queue:C:\\proj': [
+        { text: 'where from', at: 1, kind: 'question', file: 'C:\\proj\\docs\\report.md', line: 5 },
+        { text: 'and this', at: 2, kind: 'question', file: 'c:\\Proj/docs\\Report.md', line: 8 },
+      ],
+    }
+    const { sent, aside, shown, idle } = world($, on, { system: 'windows', stored })
+
+    expect(await shown()).toEqual(['2 comments waiting', '1 question where from', '↳ docs/report.md:5', '2 question and this', '↳ docs/Report.md:8'])
+    expect(await aside('plan')).toBe('Organizing 2 comments.')
+    await idle()
+    const lines = sent.at(-1)!.split('\n')
+    const start = lines.indexOf('Comments on what you wrote (question, change, drop, dig deeper):')
+    expect(lines.slice(start + 1, lines.indexOf('', start))).toEqual(['docs/report.md:', '  1. [question] line 5: where from', '  2. [question] line 8: and this'])
+  })
+
+  test('on Windows, a tag an earlier release handed over under another spelling of its file stays handed over', async ($, on) => {
+    const stored = { 'handed:C:\\proj': ['C:\\proj\\docs\\report.md\u0000is this the same for Poland'] }
+    const { write, aside, shown } = world($, on, { system: 'windows', files: { 'C:\\proj\\docs\\report.md': REPORT }, stored })
+    await write('C:\\proj\\docs\\report.md')
+
+    expect(await aside('plan')).toBe('The queue is empty. Start a message with "+" to add an idea, or "+?" to comment on a copied fragment.')
+    expect((await shown()).at(-1)).toBe('↳ docs/report.md:9 · "Costs stayed flat across all regions." · handed over')
+  })
+
+  test('undo counts each of two tags with the same text in one file', async ($, on) => {
+    const notes = ['# Notes', '<!-- ? why -->', '', '<!-- ? why -->'].join('\n')
+    const { write, aside, idle } = world($, on, { files: { '/proj/notes.md': notes } })
+    await write('/proj/notes.md')
+    expect(await aside('plan')).toBe('Organizing 2 comments.')
+    await idle()
+
+    expect(await aside('undo')).toBe('Brought back 2 tags, 2 waiting.')
+  })
+
+  test('on Windows, undo brings back once a tag an earlier release took under two spellings of its file', async ($, on) => {
+    const tag = 'is this the same for Poland'
+    const stored = {
+      'takenTags:C:\\proj': [`C:\\proj\\docs\\report.md\u0000${tag}`, `c:\\proj/docs\\report.md\u0000${tag}`],
+      'takenBy:C:\\proj': 'hand-over',
+      'handed:C:\\proj': [`C:\\proj\\docs\\report.md\u0000${tag}`, `c:\\proj/docs\\report.md\u0000${tag}`],
+    }
+    const { write, aside } = world($, on, { system: 'windows', files: { 'C:\\proj\\docs\\report.md': REPORT }, stored })
+    await write('C:\\proj\\docs\\report.md')
+
+    expect(await aside('undo')).toBe('Brought back 1 tag, 1 waiting.')
+    expect(await aside('plan')).toBe('Organizing 1 comment.')
+  })
+
   test('/aside run all sends the queue as it is, to be worked through now', async ($, on) => {
     const { sent, type, aside, idle } = world($, on)
     await type('+ a\n+? b')

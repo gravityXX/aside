@@ -1,6 +1,6 @@
 import type { Entry, Step } from '../../types'
 import { KINDS } from './entries'
-import { relativePath, shortenText } from './text'
+import { pathKey, relativePath, shortenText } from './text'
 
 // What the last line of every prompt composed from the queue says, and what every step
 // prompt carries: the plugin knows its own turns by them.
@@ -38,16 +38,21 @@ const describeQueue = (entries: readonly Entry[], root: string): string[] => {
   const numbered = entries.map((entry, i) => ({ entry, n: i + 1 }))
   const ideas = numbered.filter(({ entry }) => entry.kind === 'idea')
   const comments = numbered.filter(({ entry }) => entry.kind !== 'idea')
-  const files = [...new Set(comments.map(({ entry }) => entry.file ?? ''))]
+  // Grouped by pathKey, so that one file stored under two spellings is one group, headed by
+  // the file as /aside shows it.
+  const placeOf = (entry: Entry) => relativePath(entry.file ?? '', root)
+  const keyOf = (entry: Entry) => pathKey(placeOf(entry), root)
+  const files = [...new Set(comments.map(({ entry }) => keyOf(entry)))]
 
   const sections: string[] = ['My queue, collected while you were working, oldest first.']
   if (ideas.length > 0) {
     sections.push(['Ideas:', ...ideas.map(({ entry, n }) => `${n}. ${entry.text.replace(/\n/g, '\n   ')}${describeWorkContext(entry)}`)].join('\n'))
   }
   if (comments.length > 0) {
-    const groups = files.map(file => {
-      const own = comments.filter(({ entry }) => (entry.file ?? '') === file)
-      const head = file === '' ? 'Not tied to a file:' : `${relativePath(file, root)}:`
+    const groups = files.map(key => {
+      const own = comments.filter(({ entry }) => keyOf(entry) === key)
+      // The group has a comment: its key came from one.
+      const head = key === '' ? 'Not tied to a file:' : `${placeOf(own[0]!.entry)}:`
 
       return [
         head,

@@ -14,8 +14,54 @@ export const shortenText = (text: string, room = 40): string => {
   return line.length <= room ? line : `${line.slice(0, room - 1).trimEnd()}…`
 }
 
-export const relativePath = (path: string, root: string): string =>
-  path.startsWith(`${root}/`) ? path.slice(root.length + 1) : path
+// A Windows path, by its drive ("C:\\x", "c:/x") or a share ("\\\\host\\x", "//host/x").
+const isWindowsPath = (path: string) => /^(?:[A-Za-z]:[\\/]|[\\/]{2}[^\\/])/.test(path)
+
+// A drive on its own, as in "C:".
+const isDrive = (part: string | undefined) => part !== undefined && /^[A-Za-z]:$/.test(part)
+
+// A path with no "." segments, each ".." folded into the folder before it, and no doubled
+// slashes but a share's leading two, as the system reads it: "C:/p/./docs//a.md" is "C:/p/docs/a.md".
+const tidySegments = (path: string): string => {
+  const lead = /^\/\/(?=[^/])/.test(path) ? '//' : path.startsWith('/') ? '/' : ''
+  const parts: string[] = []
+  for (const part of path.split('/')) {
+    if (part === '' || part === '.') continue
+    const last = parts.at(-1)
+    if (part !== '..' || (last === undefined && lead === '') || last === '..') parts.push(part)
+    else if (last !== undefined && !isDrive(last)) parts.pop()
+  }
+  const tidy = `${lead}${parts.join('/')}`
+
+  return isDrive(tidy) ? `${tidy}/` : tidy
+}
+
+// One spelling of a path, so that a file Claude wrote as "C:\\p\\a.md" and the same file found
+// as "C:/p/./a.md" are one file, with one tag list. On every system the segments are tidied
+// ("./docs//a.md" is "docs/a.md"); on Windows the slashes go forward and the drive upper case,
+// and a name under a Windows root ("docs\\a.md") is spelled the same. A POSIX path keeps its
+// backslashes, which may be part of a file name there.
+export const canonicalPath = (path: string, root = path): string =>
+  isWindowsPath(path) || isWindowsPath(root)
+    ? tidySegments(path.replace(/\\/g, '/')).replace(/^[a-z](?=:\/)/, drive => drive.toUpperCase())
+    : tidySegments(path)
+
+// What two paths are compared by: their one spelling, in lower case on Windows, whose file
+// system takes "Docs\\Report.md" for "docs\\report.md".
+export const pathKey = (path: string, root = path): string => {
+  const own = canonicalPath(path, root)
+
+  return isWindowsPath(own) || isWindowsPath(root) ? own.toLowerCase() : own
+}
+
+export const relativePath = (path: string, root: string): string => {
+  const file = canonicalPath(path, root)
+  const dir = canonicalPath(root).replace(/\/$/, '')
+  const head = file.slice(0, dir.length + 1)
+  const isUnder = isWindowsPath(dir) ? head.toLowerCase() === `${dir}/`.toLowerCase() : head === `${dir}/`
+
+  return isUnder ? file.slice(dir.length + 1) : file
+}
 
 const PLURALS = { idea: 'ideas', comment: 'comments', tag: 'tags', step: 'steps', entry: 'entries' } as const
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- On Windows, a file is one file however its path is written: with `\` or `/`, in any letter case, or as `.\docs\report.md`. A tag no longer shows twice when its file is scanned under two of these, a file Claude writes shows by its path in the project rather than in full, in a project at the root of a drive too, and the plan keeps the comments on one file together. Queues, tags handed over and `/aside undo` saved by 0.20.0 read the same way. A Windows path outside the project shows with forward slashes, as in `C:/notes/todo.md`.
+- On every system, a file named as `./docs/report.md`, `docs//report.md` or through `..` is the same file as `docs/report.md`, so its tags no longer show twice.
+
 ## 0.20.0 - 2026-10-18
 
 - The plan is drawn as a line of steps, in the `/aside` frame, the list pane and the saved plan's row: each step's mark in its state's colour (done, running, to do), and under a step done how long it took and what it said. A double line marks where a step paused the run, and the plan's title gives its time so far.
