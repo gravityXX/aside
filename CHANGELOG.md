@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.23.0 - 2026-10-19
 
 - A global list for ideas that belong to no project: start one with `+g`, or end a draft with ` +g`. `/aside g` shows it, `/aside here N ...` moves its ideas into this project's queue and `/aside global N ...` moves ideas there, and `/aside g remove`, `edit`, `pop` and `move` work on it as on the queue. `/aside` and the plan leave it out; the line above the prompt counts it, as in `1 global`. Ideas added in several sessions at once never overwrite each other.
 
