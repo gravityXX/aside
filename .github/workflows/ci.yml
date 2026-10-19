@@ -107,3 +107,19 @@ jobs:
       - name: Test
         if: steps.bump.outputs.pushed != 'true'
         run: claude plugin test .
+
+  # The same tests on Windows, where the engine spells paths its own way. A job of its own, so
+  # the check the ruleset requires keeps its name.
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code@2.1.301
+      - name: Validate
+        run: claude plugin validate .
+      - name: Test
+        run: claude plugin test .
