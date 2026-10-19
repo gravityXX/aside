@@ -194,8 +194,7 @@ describe('where a comment points', () => {
   })
 
   test('a comment sent from a phone or the web is queued, without this machine\'s clipboard', async ($, on) => {
-    const { runs, shown, idle } = world($, on, { clip: 'Revenue grew by 12% in the third quarter' })
-    const fromPhone = (text: string) => $.prompt.submit({ text, origin: { kind: 'bridge' } as never, wait: false })
+    const { runs, shown, fromPhone, idle } = world($, on, { clip: 'Revenue grew by 12% in the third quarter' })
 
     expect(await fromPhone('+ dark mode')).toEqual({ drop: 'queued' })
     expect(await fromPhone('+? where from')).toEqual({ drop: 'queued' })

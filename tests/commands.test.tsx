@@ -385,7 +385,7 @@ describe('exporting the list', () => {
     await idle()
 
     await aside('export')
-    expect(w.files['/proj/aside.md']!.split('\n')[8]).toBe('## Plan paused after step 1 (needs &lt;your> yes & a name), 2 of 3 steps to do (/aside continue)')
+    expect(w.files['/proj/aside.md']!.split('\n')[8]).toBe('## Plan waits at step 1 (needs &lt;your> yes & a name), 3 of 3 steps to do (/aside continue)')
   })
 
   test('code and backticks in an entry stay as typed: no fence in it closes the block it is in', async ($, on) => {

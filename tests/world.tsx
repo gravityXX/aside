@@ -85,13 +85,15 @@ const ran = (stdout: string, exitCode = 0) => ({
 })
 
 // A project at /proj (C:\\proj on Windows) with the plugin loaded, and what reaches the person and Claude:
-// `sent` the prompts Claude got, `toasts` the notices in the corner, `logged` the lines in
+// `sent` the prompts Claude got, `contexts` what Claude read beside each of them, unseen by the
+// person, `toasts` the notices in the corner, `logged` the lines in
 // the transcript, `filled` what went into the prompt box, `asked` the notes the small model
 // was asked to tidy, `planned` the calls to a planner model, `panes` the panes open, `runs`
 // the commands the plugin ran.
 export const world = ($: Engine, on: On, given: Partial<Machine> = {}) => {
   const w: Machine = { files: {}, clip: '', grep: '', branch: 'main', system: 'wsl', ...given }
   const sent: string[] = []
+  const contexts: (readonly string[])[] = []
   const toasts: string[] = []
   const logged: string[] = []
   const filled: string[] = []
@@ -152,6 +154,7 @@ export const world = ($: Engine, on: On, given: Partial<Machine> = {}) => {
       return { drop: 'blocked by a hook' }
     }
     sent.push(e.text)
+    contexts.push(e.context ?? [])
     return { text: e.text }
   })
   on('prompt.fill', ($e, e) => {
@@ -279,6 +282,9 @@ export const world = ($: Engine, on: On, given: Partial<Machine> = {}) => {
   // Claude pausing the plan from a step with the wait tool.
   const wait = (reason: string) => $.tool.call({ tool: 'mcp__aside__wait', reason } as never)
 
+  // Enter on a phone or the web, through Remote Control.
+  const fromPhone = (text: string) => $.prompt.submit({ text, origin: { kind: 'bridge' } as never, wait: false })
+
   const startTurn = (text: string, turnId: string) => $.turn.start({ text, turnId })
 
   // The end of a turn: how it ended, Claude's answer and how long it ran.
@@ -325,6 +331,7 @@ export const world = ($: Engine, on: On, given: Partial<Machine> = {}) => {
   return {
     w,
     sent,
+    contexts,
     toasts,
     logged,
     filled,
@@ -336,6 +343,7 @@ export const world = ($: Engine, on: On, given: Partial<Machine> = {}) => {
     idle,
     type,
     queue,
+    fromPhone,
     aside,
     shown,
     write,

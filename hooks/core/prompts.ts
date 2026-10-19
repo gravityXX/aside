@@ -1,5 +1,6 @@
 import type { Entry, Plan, Step } from '../../types'
 import { KINDS } from './entries'
+import { isWaiting } from './listing'
 import { pathKey, relativePath, shortenText } from './text'
 
 // What the last line of every prompt composed from the queue says, and what every step
@@ -87,12 +88,21 @@ const ADDING_LINE = 'The saved plan is under way, so its steps stay as they are,
 
 export const isAddingPrompt = (text: string) => isPlanningPrompt(text) && text.includes(ADDING_LINE)
 
+// Where a step of the plan stands, for the planner.
+const stateOf = (plan: Plan, i: number, step: Step) => {
+  if (i === plan.active?.step) {
+    return isWaiting(plan.active) ? 'waits for my answer' : 'running'
+  }
+
+  return step.isDone ? 'done' : 'to do'
+}
+
 // While the plan runs, every step with where it stands, numbered S1, S2 apart from the items
 // as pendingSection does: the planner adds the items after them as new steps and changes none.
 const addingSection = (plan: Plan): string[] => [
   [
     `${ADDING_LINE} Plan only the items above, as new steps: save only those, and they are added after the last of these steps, none of which you repeat.`,
-    ...plan.steps.map((step, i) => `S${i + 1}. ${shortenText(step.title, 60)} (${i === plan.active?.step ? 'running' : step.isDone ? 'done' : 'to do'})`),
+    ...plan.steps.map((step, i) => `S${i + 1}. ${shortenText(step.title, 60)} (${stateOf(plan, i, step)})`),
   ].join('\n'),
 ]
 
@@ -199,6 +209,12 @@ export type StepMode = 'alone' | 'more' | 'last'
 
 const RESULT_LINE = 'End your reply with one line that starts "Result: " and says in one sentence what you did and what is still open.'
 
+const SUMMARY_LINE =
+  'Write the "Result: " line for this step, then end your reply with "## Summary of the run": one line per step of the plan on what was done, then what is still open (questions, anything paused, skipped or blocked), then what to do next.'
+
+// What a step may do when it needs the person: the wait tool keeps it open for their answer.
+const waitLine = (waitTool: string) => `If you need my answer first, or something blocks this step, call the ${waitTool} tool and stop.`
+
 // What the steps done so far said, for the last step of a run to sum the plan up from.
 const resultsSoFar = (steps: readonly Step[], index: number): string[] => {
   const done = steps.map((one, i) => ({ one, n: i + 1 })).filter(({ one, n }) => n !== index + 1 && one.isDone)
@@ -208,10 +224,14 @@ const resultsSoFar = (steps: readonly Step[], index: number): string[] => {
     : ['What the steps done said:', ...done.map(({ one, n }) => `${n} ${shortenText(one.title, 60)}: ${one.result ?? 'no result kept'}`)]
 }
 
+// Whether a step in `mode` sums the run up: the last step of a run of several.
+export const isSummingUp = (steps: readonly Step[], mode: StepMode) => mode === 'last' && steps.length > 1
+
 // A step of the plan as the prompt that runs it: the step's own prompt, then, in a plan of
-// several, where it stands and how to go about it: this step alone, a pause when it needs
-// the person or is blocked, and a result line the plugin keeps. The last step of a run gets
-// what the steps done said, and ends the run with a summary of the whole plan.
+// several, where it stands and how to go about it: this step alone, the wait tool when it
+// needs the person or is blocked, and a result line the plugin keeps. The last step of a run
+// gets what the steps done said, and ends the run with a summary of the whole plan, once the
+// step is done rather than while it waits.
 export const stepPrompt = (steps: readonly Step[], index: number, mode: StepMode, waitTool: string): string => {
   const step = steps[index]!
   const head = `${step.prompt}\n\n(Step ${index + 1} of ${steps.length} of the queue plan, "${step.title}", ${STEP_MARKER}.`
@@ -221,20 +241,50 @@ export const stepPrompt = (steps: readonly Step[], index: number, mode: StepMode
   const stateOf = (one: Step, i: number) => (i === index ? 'this one' : one.isDone ? 'done' : 'to do')
   const map = steps.map((one, i) => `${i + 1} ${shortenText(one.title, 60)} (${stateOf(one, i)})`).join(' · ')
   const lines = {
-    alone: ['Do this step only, not the work of the other steps. If it is done already, say so.', RESULT_LINE],
+    alone: ['Do this step only, not the work of the other steps. If it is done already, say so.', waitLine(waitTool), RESULT_LINE],
     more: [
       'Do this step only, not the work of the steps after it; the next one is sent when you answer. If it is done already, say so.',
-      `If you need my answer first, or something blocks this step, call the ${waitTool} tool and stop.`,
+      waitLine(waitTool),
       RESULT_LINE,
     ],
     last: [
       'Do this step only; it is the last one of this run. If it is done already, say so.',
       ...resultsSoFar(steps, index),
-      'Write the "Result: " line for this step, then end your reply with "## Summary of the run": one line per step of the plan on what was done, then what is still open (questions, anything paused, skipped or blocked), then what to do next.',
+      SUMMARY_LINE,
+      `${waitLine(waitTool)} Then end your reply with the "Result: " line and no summary yet: the summary comes once the step is done.`,
     ],
   }[mode]
 
   return `${head}\nPlan: ${map}.\n${lines.join('\n')})`
+}
+
+// What the model reads beside the person's message to a step that waits for it, never shown
+// to them: which step it most likely answers and how to go on with it. It names the plugin
+// without the words of STEP_MARKER or COMPOSED_BY, so nothing takes the message for one of the
+// plugin's own prompts (isOwnPrompt).
+export const answerContext = (steps: readonly Step[], index: number, isLast: boolean, waitTool: string): string => {
+  const step = steps[index]!
+  const summary = isLast ? ' It is the last step of this run, so write no summary of the run: it comes once I press continue.' : ''
+
+  return (
+    `(Added by the aside plugin: step ${index + 1} of ${steps.length} of the queue plan, "${step.title}", waits for my answer, and this message most likely gives it. ` +
+    `If it asks for something else, do that, and the step stays open; otherwise go on with that step only. If you need my answer again, call the ${waitTool} tool and stop. ` +
+    `Either way, end your reply with one line that starts "Result: " and says in one sentence what the step has done so far and what is still open. ` +
+    `The step ends when I press continue.${summary})`
+  )
+}
+
+// What ends the last step of a run when the person presses continue while it waits: one
+// more turn, which only sums the run up.
+export const closingPrompt = (steps: readonly Step[], index: number): string => {
+  const step = steps[index]!
+
+  return [
+    `(Step ${index + 1} of ${steps.length} of the queue plan, "${step.title}", ${STEP_MARKER}: I pressed continue, so this step ends here, and it was the last one of this run.`,
+    'Do no more work on it.',
+    ...resultsSoFar(steps, index),
+    `${SUMMARY_LINE})`,
+  ].join('\n')
 }
 
 // A step's "Result:" line, plain or in markdown ("**Result:** ...").

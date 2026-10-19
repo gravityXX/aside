@@ -3,7 +3,7 @@ import type { EngineInterface as Engine } from 'claude-code'
 import type { Entry } from '../../types'
 import type { Context } from '../context'
 import { findTags, inOrder } from '../core/entries'
-import { describeCount, isExportText, listingMarkdown, listingText, planSection, queueSection, tagsSection } from '../core/listing'
+import { describeCount, isExportText, isWaiting, listingMarkdown, listingText, planSection, queueSection, tagsSection } from '../core/listing'
 import type { ListingSection } from '../core/listing'
 import { popPrompt } from '../core/prompts'
 import { canonicalPath, formatCount, isAbsolutePath, isWindowsPath, relativePath, shortenText } from '../core/text'
@@ -260,12 +260,13 @@ export async function clearQueue($: Engine): Promise<string> {
 }
 
 // Brings back what plan, run or clear took, unless a step of the plan is running in this
-// session, so nothing is done twice.
+// session, or waits for the person in any, so nothing is done twice.
 export async function restoreTaken($: Engine): Promise<string> {
   const keys = await projectKeys($)
   const running = (await loadPlan($, keys.plan)).active
-  if (running && running.sessionId === (await $.session.id())) {
-    return `Step ${running.step + 1} of the plan is running; /aside stop first, so nothing is done twice.`
+  if (running && (isWaiting(running) || running.sessionId === (await $.session.id()))) {
+    const state = isWaiting(running) ? (running.isAnswered ? 'waits for /aside continue' : 'waits for your answer') : 'is running'
+    return `Step ${running.step + 1} of the plan ${state}; /aside stop first, so nothing is done twice.`
   }
   const { entries, tagIds } = await bringBackTake($, keys)
   if (entries.length === 0 && tagIds.length === 0) {

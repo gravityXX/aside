@@ -66,7 +66,7 @@ The plugin runs on the Claude Code plugin API: hooks `($, e, next)` added with `
 1. Outside `register.tsx`, a function that takes `$` is a `function` declaration called by name. An arrow function or a function expression is refused, even when the caller is in the same file.
 2. `$` is never passed to a method or property call (`rows[0].run($)`, `obj.read($)`). A table holds data only, and a `switch` calls the functions.
 3. A closure that captures `$` is fine: `$.clock.after(50, () => f($))`, `onPress={() => void g($)}`.
-4. The hook given to `on()` is a function literal or the name of a function declaration, never a call that returns one. The pattern is `on('x', ($, e, next) => handler(ctx, $, e, next))`.
+4. The hook given to `on()` is a function literal or the name of a function declaration, never a call that returns one. The pattern is `on('x', ($, e, next) => handler(ctx, $, e, next))`. A second hook on the same event needs a matcher, as the second `prompt.submit` has.
 5. A matcher value is a literal written in `register.tsx`. An imported constant shows as `?` in the validator's scan.
 6. An atom is read and updated only in the file that makes it. Other files call the functions that file exports, such as `readBand($)`.
 

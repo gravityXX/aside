@@ -55,7 +55,7 @@ const COMMANDS: readonly Command[] = [
     usage: 'run [N ... | all]',
     help: [
       '/aside run - run the plan step by step; with no plan, each entry as its own step',
-      '/aside continue - go on with a paused run, as /aside run does',
+      '/aside continue - end the step that waits for your answer and go on, or go on with a paused run, as /aside run does',
       '/aside run N [M ...] - run those steps of the plan, or those entries once no step is left to do',
       '/aside run all - send everything at once, no plan',
     ],

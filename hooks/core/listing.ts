@@ -92,31 +92,42 @@ export const leftOutSection = (left: readonly { entry: Entry; question: string }
   }),
 })
 
-// The plan, with what each step done said under it; null with no plan. A plan run to its
-// end stays in the listing until the next one takes its place.
+// Whether the step running is waiting for the person's answer, with no turn of it running:
+// Claude asked with the wait tool, and only /aside continue or /aside stop ends it now.
+export const isWaiting = (active: NonNullable<Plan['active']>) => active.pausedFor !== undefined && active.turnId === undefined
+
+// The plan, with what each step done said under it, and so far, the step that waits; null
+// with no plan. A plan run to its end stays in the listing until the next one takes its place.
 export const planSection = (plan: Plan): ListingSection | null => {
   if (plan.steps.length === 0) {
     return null
   }
   const left = plan.steps.filter(step => !step.isDone).length
-  const stateOf = (i: number) => (plan.active?.step === i ? 'running' : plan.steps[i]!.isDone ? 'done' : 'to do')
+  const waiting = plan.active && isWaiting(plan.active) ? plan.active : undefined
+  const stateOf = (i: number) => (plan.active?.step === i ? (waiting ? 'waiting' : 'running') : plan.steps[i]!.isDone ? 'done' : 'to do')
 
   const paused = plan.paused && !plan.active ? plan.paused : undefined
   const toDo = `${left} of ${formatCount(plan.steps.length, 'step')} to do`
-  // How long each step done ran, when its turn said; the plan's time is theirs together.
-  const timeOf = (step: Plan['steps'][number]) => (step.isDone && step.ms !== undefined && step.ms > 0 ? formatDuration(step.ms) : '')
-  const ms = plan.steps.reduce((sum, step) => sum + (step.isDone && step.ms ? step.ms : 0), 0)
+  // How long each step done ran, when its turn said; the plan's time is theirs together, with
+  // the turns so far of a step that waited for the person.
+  const timeOf = (ms: number | undefined) => (ms !== undefined && ms > 0 ? formatDuration(ms) : '')
+  const ms = plan.steps.reduce((sum, step) => sum + (step.isDone && step.ms ? step.ms : 0), plan.active?.ms ?? 0)
   const soFar = ms > 0 ? ` · ${formatDuration(ms)} so far` : ''
+  // What the step waits for: Claude's question, until a turn took the person's answer to it.
+  const waitsFor = waiting && (waiting.isAnswered ? 'answered' : waiting.pausedFor)
 
   return {
     title:
       left === 0
         ? `Plan done: ${formatCount(plan.steps.length, 'step')}${ms > 0 ? ` in ${formatDuration(ms)}` : ''}`
-        : paused
-          ? `Plan paused after step ${paused.step + 1} (${paused.reason}), ${toDo} (/aside continue)${soFar}`
-          : `Plan: ${toDo} (/aside run)${soFar}`,
+        : waiting
+          ? `Plan waits at step ${waiting.step + 1} (${waitsFor}), ${toDo} (/aside continue)${soFar}`
+          : paused
+            ? `Plan paused after step ${paused.step + 1} (${paused.reason}), ${toDo} (/aside continue)${soFar}`
+            : `Plan: ${toDo} (/aside run)${soFar}`,
     rows: plan.steps.map((step, i) => {
-      const about = [timeOf(step), step.isDone ? (step.result ?? '') : ''].filter(Boolean).join(' · ')
+      const said = step.isDone ? [timeOf(step.ms), step.result ?? ''] : waiting?.step === i ? [timeOf(waiting.ms), waiting.result ?? ''] : []
+      const about = said.filter(Boolean).join(' · ')
 
       return { label: String(i + 1), word: stateOf(i), lines: [step.title], about: about ? [about] : [] }
     }),
@@ -173,7 +184,7 @@ export const listingMarkdown = (sections: readonly ListingSection[], made: strin
   ].join('\n')
 }
 
-const ROW_WORDS = [...Object.values(KINDS).map(kind => kind.label), 'running', 'done', 'to do']
+const ROW_WORDS = [...Object.values(KINDS).map(kind => kind.label), 'running', 'waiting', 'done', 'to do']
 const ROW_PATTERN = new RegExp(`^ {0,2}(\\d+|·)  (${ROW_WORDS.join('|')}) {2,}(\\S.*)$`)
 
 // A listing read back from the text /aside printed, so the transcript can draw it in colour.
