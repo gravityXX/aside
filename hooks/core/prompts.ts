@@ -187,6 +187,9 @@ export const sendPrompt = (entries: readonly Entry[], root: string): string =>
     COMPOSED_MARKER,
   ].join('\n\n')
 
+// What a step made of a tag tells Claude besides the tag's own words.
+export const TAG_NOTE = 'This comment is a <!-- --> tag in the file; remove the tag once it is handled.'
+
 // One entry as a prompt of its own, for a step: what it says and what it is about.
 export const entryPrompt = (entry: Entry, root: string, withContext = true): string => {
   const file = entry.file ? `In ${relativePath(entry.file, root)}: ` : ''
@@ -194,7 +197,7 @@ export const entryPrompt = (entry: Entry, root: string, withContext = true): str
   const label = KINDS[entry.kind].label
   const kind = entry.kind === 'idea' ? '' : `${label[0]!.toUpperCase()}${label.slice(1)}`
   const head = [kind, file + spot].filter(Boolean).join(' - ')
-  const tag = entry.isTag ? '\n\nThis comment is a <!-- --> tag in the file; remove the tag once it is handled.' : ''
+  const tag = entry.isTag ? `\n\n${TAG_NOTE}` : ''
 
   return `${head ? `${head}:\n` : ''}${entry.text || '(no text)'}${withContext ? describeWorkContext(entry) : ''}${tag}`
 }

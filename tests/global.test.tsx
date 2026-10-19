@@ -531,3 +531,17 @@ describe('named queues', () => {
     expect((await aside('q work')).split('\n').slice(2)).toEqual(['  1  idea  Read the RFC.'])
   })
 })
+
+describe('importing into a queue of no project', () => {
+  const IDEAS = '- read the RFC\n- +? why is it slow\n- try zellij'
+
+  test('/aside g import and /aside q NAME import put a list\'s items on those queues, ideas only, once', async ($, on) => {
+    const { aside, shown } = world($, on, { files: { '/proj/ideas.md': IDEAS } })
+
+    expect(await aside('g import ideas.md')).toBe('Imported 2 ideas from ideas.md to the global list (2 global). Left out: 1 comment, as the global list holds ideas only.')
+    expect(await shown('g')).toEqual(['2 ideas on the global list', '1 idea read the RFC', '2 idea try zellij'])
+    expect(await aside('q work import ideas.md')).toBe('Imported 2 ideas from ideas.md to @work (2 in @work). Left out: 1 comment, as @work holds ideas only.')
+    expect(await aside('q work import ideas.md')).toBe('Nothing new in ideas.md for @work. Left out: 2 already there, 1 comment, as @work holds ideas only.')
+    expect((await shown())[0]).toBe('The queue is empty.')
+  })
+})

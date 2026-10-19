@@ -55,6 +55,8 @@ export type Machine = {
   isReadOnly?: boolean
   // The store refuses the n-th write from now, once, as a store that fills up half-way.
   refuseWrite?: number
+  // The store refuses the next write to a key that starts with this, once.
+  refuseWriteTo?: string
   // Runs before the store takes a write, with its key: what else happens while a write is
   // on its way.
   beforeWrite?: (key: string) => Promise<unknown>
@@ -109,6 +111,10 @@ export const world = ($: Engine, on: On, given: Partial<Machine> = {}) => {
     await w.beforeWrite?.(e.key)
     if (w.refuseWrite !== undefined && --w.refuseWrite === 0) {
       w.refuseWrite = undefined
+      return { deny: 'the store is full' }
+    }
+    if (w.refuseWriteTo !== undefined && e.key.startsWith(w.refuseWriteTo)) {
+      w.refuseWriteTo = undefined
       return { deny: 'the store is full' }
     }
     if (w.isStoreFull) return { deny: 'the store is full' }

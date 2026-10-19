@@ -1,3 +1,4 @@
+import type { Kind } from '../../types'
 import { slugify, splitWords } from './text'
 
 export const MARKDOWN_PATH = /\.(md|markdown|mdx)$/i
@@ -100,4 +101,74 @@ export const findHeading = (source: string, wanted: string): { line: number; tit
     headings.find(one => slugify(one.title).startsWith(target)) ??
     headings.find(one => slugify(one.title).includes(target))
   )
+}
+
+// A list item: its indent, its task box when it has one, and its text.
+const LIST_ITEM = /^(\s*)(?:[-*+]|\d{1,9}[.)])\s+(?:\[([ xX])\](?:\s+|$))?(.*)$/
+
+// A thematic break such as "* * *" or "- - -", which LIST_ITEM would read as an item.
+const THEMATIC_BREAK = /^\s{0,3}([-*_])(?:\s*\1){2,}\s*$/
+
+const HEADING = /^\s{0,3}#{1,6}(?:\s|$)/
+
+// How many lines YAML front matter takes at the top of a note (Obsidian, Jekyll): its lists are
+// the note's tags and fields, not items of the person's.
+const frontMatterLines = (lines: readonly string[]): number => {
+  if (lines[0]?.trim() !== '---') {
+    return 0
+  }
+  const end = lines.findIndex((line, i) => i > 0 && /^(?:---|\.\.\.)\s*$/.test(line))
+
+  return end < 0 ? 0 : end + 1
+}
+
+// The kind a list item's own mark gives it, as a message's mark would: "+? why" a question.
+// Only these marks with a space after them are read; "+g" or "+@work" stays part of the text.
+const ITEM_MARKS: Record<string, Kind> = { '': 'idea', '?': 'question', '!': 'change', '-': 'drop', '+': 'deeper' }
+
+// The entries a markdown list holds, for /aside import: each item outside code, front matter
+// and thematic breaks, unless its task box is ticked, with the lines indented under it, a
+// sub-list included, and a line straight after it that Markdown runs on into it, as its own
+// lines. A heading or a paragraph after a blank line ends an item and is no entry. `checked`
+// counts the ticked items left out.
+export const listItems = (source: string): { items: { kind: Kind; text: string }[]; checked: number } => {
+  const lines = source.split(/\r?\n/)
+  const fenced = findFencedLines(lines)
+  const skipped = frontMatterLines(lines)
+  const items: { kind: Kind; text: string }[] = []
+  let checked = 0
+  // The item being read, or a ticked one being skipped, with how far it is indented.
+  let current: { indent: number; kind: Kind; lines: string[]; isTicked: boolean } | undefined
+  let isAfterBlank = false
+  const close = () => {
+    const text = current?.lines.filter(line => line !== '').join('\n') ?? ''
+    if (current && !current.isTicked && text !== '') items.push({ kind: current.kind, text })
+    current = undefined
+  }
+  for (const [i, line] of lines.entries()) {
+    if (i < skipped) continue
+    if (line.trim() === '') {
+      isAfterBlank = true
+      continue
+    }
+    const indent = line.length - line.trimStart().length
+    const item = fenced[i] || THEMATIC_BREAK.test(line) ? null : LIST_ITEM.exec(line)
+    const isRunOn = !isAfterBlank && item === null && !fenced[i] && !HEADING.test(line)
+    isAfterBlank = false
+    if (current && (indent > current.indent || isRunOn)) {
+      // A "+" bullet under an item reads as "-": a message whose every line starts with "+" is
+      // an entry per line, so /aside edit would split the item.
+      current.lines.push(line.trim().replace(/^\+(?=\s)/, '-'))
+      continue
+    }
+    close()
+    if (!item) continue
+    const isTicked = item[2] === 'x' || item[2] === 'X'
+    if (isTicked) checked += 1
+    const [, mark = '', text = item[3]!] = /^\+(\+|[?!-])?\s+(.*)$/.exec(item[3]!) ?? []
+    current = { indent, kind: ITEM_MARKS[mark] ?? 'idea', lines: [text.trim()], isTicked }
+  }
+  close()
+
+  return { items, checked }
 }

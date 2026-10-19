@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- `/aside log` lists the plans run to their end, the last 5 with what each step did and how long it took, newest first, and `/aside log N` shows any of the 20 it keeps. A plan comes there once another takes its place, so `/aside` keeps showing the one just run.
+- `/aside find TEXT` finds the entries, the tags, the steps of the plan and the ideas of the global list and every named queue that hold all its words, in any case and with or without accents, so `zrob` finds `Zrób`. Each comes under the number its own command takes, as in `/aside pop 2` or `/aside q work here 1`.
+- `/aside import FILE` queues the items of a markdown list in FILE, each an entry, with the lines indented under it. A mark such as `+?` at an item's start gives its kind; ticked items, front matter, headings, paragraphs and code blocks between items are left out, an item already in the queue is not queued again, and the file stays as it is. `/aside g import FILE` and `/aside q work import FILE` put its ideas on those queues. A message such as `/aside find the bug` or `/aside import notes.md` no longer queues that text.
+
 ## 0.25.2 - 2026-10-19
 
 - `/aside help`, its Tab hint and the README say what `/aside undo` brings back: what the last clear took, or a plan or run Claude has not answered yet. They used to promise any plan or run, which Claude's answer had already made final.

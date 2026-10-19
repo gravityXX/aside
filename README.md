@@ -72,6 +72,7 @@ Requires <kbd>Claude Code</kbd> 2.1.301 or newer, whose plugin API is still in e
 /aside run all         send the queue as is, no plan
 /aside continue        end the step that waits for you and go on
 /aside stop            stop after the current step
+/aside log [N]         the plans run to their end, with what each step did, or plan N
 
 /aside TEXT            queue TEXT, as + would
 /aside pop [N]         put the newest entry, or entry N, in the prompt box
@@ -80,6 +81,8 @@ Requires <kbd>Claude Code</kbd> 2.1.301 or newer, whose plugin API is still in e
 /aside remove N ...    remove one entry, or several
 /aside clear           empty the queue
 /aside undo            bring back what the last clear, or an unanswered plan or run, took
+/aside find TEXT       look for words in the queue, the tags, the plan and every queue
+/aside import FILE     queue the items of a markdown list in FILE, each an entry
 /aside scan FILE       read the tags of a file Claude did not write
 /aside export [FILE]   save the list as Markdown, to aside.md or FILE
 /aside help            list every command
@@ -93,6 +96,7 @@ read it later +g       the whole draft, onto the global list
 /aside g add N ...     move ideas N of this queue, numbered as /aside shows them, to the global list
 /aside g remove N ...  remove from the global list; g edit N, g pop [N] and g move N M as for the queue
 /aside g clear         empty the global list; /aside g undo brings back what it took
+/aside g import FILE   put the items of a markdown list on the global list
 
 +@work TEXT            put an idea in the queue named work, made by its first idea
 read it later +@work   the whole draft, into the queue work

@@ -27,11 +27,17 @@ export type Step = {
   title: string
   prompt: string
   isDone?: true
-  // What the step's answer said it did and left open (its "Result:" line), and how long it
-  // ran, kept once it is done for the summary at the end of the run.
+  // What the step's answer said it did and left open (its "Result:" line), how long it ran
+  // and when, by the clock, it was done, kept once it is done for the summary at the end of
+  // the run and the log.
   result?: string
   ms?: number
+  doneAt?: number
 }
+
+// A plan run to its end, in the log once another took its place: when its last step was done,
+// and each step's title, time and result.
+export type PastRun = { at: number; steps: { title: string; ms?: number; result?: string }[] }
 
 export type Plan = {
   steps: Step[]
