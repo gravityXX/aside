@@ -8,9 +8,25 @@ import type { Order, TypedEntry } from '../core/entries'
 import { formatPlace, isExportText } from '../core/listing'
 import { findFragment, findHeading, fragmentWords, MARKDOWN_PATH, MIN_FRAGMENT_WORDS } from '../core/markdown'
 import { readTidyReply, TIDY_SYSTEM, tidyPrompt } from '../core/prompts'
-import { describeError, relativePath, shortenText } from '../core/text'
+import { describeError, formatCount, relativePath, shortenText } from '../core/text'
 import { readClipboard, readGitBranch, resolveFile, searchMarkdown, tryReadFile } from '../io/host'
-import { forgetEditing, loadEditing, loadEntries, projectKeys, refreshBand, readTrackedFiles, trackFile, saveEntries } from '../io/store'
+import {
+  addGlobalIdeas,
+  forgetEditing,
+  forgetGlobalEditing,
+  forgetGlobalIdeas,
+  loadEditing,
+  loadEntries,
+  loadGlobalEditing,
+  loadGlobalIdeas,
+  projectKeys,
+  refreshBand,
+  readTrackedFiles,
+  trackFile,
+  saveEntries,
+  saveGlobalIdea,
+} from '../io/store'
+import type { GlobalIdea } from '../io/store'
 
 // The tools whose output a comment may be about when nothing else says so; any error counts.
 const OUTPUT_TOOLS = new Set(['Bash', 'Edit', 'Write', 'NotebookEdit'])
@@ -162,16 +178,62 @@ const putBack = (stored: readonly Entry[], added: readonly Entry[], index: numbe
   return inOrder(shown, order)
 }
 
+// A tidying in flight, which a planner waits for.
+function whileTidying(ctx: Context, work: Promise<void>) {
+  const tidy = work.catch(() => undefined)
+  ctx.session.tidies.add(tidy)
+  void tidy.then(() => ctx.session.tidies.delete(tidy))
+}
+
+// The ideas typed with "+g", onto the global list. A message that is one "+g" idea, sent while
+// an idea is out with /aside g edit, takes that idea's place; the record goes once it is back.
+async function storeGlobal($: Engine, ideas: readonly Entry[], isSingle: boolean): Promise<GlobalIdea[]> {
+  if (ideas.length === 0) {
+    return []
+  }
+  const editing = isSingle ? await loadGlobalEditing($) : undefined
+  if (editing) {
+    const idea = { key: editing.key, entry: { ...editing.entry, text: ideas[0]!.text, raw: ideas[0]!.raw } }
+    await saveGlobalIdea($, idea)
+    await forgetGlobalEditing($)
+
+    return [idea]
+  }
+
+  return addGlobalIdeas($, ideas)
+}
+
+// A tidied text from the small model, or undefined when none comes in time.
+async function askTidy($: Engine, text: string): Promise<string | undefined> {
+  if (text.trim() === '') {
+    return undefined
+  }
+  const ask = { model: 'haiku', system: TIDY_SYSTEM, prompt: tidyPrompt(text), maxTokens: 1024, timeoutMs: 10_000 }
+  const reply = await $.model.complete(ask).catch(() => undefined)
+
+  return reply?.isAnswered ? readTidyReply(reply.text, text) : undefined
+}
+
+// A global idea's text, tidied as an entry's is, unless the idea has left the list or changed
+// meanwhile.
+async function tidyGlobalIdea($: Engine, idea: GlobalIdea): Promise<void> {
+  const fixed = await askTidy($, idea.entry.text)
+  if (fixed === undefined) {
+    return
+  }
+  const now = (await loadGlobalIdeas($)).find(one => one.key === idea.key)
+  if (now === undefined || now.entry.text !== idea.entry.text) {
+    return
+  }
+  const raw = now.entry.raw?.endsWith(now.entry.text) ? `${now.entry.raw.slice(0, now.entry.raw.length - now.entry.text.length)}${fixed}` : now.entry.raw
+  await saveGlobalIdea($, { key: now.key, entry: { ...now.entry, text: fixed, ...(raw === undefined ? {} : { raw }) } })
+}
+
 // An entry's own text, tidied by a small model once it is stored. It waits as typed until
 // the reply comes, and keeps that text when none comes in time or the entry has left the
 // queue by then. The edit box gets the tidied text too, with its mark and place as typed.
 async function tidyEntry($: Engine, ctx: Context, entry: Entry): Promise<void> {
-  if (entry.text.trim() === '') {
-    return
-  }
-  const ask = { model: 'haiku', system: TIDY_SYSTEM, prompt: tidyPrompt(entry.text), maxTokens: 1024, timeoutMs: 10_000 }
-  const reply = await $.model.complete(ask).catch(() => undefined)
-  const fixed = reply?.isAnswered ? readTidyReply(reply.text, entry.text) : undefined
+  const fixed = await askTidy($, entry.text)
   if (fixed === undefined) {
     return
   }
@@ -219,7 +281,8 @@ export async function addEntries(
   // An entry taken out with /aside edit comes back where it was, keeping what it pointed at,
   // unless the reworked text names a place of its own.
   const editing = await loadEditing($, keys.editing)
-  const isRework = editing !== undefined && typed.length === 1 && typed[0]!.kind === editing.idea.kind && Object.keys(typed[0]!.anchor).length === 0
+  const isRework =
+    editing !== undefined && typed.length === 1 && !typed[0]!.isGlobal && typed[0]!.kind === editing.idea.kind && Object.keys(typed[0]!.anchor).length === 0
   const sourceCache = new Map<string, Promise<string | undefined>>()
   const readSource: ReadSource = file => {
     if (!sourceCache.has(file)) sourceCache.set(file, tryReadFile($, file))
@@ -229,7 +292,8 @@ export async function addEntries(
 
   const added: Entry[] = []
   const notes: string[] = []
-  for (const one of typed) {
+  const globals = typed.filter(one => one.isGlobal).map(one => ({ text: one.text, raw: one.raw, at: now, kind: 'idea' as const }))
+  for (const one of typed.filter(entry => !entry.isGlobal)) {
     if (isRework) {
       const { text: _text, raw: _raw, ...kept } = editing!.idea
       added.push({ ...kept, text: one.text, raw: one.raw })
@@ -242,16 +306,27 @@ export async function addEntries(
 
   const stored = await loadEntries($, keys.queue)
   const all = isRework ? putBack(stored, added, editing!.index, ctx.settings.order) : [...stored, ...added]
-  await saveEntries($, keys.queue, all)
-  if (editing) await forgetEditing($, keys.editing)
-  await refreshBand($)
-  for (const entry of ctx.settings.tidy ? added : []) {
-    const tidy = tidyEntry($, ctx, entry).catch(() => undefined)
-    ctx.session.tidies.add(tidy)
-    void tidy.then(() => ctx.session.tidies.delete(tidy))
+  // The global ideas first, and taken back should the queue's write fail, so a message is kept
+  // whole or not at all and sent again adds nothing twice.
+  const onGlobal = await storeGlobal($, globals, typed.length === 1)
+  if (added.length > 0) {
+    await saveEntries($, keys.queue, all).catch(async (error: unknown) => {
+      await forgetGlobalIdeas($, onGlobal.map(idea => idea.key)).catch(() => undefined)
+      throw error
+    })
   }
+  // An idea taken out with /aside edit and sent back as "+g idea" has moved to the global list.
+  const isMovedOut = editing !== undefined && typed.length === 1 && typed[0]!.isGlobal === true && editing.idea.kind === 'idea'
+  if (editing && (added.length > 0 || isMovedOut)) await forgetEditing($, keys.editing)
+  const band = await refreshBand($)
+  for (const entry of ctx.settings.tidy ? added : []) whileTidying(ctx, tidyEntry($, ctx, entry))
+  for (const idea of ctx.settings.tidy ? onGlobal : []) whileTidying(ctx, tidyGlobalIdea($, idea))
   if (images > 0) notes.push('the image was not kept')
-  const said = reportQueued(added, notes, keys.root, all.length)
+  const parts = [
+    ...(added.length > 0 ? [reportQueued(added, notes, keys.root, all.length)] : []),
+    ...(globals.length > 0 ? [`queued ${globals.length === 1 ? `"${shortenText(globals[0]!.text)}"` : formatCount(globals.length, 'idea')} to the global list (${band.global ?? 0} global)`] : []),
+  ]
+  const said = parts.join('; ')
   if (report === 'log') $.ui.log(said)
 
   return said

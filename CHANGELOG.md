@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- A global list for ideas that belong to no project: start one with `+g`, or end a draft with ` +g`. `/aside g` shows it, `/aside here N ...` moves its ideas into this project's queue and `/aside global N ...` moves ideas there, and `/aside g remove`, `edit`, `pop` and `move` work on it as on the queue. `/aside` and the plan leave it out; the line above the prompt counts it, as in `1 global`. Ideas added in several sessions at once never overwrite each other.
+
 ## 0.22.0 - 2026-10-19
 
 - The `planModel` setting picks who organizes the queue on `/aside plan`. `session`, the default, is Claude in this conversation, as before. `sonnet`, `haiku` or `opus` hand it to one call to that model outside the conversation: the plan comes back as the command's answer, or as a toast after Claude answers with `afterClaudeAnswers` on `plan`, nothing is added to the conversation, and it can run while Claude works. The queue stays as it is until the plan is saved, one such call runs at a time, and when that model gives no plan, or the queue or the plan changed while it thought, nothing is saved and aside says why.

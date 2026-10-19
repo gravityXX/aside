@@ -266,6 +266,7 @@ export async function refreshBand($: Engine, tagCount?: number): Promise<Band> {
   const list = await loadEntries($, keys.queue)
   const plan = await loadPlan($, keys.plan)
   const ideas = list.filter(entry => entry.kind === 'idea').length
+  const global = await countGlobalIdeas($)
   const next: Band = {
     ideas,
     comments: list.length - ideas,
@@ -274,8 +275,90 @@ export async function refreshBand($: Engine, tagCount?: number): Promise<Band> {
     done: plan.steps.filter(step => step.isDone).length,
     ...(plan.active ? { running: plan.active.step + 1 } : {}),
     ...(plan.paused && !plan.active ? { paused: plan.paused.step + 1 } : {}),
+    ...(global > 0 ? { global } : {}),
   }
   await update($, band, () => next)
 
   return next
+}
+
+// The global list: ideas that belong to no project, one store key each, so that sessions in
+// different projects add and take them at the same time without writing over each other's.
+// The key holds the idea's own `at`, the session that added it and a number free for that
+// pair, so ideas of one message keep the order typed. `order` places an idea elsewhere in the
+// list: set when it comes from a queue with /aside global, and when it is moved.
+const GLOBAL_IDEA = 'global:idea:'
+
+export type GlobalIdea = { key: string; entry: Entry & { order?: number } }
+
+const isEntry = (value: unknown): value is Entry =>
+  typeof value === 'object' && value !== null && typeof (value as Entry).text === 'string' && typeof (value as Entry).at === 'number'
+
+export const rankOf = (idea: GlobalIdea) => idea.entry.order ?? idea.entry.at
+
+async function countGlobalIdeas($: Engine): Promise<number> {
+  return (await $.store.keys()).filter(key => key.startsWith(GLOBAL_IDEA)).length
+}
+
+// The global list, first to last.
+export async function loadGlobalIdeas($: Engine): Promise<GlobalIdea[]> {
+  const ideas: GlobalIdea[] = []
+  for (const key of (await $.store.keys()).filter(one => one.startsWith(GLOBAL_IDEA))) {
+    const value = await $.store.get(key)
+    if (isEntry(value)) ideas.push({ key, entry: { ...value, kind: 'idea' } })
+  }
+
+  return ideas.sort((a, b) => rankOf(a) - rankOf(b) || a.key.localeCompare(b.key, undefined, { numeric: true }))
+}
+
+// Each idea under a key of its own. All of them or none: should a write fail, those already
+// written are taken back before the error goes on.
+export async function addGlobalIdeas($: Engine, entries: readonly GlobalIdea['entry'][]): Promise<GlobalIdea[]> {
+  const session = await $.session.id()
+  const taken = new Set(await $.store.keys())
+  const added: GlobalIdea[] = []
+  try {
+    for (const entry of entries) {
+      let n = 0
+      while (taken.has(`${GLOBAL_IDEA}${entry.at}:${session}:${n}`)) n += 1
+      const key = `${GLOBAL_IDEA}${entry.at}:${session}:${n}`
+      taken.add(key)
+      await $.store.set(key, entry)
+      added.push({ key, entry })
+    }
+  } catch (error) {
+    await forgetGlobalIdeas($, added.map(idea => idea.key)).catch(() => undefined)
+    throw error
+  }
+
+  return added
+}
+
+export async function saveGlobalIdea($: Engine, idea: GlobalIdea) {
+  await $.store.set(idea.key, idea.entry)
+}
+
+export async function forgetGlobalIdeas($: Engine, keys: readonly string[]) {
+  for (const key of keys) await $.store.delete(key)
+}
+
+// A global idea taken out with /aside g edit, kept for the session until the reworked one is
+// stored in its place, across a reload too.
+async function globalEditingKey($: Engine): Promise<string> {
+  return `global:editing:${await $.session.id()}`
+}
+
+export async function loadGlobalEditing($: Engine): Promise<GlobalIdea | undefined> {
+  const value = await $.store.get(await globalEditingKey($))
+  const one = value as { key?: unknown; entry?: unknown } | undefined
+
+  return typeof one?.key === 'string' && isEntry(one.entry) ? { key: one.key, entry: one.entry } : undefined
+}
+
+export async function saveGlobalEditing($: Engine, idea: GlobalIdea) {
+  await $.store.set(await globalEditingKey($), idea)
+}
+
+export async function forgetGlobalEditing($: Engine) {
+  await $.store.delete(await globalEditingKey($))
 }

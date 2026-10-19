@@ -45,7 +45,7 @@ export type Plan = {
   paused?: { step: number; reason: string; isChain: boolean; then?: number[] }
 }
 
-export type Band = { ideas: number; comments: number; tags: number; steps: number; done: number; running?: number; paused?: number }
+export type Band = { ideas: number; comments: number; tags: number; steps: number; done: number; running?: number; paused?: number; global?: number }
 
 declare module 'claude-code' {
   interface PluginState {

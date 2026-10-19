@@ -19,12 +19,18 @@ const KIND_BY_MARK: Record<string, Kind> = { '?': 'question', '!': 'change', '-'
 export type Anchor = { file?: string; line?: number; heading?: string }
 
 // An entry as typed, before it is pinned and stored.
-export type TypedEntry = { kind: Kind; text: string; anchor: Anchor; raw: string }
+// `isGlobal`: typed as "+g idea", for the global list rather than this project's queue.
+export type TypedEntry = { kind: Kind; text: string; anchor: Anchor; raw: string; isGlobal?: true }
 
 const ANCHOR_PATTERN = /^(?:@(?<file>(?:[A-Za-z]:(?=[\\/]))?[^\s:#]+)(?::(?<line>\d+)|#(?<fileHeading>[\p{L}\p{N}-]+))?|#(?<heading>[\p{L}\p{N}-]+))(?=\s|$)/u
 
 const parseEntry = (raw: string): TypedEntry | null => {
   const body = raw.trim().slice(1)
+  // "+g idea" is an idea for the global list; "+go home" is an idea that starts with "go".
+  if (/^g(?=\s|$)/.test(body)) {
+    const text = body.slice(1).trim()
+    return text === '' ? null : { kind: 'idea', text, anchor: {}, raw: raw.trim(), isGlobal: true }
+  }
   const kind: Kind = KIND_BY_MARK[body[0] ?? ''] ?? 'idea'
   let text = (kind === 'idea' ? body : body.slice(1)).trim()
   const anchor: Anchor = {}
@@ -66,9 +72,10 @@ const looksLikeDiff = (text: string): boolean => {
 }
 
 // A draft already typed goes to the queue too when it ends with a mark after a space or a
-// line break: "why is this so slow +?" is "+? why is this so slow". "C++" is not.
+// line break: "why is this so slow +?" is "+? why is this so slow", "read it later +g" an idea
+// for the global list. "C++" is not.
 const parseTrailingMark = (text: string): TypedEntry | null => {
-  const end = /\s(\+[?!+-]?)$/.exec(text)
+  const end = /\s(\+(?:[?!+-]|g)?)$/.exec(text)
   if (!end) {
     return null
   }
