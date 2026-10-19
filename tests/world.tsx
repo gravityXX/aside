@@ -35,7 +35,13 @@ export type Machine = {
   // What grep prints for any search.
   grep: string
   branch: string
-  system: 'wsl' | 'mac' | 'linux'
+  // Windows has the project at C:\\proj, the clipboard through powershell.exe, no grep, and
+  // file names that match in any letter case, as NTFS does.
+  system: 'wsl' | 'mac' | 'linux' | 'windows'
+  // The project's folder, in place of /proj or C:\\proj.
+  root?: string
+  // What an earlier release left in the store, by key, for a test that it still loads.
+  stored?: Record<string, unknown>
   // On Linux, how each clipboard reader there exits: 0 reads the clipboard, any other code fails
   // as wl-paste does with no Wayland. A reader left out is not installed.
   readers?: Record<string, number>
@@ -69,7 +75,7 @@ const ran = (stdout: string, exitCode = 0) => ({
   value: { exitCode, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false },
 })
 
-// A project at /proj with the plugin loaded, and what reaches the person and Claude:
+// A project at /proj (C:\\proj on Windows) with the plugin loaded, and what reaches the person and Claude:
 // `sent` the prompts Claude got, `toasts` the notices in the corner, `logged` the lines in
 // the transcript, `filled` what went into the prompt box, `asked` the notes the small model
 // was asked to tidy, `panes` the panes open, `runs` the commands the plugin ran.
@@ -84,7 +90,7 @@ export const world = ($: Engine, on: On, given: Partial<Machine> = {}) => {
   const runs: string[] = []
 
   // The plugin's store, as mock.store keeps it, but one that can refuse a write.
-  const store = new Map<string, unknown>()
+  const store = new Map<string, unknown>(Object.entries(w.stored ?? {}))
   on('store.get', ($e, e) => ({ value: store.get(e.key) }) as never)
   on('store.set', ($e, e) => {
     if (w.refuseWrite !== undefined && --w.refuseWrite === 0) {
@@ -101,8 +107,9 @@ export const world = ($: Engine, on: On, given: Partial<Machine> = {}) => {
   })
   on('store.keys', () => ({ value: [...store.keys()] }))
   const clock = mock.clock(on, { now: 1000 })
-  mock.env(on, w.env ?? (w.system === 'mac' ? { HOME: '/Users/me' } : w.system === 'linux' ? { HOME: '/home/me' } : { WSL_DISTRO_NAME: 'Ubuntu' }))
-  on('session.root', () => ({ value: '/proj' }))
+  const homes = { mac: { HOME: '/Users/me' }, linux: { HOME: '/home/me' }, windows: { USERPROFILE: 'C:\\Users\\me' }, wsl: { WSL_DISTRO_NAME: 'Ubuntu' } }
+  mock.env(on, w.env ?? homes[w.system])
+  on('session.root', () => ({ value: w.root ?? (w.system === 'windows' ? 'C:\\proj' : '/proj') }))
   on('session.id', () => ({ value: 'session-1' }))
   on('command.register', ($e, e) => ({ value: { command: e.name } }))
   on('tool.register', ($e, e) => ({ value: { tool: `mcp__aside__${e.name}` } }))
@@ -150,23 +157,33 @@ export const world = ($: Engine, on: On, given: Partial<Machine> = {}) => {
     }
   })
 
-  // The kit hands a file hook the path as the system it runs on spells it. On Linux it resolves
-  // a Windows path ("C:\\x") against its own folder, which a Windows machine would read as it
-  // is, so that folder is taken off. On Windows it puts its drive before a path under the
-  // project ("C:\\proj\\docs"), which is turned back into the project's own "/proj/docs".
+  // The kit hands a file hook the path as the system it runs on spells it: on Linux with its
+  // own folder before a Windows path ("/kit/C:\\x"), on Windows with its drive before a path
+  // under the project ("C:\\proj\\x"). Those, and the files a test names, come down to one
+  // spelling: the folder taken off, forward slashes, and the project at "/proj" on any drive.
   const onDisk = (path: string) => {
-    if (/^[A-Za-z]:\\proj(?:\\|$)/.test(path)) return path.slice(2).replace(/\\/g, '/')
-    return path.startsWith('/proj/') ? path : path.replace(/^.*\/(?=[A-Za-z]:[\\/])/, '')
+    const own = path.replace(/^.*\/(?=[A-Za-z]:(?:[\\/]|$))/, '')
+    // A share, "\\\\host\\x", comes from the kit on Linux as "/host/x".
+    if (/^[\\/]{2}[^\\/]/.test(own)) return onDisk(own.replace(/\\/g, '/').slice(1))
+    const slashed = /^[A-Za-z]:(?:[\\/]|$)/.test(own) ? own.replace(/\\/g, '/') : own
+    const spelled = slashed.replace(/^[A-Za-z]:(?=\/proj(?:\/|$))/, '')
+    return w.system === 'windows' ? spelled.toLowerCase() : spelled
   }
-  on('fs.read', ($e, e) => (onDisk(e.path) in w.files ? { value: w.files[onDisk(e.path)]! } : { deny: 'ENOENT' }))
-  on('fs.exists', ($e, e) => ({ value: onDisk(e.path) in w.files }))
+  const fileAt = (path: string) => Object.keys(w.files).find(name => onDisk(name) === onDisk(path))
+  on('fs.read', ($e, e) => {
+    const name = fileAt(e.path)
+    return name === undefined ? { deny: 'ENOENT' } : { value: w.files[name]! }
+  })
+  on('fs.exists', ($e, e) => ({ value: fileAt(e.path) !== undefined }))
   on('fs.list', ($e, e) => {
     const dir = onDisk(e.path).replace(/\/$/, '')
     const names = new Map<string, 'file' | 'dir'>()
-    for (const path of Object.keys(w.files)) {
+    for (const name of Object.keys(w.files)) {
+      const path = onDisk(name)
       if (!path.startsWith(`${dir}/`)) continue
-      const [head, ...rest] = path.slice(dir.length + 1).split('/')
-      names.set(head!, rest.length > 0 ? 'dir' : 'file')
+      // The rest of the path past the folder, in the file's own letter case.
+      const rest = name.replace(/\\/g, '/').slice(-(path.length - dir.length - 1)).split('/')
+      names.set(rest[0]!, rest.length > 1 ? 'dir' : 'file')
     }
     return { value: [...names].map(([name, kind]) => ({ name, kind, size: 100, mtimeMs: 0, isLink: false })) } as never
   })
@@ -178,7 +195,7 @@ export const world = ($: Engine, on: On, given: Partial<Machine> = {}) => {
     const reader = w.system === 'linux' ? w.readers?.[e.argv[0]!] : undefined
     switch (e.argv[0]) {
       case 'powershell.exe':
-        return w.system === 'wsl' ? ran(`${w.clip}\r\n`) : missing
+        return w.system === 'wsl' || w.system === 'windows' ? ran(`${w.clip}\r\n`) : missing
       case 'pbpaste':
         return isMac ? ran(w.clip) : missing
       case 'wl-paste':
@@ -188,7 +205,8 @@ export const world = ($: Engine, on: On, given: Partial<Machine> = {}) => {
       case 'git':
         return ran(`${w.branch}\n`)
       case 'grep':
-        // BSD grep has no -P and fails with 2.
+        // BSD grep has no -P and fails with 2; Windows has none.
+        if (w.system === 'windows') return missing
         return isMac ? ran('', 2) : ran(w.grep, w.grepExit ?? 0)
       default:
         return { deny: 'unknown command' }

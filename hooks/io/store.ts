@@ -2,6 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface as Engine } from 'claude-code'
 
 import type { Band, Entry, Plan } from '../../types'
+import { canonicalPath, pathKey } from '../core/text'
 
 const EMPTY_BAND: Band = { ideas: 0, comments: 0, tags: 0, steps: 0, done: 0 }
 
@@ -18,12 +19,19 @@ export function readBand($: Engine): Promise<Band> {
   return read($, band)
 }
 
-export function readTrackedFiles($: Engine): Promise<string[]> {
-  return read($, trackedFiles)
+// The list holds each file once, by pathKey, in the spelling it was last tracked under. One
+// kept before it did may hold a Windows file twice, and comes back with the newest of the two.
+export async function readTrackedFiles($: Engine): Promise<string[]> {
+  const files = (await read($, trackedFiles)).map(file => canonicalPath(file))
+  const keys = files.map(file => pathKey(file))
+
+  return files.filter((file, i) => keys.indexOf(keys[i]!, i + 1) === -1)
 }
 
 export function trackFile($: Engine, path: string) {
-  return update($, trackedFiles, list => [...list.filter(file => file !== path), path].slice(-100))
+  const own = canonicalPath(path)
+
+  return update($, trackedFiles, list => [...list.filter(file => pathKey(file) !== pathKey(own)), own].slice(-100))
 }
 
 // Everything belongs to the project: each root keeps its own queue and plan.
@@ -38,11 +46,13 @@ export type Keys = {
   editing: string
 }
 
+// `root` is spelled as canonicalPath spells files, to compare them with; the keys keep the
+// engine's own spelling, under which earlier releases stored the queue.
 export async function projectKeys($: Engine): Promise<Keys> {
   const root = await $.session.root()
 
   return {
-    root,
+    root: canonicalPath(root),
     queue: `queue:${root}`,
     taken: `taken:${root}`,
     takenTags: `takenTags:${root}`,
@@ -82,11 +92,27 @@ export async function savePlan($: Engine, key: string, plan: Plan) {
 }
 
 // A tag is known by its file and text: lines move as the file is edited.
-export const tagId = (tag: Entry) => `${tag.file}\u0000${tag.text}`
+export const tagId = (tag: Entry) => `${pathKey(tag.file ?? '')}\u0000${tag.text}`
+
+// Stored tagIds as tagId makes them now. Ids stored before files had one spelling may name
+// one tag under two spellings of its Windows file: those are one. A repeat of one stored id
+// stays, as it is a second tag of the same text in the same file.
+const respellTagIds = (stored: unknown): string[] => {
+  const ids = Array.isArray(stored) ? stored.filter((id): id is string => typeof id === 'string') : []
+  const respelled = ids.map(id => {
+    const end = id.indexOf('\u0000')
+    return end === -1 ? id : `${pathKey(id.slice(0, end))}${id.slice(end)}`
+  })
+
+  return respelled.filter((id, i) => {
+    const first = respelled.indexOf(id)
+    return first === i || ids[first] === ids[i]
+  })
+}
 
 // The tags an earlier /aside already handed over, by tagId.
 export async function loadHanded($: Engine, key: string): Promise<string[]> {
-  return ((await $.store.get(key)) as string[] | undefined) ?? []
+  return respellTagIds(await $.store.get(key))
 }
 
 // An entry taken out with /aside edit, and the place it goes back to. The field keeps the
@@ -124,7 +150,7 @@ export async function saveTake($: Engine, keys: Keys, take: Take) {
 
 // A take stored before takenBy existed counts as a clear's: it stays until the next take.
 export async function loadTake($: Engine, keys: Keys): Promise<Take> {
-  const tagIds = ((await $.store.get(keys.takenTags)) as string[] | undefined) ?? []
+  const tagIds = respellTagIds(await $.store.get(keys.takenTags))
   const by = (await $.store.get(keys.takenBy)) === 'hand-over' ? 'hand-over' : 'clear'
 
   return { entries: await loadEntries($, keys.taken), tagIds, by }

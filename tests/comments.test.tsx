@@ -118,10 +118,79 @@ describe('where a comment points', () => {
     const files = { 'C:\\proj\\docs\\report.md': REPORT, 'C:\\notes\\todo.md': 'notes', '/proj/My Notes.md': '<!-- ? why this -->' }
     const { queue, aside, shown } = world($, on, { files })
 
-    expect(await queue('+? @C:\\proj\\docs\\report.md:5 why')).toBe('queued ? C:\\proj\\docs\\report.md:5 (1 waiting)')
-    expect(await aside('scan C:\\notes\\todo.md')).toBe('C:\\notes\\todo.md: 0 tags; /aside includes the file from now on.')
+    expect(await queue('+? @C:\\proj\\docs\\report.md:5 why')).toBe('queued ? C:/proj/docs/report.md:5 (1 waiting)')
+    expect(await aside('scan C:\\notes\\todo.md')).toBe('C:/notes/todo.md: 0 tags; /aside includes the file from now on.')
     expect(await aside('scan My Notes.md')).toContain('My Notes.md')
     expect((await shown()).slice(-3)).toEqual(['Tags in files', '· question why this', '↳ My Notes.md:1'])
+  })
+
+  test('on Windows, a file is one file however its path is spelled: its tags show once, under its path in the project', async ($, on) => {
+    const { write, queue, aside, shown } = world($, on, {
+      system: 'windows',
+      files: { 'C:\\proj\\docs\\report.md': REPORT },
+      clip: 'Revenue grew by 12% in the third quarter',
+    })
+    await write('c:\\proj\\docs\\report.md')
+
+    expect(await queue('+? where from')).toBe('queued ? docs/report.md:5 "Revenue grew by 12% in the th…" (1 waiting)')
+    for (const name of ['docs\\report.md', 'C:/proj/docs/report.md', '.\\Docs\\Report.md', 'docs\\..\\docs\\report.md']) {
+      expect(await aside(`scan ${name}`)).toBe('docs/report.md: 1 tag; /aside includes the file from now on.')
+    }
+    expect(await shown()).toEqual([
+      '1 comment waiting',
+      '1 question where from',
+      '↳ docs/report.md:5 · "Revenue grew by 12% in the third quarter"',
+      'Tags in files',
+      '· question is this the same for Poland',
+      '↳ docs/report.md:9 · "Costs stayed flat across all regions."',
+    ])
+  })
+
+  test('on Windows, a file Claude writes under two letter cases is one file, shown as last written', async ($, on) => {
+    const { write, shown } = world($, on, { system: 'windows', files: { 'C:\\proj\\docs\\report.md': REPORT } })
+    await write('C:\\proj\\docs\\report.md')
+    await write('C:\\proj\\Docs\\Report.md')
+
+    expect(await shown()).toEqual([
+      'The queue is empty.',
+      'Tags in files',
+      '· question is this the same for Poland',
+      '↳ Docs/Report.md:9 · "Costs stayed flat across all regions."',
+    ])
+  })
+
+  test('on Windows, a file named by the end of its path is found in any letter case', async ($, on) => {
+    const files = { 'C:\\proj\\docs\\report.md': REPORT, 'C:\\proj\\sub\\Notes.md': '# Notes' }
+    const { write, queue } = world($, on, { system: 'windows', files })
+    await write('C:\\proj\\docs\\report.md')
+
+    expect(await queue('+? @Report.md:5 why')).toBe('queued ? docs/report.md:5 (1 waiting)')
+    expect(await queue('+? @notes.md:1 and this')).toBe('queued ? sub/Notes.md:1 (2 waiting)')
+  })
+
+  test('on Windows, a project at the root of a drive shows its files by their path from there', async ($, on) => {
+    const { write, queue, aside, shown } = world($, on, { system: 'windows', root: 'c:\\', files: { 'C:\\docs\\report.md': REPORT } })
+    await write('C:\\docs\\report.md')
+
+    expect(await aside('scan docs\\report.md')).toBe('docs/report.md: 1 tag; /aside includes the file from now on.')
+    expect(await queue('+? @Report.md:5 why')).toBe('queued ? docs/report.md:5 (1 waiting)')
+    expect(await shown()).toEqual([
+      '1 comment waiting',
+      '1 question why',
+      '↳ docs/report.md:5',
+      'Tags in files',
+      '· question is this the same for Poland',
+      '↳ docs/report.md:9 · "Costs stayed flat across all regions."',
+    ])
+  })
+
+  test('on Windows, a project on a share shows its files by their path from there', async ($, on) => {
+    const root = '\\\\host\\share\\proj'
+    const { write, queue, aside } = world($, on, { system: 'windows', root, files: { [`${root}\\docs\\report.md`]: REPORT } })
+    await write(`${root}\\docs\\report.md`)
+
+    expect(await aside('scan .\\docs\\report.md')).toBe('docs/report.md: 1 tag; /aside includes the file from now on.')
+    expect(await queue('+? @Docs\\Report.md:5 why')).toBe('queued ? docs/report.md:5 (1 waiting)')
   })
 
   test('a comment sent from a phone or the web is queued, without this machine\'s clipboard', async ($, on) => {

@@ -1,6 +1,7 @@
 import type { EngineInterface as Engine } from 'claude-code'
 
 import { MARKDOWN_PATH, MIN_FRAGMENT_WORDS } from '../core/markdown'
+import { canonicalPath, pathKey } from '../core/text'
 
 // A UTF-8 locale, so grep -P matches letters with \p{L} and ignores case beyond ASCII.
 const GREP_ENV = { LC_ALL: 'C.UTF-8' }
@@ -147,18 +148,25 @@ export async function searchMarkdown($: Engine, quote: string, root: string): Pr
 }
 
 // A file named after "@": as written from the root, else a session file ending with it,
-// else the first one under the root at that path.
+// else the first one under the root at that path. `root` and `seen` are spelled as
+// canonicalPath spells them, and so is the file found: a session file in its own spelling.
 export async function resolveFile($: Engine, name: string, root: string, seen: readonly string[]): Promise<string> {
-  // Absolute as written: "/home/...", or a Windows drive, "C:\\..." or "C:/...".
-  const direct = /^(?:[A-Za-z]:)?[\\/]/.test(name) ? name : `${root}/${name}`
+  const path = canonicalPath(name, root)
+  // Absolute as written: "/home/...", or a Windows drive or share, "C:/..." or "//host/...".
+  const direct = /^(?:[A-Za-z]:)?\//.test(path) ? path : canonicalPath(`${root}/${path}`)
+  const known = seen.find(file => pathKey(file) === pathKey(direct))
+  if (known) {
+    return known
+  }
   if (await $.fs.exists(direct).catch(() => false)) {
     return direct
   }
-  const own = [...seen].reverse().find(file => file.endsWith(`/${name}`))
+  const tail = `/${pathKey(path, root)}`
+  const own = [...seen].reverse().find(file => pathKey(file).endsWith(tail))
   if (own) {
     return own
   }
-  const [first] = await walkFiles($, root, path => path.endsWith(`/${name}`), 1)
+  const [first] = await walkFiles($, root, file => pathKey(file).endsWith(tail), 1)
 
   return first ?? direct
 }
