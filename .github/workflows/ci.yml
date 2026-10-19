@@ -79,13 +79,19 @@ jobs:
         env:
           LAST: ${{ steps.next.outputs.last }}
           NEXT: ${{ steps.next.outputs.next }}
+          # The bot cannot push to a fork's branch, so a fork's pull request keeps the version it
+          # has; the maintainer's next pull request bumps it, counting these commits too.
+          IS_FORK: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
         run: |
           version=$(jq -r .version .claude-plugin/plugin.json)
           if ! grep -q "^## $version " CHANGELOG.md; then
             echo "::error::CHANGELOG.md has no section for $version"
             exit 1
           fi
-          if [ -n "$NEXT" ] && [ "$version" != "$NEXT" ]; then
+          if [ -n "$NEXT" ] && [ "$version" != "$NEXT" ] && [ "$IS_FORK" = "true" ]; then
+            echo "::notice title=Version::These commits make it $NEXT; the maintainer's next release bumps the version"
+            exit 0
+          elif [ -n "$NEXT" ] && [ "$version" != "$NEXT" ]; then
             echo "::error::plugin.json says $version, the commits since v$LAST make it $NEXT"
             exit 1
           fi
