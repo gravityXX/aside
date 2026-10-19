@@ -19,17 +19,24 @@ const KIND_BY_MARK: Record<string, Kind> = { '?': 'question', '!': 'change', '-'
 export type Anchor = { file?: string; line?: number; heading?: string }
 
 // An entry as typed, before it is pinned and stored.
-// `isGlobal`: typed as "+g idea", for the global list rather than this project's queue.
-export type TypedEntry = { kind: Kind; text: string; anchor: Anchor; raw: string; isGlobal?: true }
+// `list`: the queue for no project it is typed for, rather than this project's queue: "+g idea"
+// for the global list, "global", and "+@work idea" for the queue named "work".
+export type TypedEntry = { kind: Kind; text: string; anchor: Anchor; raw: string; list?: string }
+
+// The mark of an idea for a queue of no project, at the start of what follows the "+": "g", or
+// "@" and a name of up to 20 letters, digits, "-" and "_", in any case.
+const LIST_MARK = /^(?:g|@([A-Za-z0-9_-]{1,20}))(?=\s|$)/
 
 const ANCHOR_PATTERN = /^(?:@(?<file>(?:[A-Za-z]:(?=[\\/]))?[^\s:#]+)(?::(?<line>\d+)|#(?<fileHeading>[\p{L}\p{N}-]+))?|#(?<heading>[\p{L}\p{N}-]+))(?=\s|$)/u
 
 const parseEntry = (raw: string): TypedEntry | null => {
   const body = raw.trim().slice(1)
-  // "+g idea" is an idea for the global list; "+go home" is an idea that starts with "go".
-  if (/^g(?=\s|$)/.test(body)) {
-    const text = body.slice(1).trim()
-    return text === '' ? null : { kind: 'idea', text, anchor: {}, raw: raw.trim(), isGlobal: true }
+  // "+g idea" is an idea for the global list and "+@work idea" for the queue work; "+go home"
+  // is an idea that starts with "go". A comment's "@file" comes after its mark, as "+? @file".
+  const list = LIST_MARK.exec(body)
+  if (list) {
+    const text = body.slice(list[0].length).trim()
+    return text === '' ? null : { kind: 'idea', text, anchor: {}, raw: raw.trim(), list: list[1]?.toLowerCase() ?? 'global' }
   }
   const kind: Kind = KIND_BY_MARK[body[0] ?? ''] ?? 'idea'
   let text = (kind === 'idea' ? body : body.slice(1)).trim()
@@ -73,9 +80,9 @@ const looksLikeDiff = (text: string): boolean => {
 
 // A draft already typed goes to the queue too when it ends with a mark after a space or a
 // line break: "why is this so slow +?" is "+? why is this so slow", "read it later +g" an idea
-// for the global list. "C++" is not.
+// for the global list, "read it later +@work" one for the queue work. "C++" is not.
 const parseTrailingMark = (text: string): TypedEntry | null => {
-  const end = /\s(\+(?:[?!+-]|g)?)$/.exec(text)
+  const end = /\s(\+(?:[?!+-]|g|@[A-Za-z0-9_-]{1,20})?)$/.exec(text)
   if (!end) {
     return null
   }

@@ -52,7 +52,18 @@ export type Plan = {
   adding?: { after: number; sessionId: string; turnId?: string }
 }
 
-export type Band = { ideas: number; comments: number; tags: number; steps: number; done: number; running?: number; paused?: number; global?: number }
+// named: the queues other than the global list that hold ideas, the one added to last first.
+export type Band = {
+  ideas: number
+  comments: number
+  tags: number
+  steps: number
+  done: number
+  running?: number
+  paused?: number
+  global?: number
+  named?: { name: string; count: number }[]
+}
 
 declare module 'claude-code' {
   interface PluginState {

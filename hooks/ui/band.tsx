@@ -30,7 +30,7 @@ export async function drawBand(ctx: Context, $: Engine, e: BandRender[1], next: 
   const now = await readBand($)
   const waiting = now.ideas + now.comments + now.tags
   const left = now.steps - now.done
-  if (!isDrawnOn(e.surface) || e.props.hasSurvey || (waiting === 0 && left === 0 && now.running === undefined && !now.global)) {
+  if (!isDrawnOn(e.surface) || e.props.hasSurvey || (waiting === 0 && left === 0 && now.running === undefined && !now.global && !now.named)) {
     return next(e)
   }
 
@@ -41,8 +41,11 @@ export async function drawBand(ctx: Context, $: Engine, e: BandRender[1], next: 
   else if (left > 0) parts.push(plan)
   if (now.ideas) parts.push(formatCount(now.ideas, 'idea'))
   if (now.comments + now.tags) parts.push(formatCount(now.comments + now.tags, 'comment'))
-  // A reminder of the ideas that wait for no project: /aside g lists them.
-  if (now.global) parts.push(`${now.global} global`)
+  // A reminder of the ideas that wait for no project, two queues of them at most: /aside q
+  // lists them all.
+  const queues = [...(now.global ? [`${now.global} global`] : []), ...(now.named ?? []).map(one => `${one.count} @${one.name}`)]
+  parts.push(...queues.slice(0, 2))
+  if (queues.length > 2) parts.push(`+${formatCount(queues.length - 2, 'queue')}`)
   const action: Action | undefined =
     now.running !== undefined ? 'stop' : now.paused !== undefined ? 'continue' : left > 0 ? 'run plan' : undefined
 

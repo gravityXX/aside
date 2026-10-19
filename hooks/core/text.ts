@@ -66,7 +66,7 @@ export const relativePath = (path: string, root: string): string => {
   return isUnder ? file.slice(dir.length + 1) : file
 }
 
-const PLURALS = { idea: 'ideas', comment: 'comments', tag: 'tags', step: 'steps', entry: 'entries' } as const
+const PLURALS = { idea: 'ideas', comment: 'comments', tag: 'tags', step: 'steps', entry: 'entries', queue: 'queues' } as const
 
 export const formatCount = (n: number, noun: keyof typeof PLURALS): string => `${n} ${n === 1 ? noun : PLURALS[noun]}`
 

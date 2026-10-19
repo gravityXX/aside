@@ -4,14 +4,14 @@ import { currentOutput, currentTask } from '../context'
 import type { Context } from '../context'
 import { inOrder, KINDS } from '../core/entries'
 import { MARKDOWN_PATH } from '../core/markdown'
-import { describeFailure, shortenText } from '../core/text'
-import { loadEntries, loadGlobalIdeas, loadPlan, projectKeys, refreshBand } from '../io/store'
+import { describeFailure, formatCount, shortenText } from '../core/text'
+import { countQueues, GLOBAL, loadEntries, loadIdeas, loadPlan, projectKeys, refreshBand } from '../io/store'
 import { addEntries } from './capture'
 import { handOverQueue, registerPlanTool, registerWaitTool, runChosen, runEntries, runPlan, stopPlan } from './plan'
-import { runGlobal } from './global'
+import { runGlobal, runNamed } from './global'
 import { clearQueue, editEntry, exportListing, moveEntry, popEntry, removeEntries, restoreTaken, scanFile, showListing } from './queue'
 
-type Name = 'list' | 'plan' | 'run' | 'stop' | 'pop' | 'edit' | 'move' | 'remove' | 'clear' | 'undo' | 'scan' | 'export' | 'g' | 'help'
+type Name = 'list' | 'plan' | 'run' | 'stop' | 'pop' | 'edit' | 'move' | 'remove' | 'clear' | 'undo' | 'scan' | 'export' | 'g' | 'q' | 'help'
 
 // A command's row: what it accepts and how help and Tab show it. runCommand does the work.
 type Command = {
@@ -137,15 +137,27 @@ const COMMANDS: readonly Command[] = [
     name: 'g',
     // Anything after it: a command on the global list, or an idea for it.
     takes: () => true,
-    usage: 'g [TEXT | here N ... | add N ... | remove N ... | edit N | pop [N] | move N M]',
+    usage: 'g [TEXT | here N ... | add N ... | remove N ... | edit N | pop [N] | move N M | clear | undo]',
     help: [
       '/aside g - show the global list: ideas that belong to no project',
       '/aside g TEXT - put TEXT on the global list, as "+g TEXT" would',
       '/aside g here N [M ...] - move ideas N of the global list to the end of this queue',
       '/aside g add N [M ...] - move ideas N of this queue (numbers as /aside shows them) to the global list',
-      '/aside g remove N [M ...] | edit N | pop [N] | move N M - the same as for the queue, on the global list',
+      '/aside g remove N [M ...] | edit N | pop [N] | move N M | clear | undo - the same as for the queue, on the global list',
     ],
     about: 'the global list: ideas for no project',
+  },
+  {
+    name: 'q',
+    // Anything after it: the queues for no project, a command on one of them, or an idea for it.
+    takes: () => true,
+    usage: 'q [NAME [TEXT | here N ... | add N ... | remove N ... | edit N | pop [N] | move N M | clear | undo | rename NEW]]',
+    help: [
+      '/aside q - show the named queues, which belong to no project, and the global list among them',
+      '/aside q NAME [TEXT] - show the queue NAME, or put TEXT in it, as "+@NAME TEXT" would; the commands of /aside g work on it too',
+      '/aside q NAME clear | undo | rename NEW - empty it, bring back what its last clear took, or move it all to the queue NEW',
+    ],
+    about: 'the named queues: ideas for no project',
   },
   {
     name: 'help',
@@ -160,7 +172,8 @@ const TEXT_HELP = '/aside TEXT - queue TEXT, as "+ TEXT" would ("/aside + run 3"
 
 const HELP = [
   'Queue an idea: start a message with "+". When every line starts with "+", each line is its own entry.',
-  'Already typed it? End the message with the mark after a space ("... +", "... +?", "... +g") and it is queued whole.',
+  'Already typed it? End the message with the mark after a space ("... +", "... +?", "... +g", "... +@work") and it is queued whole.',
+  'For no project: "+g idea" goes to the global list, "+@work idea" to the queue named work, made by its first idea.',
   'Comment on what the agents wrote: copy a fragment in the preview, then type',
   '  +? question   +! change   +- drop   ++ dig deeper',
   '  pin it yourself with @file, @file:42, @file#heading or #heading after the mark.',
@@ -215,6 +228,8 @@ async function runCommand($: Engine, ctx: Context, name: Name, args: readonly st
       return exportListing($, ctx, args.join(' '))
     case 'g':
       return runGlobal($, ctx, args)
+    case 'q':
+      return runNamed($, ctx, args)
     case 'help':
       return HELP
   }
@@ -249,14 +264,14 @@ export function asideFailed($: Engine, e: AsideFailed[1], next: AsideFailed[2]) 
 
 // The numbers Tab offers after a command: the entries as /aside shows them, or for /aside run
 // while the plan has steps to do, the steps still to do.
-async function numberRows($: Engine, ctx: Context, of: 'entries' | 'ideas' | 'run' | 'global', digits: string) {
+async function numberRows($: Engine, ctx: Context, of: 'entries' | 'ideas' | 'run' | { queue: string }, digits: string) {
   const keys = await projectKeys($)
   const plan = await loadPlan($, keys.plan)
   const isSteps = of === 'run' && plan.steps.some(step => !step.isDone)
-  const globals = of === 'global' ? await loadGlobalIdeas($) : []
+  const listed = typeof of === 'object' ? await loadIdeas($, of.queue) : []
   const items =
-    of === 'global'
-      ? (ctx.settings.order === 'newest' ? globals.reverse() : globals).map((idea, i) => ({ n: i + 1, label: idea.entry.text, isDone: false }))
+    typeof of === 'object'
+      ? (ctx.settings.order === 'newest' ? listed.reverse() : listed).map((idea, i) => ({ n: i + 1, label: idea.entry.text, isDone: false }))
       : isSteps
       ? plan.steps.map((step, i) => ({ n: i + 1, label: step.title, isDone: step.isDone === true }))
       : inOrder(await loadEntries($, keys.queue), ctx.settings.order)
@@ -279,24 +294,51 @@ const GLOBAL_VERBS = [
   { text: 'edit', description: 'rework a global idea' },
   { text: 'pop', description: 'put a global idea in the box, ready to send' },
   { text: 'move', description: 'move a global idea to another place' },
+  { text: 'clear', description: 'empty the global list' },
+  { text: 'undo', description: 'bring back what its last clear took' },
+]
+
+// What Tab offers after "/aside q NAME ": the same commands on that queue, and its clear, undo
+// and rename.
+const NAMED_VERBS = [
+  { text: 'here', description: 'move its ideas into this queue' },
+  { text: 'add', description: 'move ideas of this queue to it' },
+  { text: 'remove', description: 'remove ideas from it' },
+  { text: 'edit', description: 'rework one of its ideas' },
+  { text: 'pop', description: 'put one of its ideas in the box, ready to send' },
+  { text: 'move', description: 'move one of its ideas to another place' },
+  { text: 'clear', description: 'empty it' },
+  { text: 'undo', description: 'bring back what its last clear took' },
+  { text: 'rename', description: 'move all of it to a queue of another name' },
 ]
 
 export async function completeAside(ctx: Context, $: Engine, e: Autocomplete[1], next: Autocomplete[2]) {
   const typed = e.text.slice(0, e.cursor)
-  // On the global list: its commands after "g", then its numbers, as many as the command takes.
-  const globalVerb = /^\/aside\s+g\s+(\S*)$/i.exec(typed)
-  const globalLater = /^\/aside\s+g\s+(here|add|remove|rm|edit|pop|move|mv)\s+((?:\d+\s+)*)(\d*)$/i.exec(typed)
-  if (globalVerb || globalLater) {
+  // The queues by name after "q", each with how many ideas it holds.
+  const queueName = /^\/aside\s+q\s+@?([A-Za-z0-9_-]*)$/i.exec(typed)
+  if (queueName) {
     const own = (await next(e)).suggestions
-    if (globalVerb) {
-      const word = globalVerb[1]!.toLowerCase()
-      return { suggestions: [...own, ...GLOBAL_VERBS.filter(row => row.text.startsWith(word) && row.text !== word)] }
+    const word = queueName[1]!.toLowerCase()
+    const queues = (await countQueues($)).filter(one => one.name.startsWith(word) && one.name !== word)
+
+    return { suggestions: [...own, ...queues.map(one => ({ text: one.name, description: formatCount(one.count, 'idea') }))] }
+  }
+  // On a queue: its commands after "g" or its name, then its numbers, as many as the command takes.
+  const queueVerb = /^\/aside\s+(?:g|q\s+@?([A-Za-z0-9_-]{1,20}))\s+(\S*)$/i.exec(typed)
+  const queueLater = /^\/aside\s+(?:g|q\s+@?([A-Za-z0-9_-]{1,20}))\s+(here|add|remove|rm|edit|pop|move|mv)\s+((?:\d+\s+)*)(\d*)$/i.exec(typed)
+  if (queueVerb || queueLater) {
+    const own = (await next(e)).suggestions
+    if (queueVerb) {
+      const word = queueVerb[2]!.toLowerCase()
+      const verbs = queueVerb[1] === undefined || queueVerb[1].toLowerCase() === GLOBAL ? GLOBAL_VERBS : NAMED_VERBS
+      return { suggestions: [...own, ...verbs.filter(row => row.text.startsWith(word) && row.text !== word)] }
     }
-    const verb = globalLater![1]!.toLowerCase()
-    const count = globalLater![2]!.split(/\s+/).filter(Boolean).length
+    const queue = queueLater![1]?.toLowerCase() ?? GLOBAL
+    const verb = queueLater![2]!.toLowerCase()
+    const count = queueLater![3]!.split(/\s+/).filter(Boolean).length
     const room = ['here', 'add', 'remove', 'rm'].includes(verb) ? Infinity : verb === 'move' || verb === 'mv' ? 2 : 1
-    // "g add" takes numbers of this queue, its ideas only; every other command those of the global list.
-    const rows = count < room ? await numberRows($, ctx, verb === 'add' ? 'ideas' : 'global', globalLater![3]!) : []
+    // "add" takes numbers of this project's queue, its ideas only; every other command those of the queue named.
+    const rows = count < room ? await numberRows($, ctx, verb === 'add' ? 'ideas' : { queue }, queueLater![4]!) : []
 
     return { suggestions: [...own, ...rows] }
   }

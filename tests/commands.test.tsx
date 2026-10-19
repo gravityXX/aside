@@ -295,6 +295,25 @@ describe('tab completion', () => {
     await type('+ dark mode\n+? why so slow')
     expect(await complete($, '/aside g add ')).toEqual(['1: dark mode'])
   })
+
+  test('after "/aside q " Tab offers the queues with their size, then a queue\'s commands and its numbers', async ($, on) => {
+    const { type } = world($, on)
+    on('prompt.autocomplete', () => ({ suggestions: [] }))
+    await type('+@work write the report\n+@work call the bank\n+@home water the plants\n+g read the RFC')
+
+    expect(await complete($, '/aside q ')).toEqual(['global: 1 idea', 'home: 1 idea', 'work: 2 ideas'])
+    expect(await complete($, '/aside q w')).toEqual(['work: 2 ideas'])
+    expect(await complete($, '/aside q @wo')).toEqual(['work: 2 ideas'])
+    expect(await complete($, '/aside q work r')).toEqual(['remove: remove ideas from it', 'rename: move all of it to a queue of another name'])
+    expect(await complete($, '/aside q work remove 1 ')).toEqual(['1: write the report', '2: call the bank'])
+    expect(await complete($, '/aside q work c')).toEqual(['clear: empty it'])
+    expect(await complete($, '/aside q global r')).toEqual(['remove: remove ideas from the global list'])
+    expect(await complete($, '/aside q home here ')).toEqual(['1: water the plants'])
+    expect(await complete($, '/aside q WO')).toEqual(['work: 2 ideas'])
+    expect(await complete($, '/aside q WORK r')).toEqual(['remove: remove ideas from it', 'rename: move all of it to a queue of another name'])
+    expect(await complete($, '/aside g c')).toEqual(['clear: empty the global list'])
+    expect(await complete($, '/aside g u')).toEqual(['undo: bring back what its last clear took'])
+  })
 })
 
 describe('exporting the list', () => {

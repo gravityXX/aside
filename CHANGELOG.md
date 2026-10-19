@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Named queues for ideas that belong to no project, beside the global list: start a message with `+@work`, or end a draft with ` +@work`, and the idea goes to the queue named `work`, made by its first idea. `/aside q` lists the queues with their newest idea, and `/aside q work` shows one and takes every command `/aside g` does: `here`, `add`, `remove`, `edit`, `pop` and `move`. `/aside q work clear` empties a queue and `/aside q work undo` brings back what that queue's last clear took; `/aside q work rename office` moves it all to another name, or into a queue that already holds ideas, merging the two. The global list is the queue named `global`: `+@global` is `+g`, and `/aside g clear` and `undo` work on it as well. The line above the prompt counts two queues, as in `1 global, 2 @work`, and the rest as `+1 queue`. A comment's `@file` is read as before, since it comes after the comment's mark.
+
 ## 0.24.0 - 2026-10-19
 
 - `/aside plan` and the pane's <kbd>plan</kbd> button work while a step of the plan runs: they add the queue to the plan as new steps after its own, leaving the steps done, the one running and those to do as they are. Claude in the conversation organizes it once the step ends, and the run then waits for `/aside continue`; with `planModel` on a model, the steps are added at once and the run goes on to them. A step that ends, pauses or stops meanwhile loses none of them, a run of steps named with `/aside run 3 1` leaves them for `/aside run`, and a plan replaced meanwhile gets none.
