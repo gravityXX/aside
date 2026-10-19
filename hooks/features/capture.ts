@@ -1,6 +1,6 @@
 import type { CatchHandler, EngineInterface as Engine, Hook } from 'claude-code'
 
-import type { Entry } from '../../types'
+import type { Band, Entry } from '../../types'
 import { currentOutput, chainWrite } from '../context'
 import type { Context } from '../context'
 import { inOrder, KINDS, parseEntries } from '../core/entries'
@@ -11,16 +11,21 @@ import { readTidyReply, TIDY_SYSTEM, tidyPrompt } from '../core/prompts'
 import { describeError, formatCount, relativePath, shortenText } from '../core/text'
 import { readClipboard, readGitBranch, resolveFile, searchMarkdown, tryReadFile } from '../io/host'
 import {
-  addGlobalIdeas,
+  addIdeas,
+  countQueues,
   forgetEditing,
   forgetGlobalEditing,
   forgetGlobalIdeas,
   loadEditing,
   loadEntries,
   loadGlobalEditing,
-  loadGlobalIdeas,
+  loadIdeas,
+  GLOBAL,
+  isOut,
   projectKeys,
+  queueOf,
   refreshBand,
+  restoreIdea,
   readTrackedFiles,
   trackFile,
   saveEntries,
@@ -185,23 +190,51 @@ function whileTidying(ctx: Context, work: Promise<void>) {
   void tidy.then(() => ctx.session.tidies.delete(tidy))
 }
 
-// The ideas typed with "+g", onto the global list. A message that is one "+g" idea, sent while
-// an idea is out with /aside g edit, takes that idea's place; the record goes once it is back.
-async function storeGlobal($: Engine, ideas: readonly Entry[], isSingle: boolean): Promise<GlobalIdea[]> {
+// An idea typed for a queue of no project, "+g" or "+@work", and that queue.
+type Listed = { list: string; entry: Entry }
+
+// The ideas typed for queues of no project, each onto its queue. A message that is one such
+// idea, sent while an idea is out with /aside q edit, takes that idea's place when it names the
+// same queue, and moves it to the queue it names otherwise; the record goes once it is back.
+// All of them or none: should a write fail, those already written are taken back.
+async function storeListed($: Engine, ideas: readonly Listed[], isSingle: boolean): Promise<GlobalIdea[]> {
   if (ideas.length === 0) {
     return []
   }
   const editing = isSingle ? await loadGlobalEditing($) : undefined
-  if (editing) {
-    const idea = { key: editing.key, entry: { ...editing.entry, text: ideas[0]!.text, raw: ideas[0]!.raw } }
-    await saveGlobalIdea($, idea)
+  if (editing && queueOf(editing) === ideas[0]!.list) {
+    const idea = await restoreIdea($, { key: editing.key, entry: { ...editing.entry, text: ideas[0]!.entry.text, raw: ideas[0]!.entry.raw } }, editing.entry)
     await forgetGlobalEditing($)
 
     return [idea]
   }
+  const added: GlobalIdea[] = []
+  try {
+    for (const list of new Set(ideas.map(one => one.list))) {
+      added.push(...(await addIdeas($, list, ideas.filter(one => one.list === list).map(one => one.entry))))
+    }
+  } catch (error) {
+    await forgetGlobalIdeas($, added.map(idea => idea.key)).catch(() => undefined)
+    throw error
+  }
+  if (editing) await forgetGlobalEditing($)
 
-  return addGlobalIdeas($, ideas)
+  return added
 }
+
+// What a message queued for queues of no project says, one part per queue, in the order typed:
+// the global list by its count, any other queue by its name, and a queue the message made as new.
+const reportListed = (ideas: readonly Listed[], band: Band, isNew: (list: string) => boolean): string[] =>
+  [...new Set(ideas.map(one => one.list))].map(list => {
+    const own = ideas.filter(one => one.list === list)
+    const what = own.length === 1 ? `"${shortenText(own[0]!.entry.text)}"` : formatCount(own.length, 'idea')
+    if (list === GLOBAL) {
+      return `queued ${what} to the global list (${band.global ?? 0} global)`
+    }
+    const count = band.named?.find(one => one.name === list)?.count ?? own.length
+
+    return isNew(list) ? `queued ${what} to @${list}, a new queue` : `queued ${what} to @${list} (${count} in @${list})`
+  })
 
 // A tidied text from the small model, or undefined when none comes in time.
 async function askTidy($: Engine, text: string): Promise<string | undefined> {
@@ -214,19 +247,22 @@ async function askTidy($: Engine, text: string): Promise<string | undefined> {
   return reply?.isAnswered ? readTidyReply(reply.text, text) : undefined
 }
 
-// A global idea's text, tidied as an entry's is, unless the idea has left the list or changed
-// meanwhile.
+// An idea's text in a queue of no project, tidied as an entry's is, unless the idea has left
+// its queue or changed meanwhile.
 async function tidyGlobalIdea($: Engine, idea: GlobalIdea): Promise<void> {
   const fixed = await askTidy($, idea.entry.text)
   if (fixed === undefined) {
     return
   }
-  const now = (await loadGlobalIdeas($)).find(one => one.key === idea.key)
+  const now = (await loadIdeas($, queueOf(idea))).find(one => one.key === idea.key)
   if (now === undefined || now.entry.text !== idea.entry.text) {
     return
   }
   const raw = now.entry.raw?.endsWith(now.entry.text) ? `${now.entry.raw.slice(0, now.entry.raw.length - now.entry.text.length)}${fixed}` : now.entry.raw
   await saveGlobalIdea($, { key: now.key, entry: { ...now.entry, text: fixed, ...(raw === undefined ? {} : { raw }) } })
+  // Taken out meanwhile with edit or clear, between the read above and that write: the write
+  // brought its key back, so it goes again, and the idea comes back only as edit or undo brings it.
+  if (await isOut($, now.key)) await forgetGlobalIdeas($, [now.key])
 }
 
 // An entry's own text, tidied by a small model once it is stored. It waits as typed until
@@ -282,7 +318,7 @@ export async function addEntries(
   // unless the reworked text names a place of its own.
   const editing = await loadEditing($, keys.editing)
   const isRework =
-    editing !== undefined && typed.length === 1 && !typed[0]!.isGlobal && typed[0]!.kind === editing.idea.kind && Object.keys(typed[0]!.anchor).length === 0
+    editing !== undefined && typed.length === 1 && typed[0]!.list === undefined && typed[0]!.kind === editing.idea.kind && Object.keys(typed[0]!.anchor).length === 0
   const sourceCache = new Map<string, Promise<string | undefined>>()
   const readSource: ReadSource = file => {
     if (!sourceCache.has(file)) sourceCache.set(file, tryReadFile($, file))
@@ -292,8 +328,12 @@ export async function addEntries(
 
   const added: Entry[] = []
   const notes: string[] = []
-  const globals = typed.filter(one => one.isGlobal).map(one => ({ text: one.text, raw: one.raw, at: now, kind: 'idea' as const }))
-  for (const one of typed.filter(entry => !entry.isGlobal)) {
+  const listed = typed.flatMap(one => (one.list === undefined ? [] : [{ list: one.list, entry: { text: one.text, raw: one.raw, at: now, kind: 'idea' as const } }]))
+  // The queues there before, so a message that makes one says so; the queue of an idea out for
+  // editing is there still, even when that idea was its only one.
+  const out = listed.length > 0 ? await loadGlobalEditing($) : undefined
+  const queues = listed.length > 0 ? new Set([...(await countQueues($)).map(one => one.name), ...(out ? [queueOf(out)] : [])]) : new Set<string>()
+  for (const one of typed.filter(entry => entry.list === undefined)) {
     if (isRework) {
       const { text: _text, raw: _raw, ...kept } = editing!.idea
       added.push({ ...kept, text: one.text, raw: one.raw })
@@ -306,17 +346,18 @@ export async function addEntries(
 
   const stored = await loadEntries($, keys.queue)
   const all = isRework ? putBack(stored, added, editing!.index, ctx.settings.order) : [...stored, ...added]
-  // The global ideas first, and taken back should the queue's write fail, so a message is kept
-  // whole or not at all and sent again adds nothing twice.
-  const onGlobal = await storeGlobal($, globals, typed.length === 1)
+  // The ideas for queues of no project first, and taken back should the queue's write fail, so
+  // a message is kept whole or not at all and sent again adds nothing twice.
+  const onGlobal = await storeListed($, listed, typed.length === 1)
   if (added.length > 0) {
     await saveEntries($, keys.queue, all).catch(async (error: unknown) => {
       await forgetGlobalIdeas($, onGlobal.map(idea => idea.key)).catch(() => undefined)
       throw error
     })
   }
-  // An idea taken out with /aside edit and sent back as "+g idea" has moved to the global list.
-  const isMovedOut = editing !== undefined && typed.length === 1 && typed[0]!.isGlobal === true && editing.idea.kind === 'idea'
+  // An idea taken out with /aside edit and sent back as "+g idea" or "+@work idea" has moved
+  // to that queue.
+  const isMovedOut = editing !== undefined && typed.length === 1 && typed[0]!.list !== undefined && editing.idea.kind === 'idea'
   if (editing && (added.length > 0 || isMovedOut)) await forgetEditing($, keys.editing)
   const band = await refreshBand($)
   for (const entry of ctx.settings.tidy ? added : []) whileTidying(ctx, tidyEntry($, ctx, entry))
@@ -324,7 +365,7 @@ export async function addEntries(
   if (images > 0) notes.push('the image was not kept')
   const parts = [
     ...(added.length > 0 ? [reportQueued(added, notes, keys.root, all.length)] : []),
-    ...(globals.length > 0 ? [`queued ${globals.length === 1 ? `"${shortenText(globals[0]!.text)}"` : formatCount(globals.length, 'idea')} to the global list (${band.global ?? 0} global)`] : []),
+    ...reportListed(listed, band, list => !queues.has(list)),
   ]
   const said = parts.join('; ')
   if (report === 'log') $.ui.log(said)

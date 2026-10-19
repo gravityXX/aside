@@ -90,9 +90,16 @@ read it later +g       the whole draft, onto the global list
 /aside g here N ...    move ideas N of the global list to the end of this queue
 /aside g add N ...     move ideas N of this queue, numbered as /aside shows them, to the global list
 /aside g remove N ...  remove from the global list; g edit N, g pop [N] and g move N M as for the queue
+/aside g clear         empty the global list; /aside g undo brings back what it took
+
++@work TEXT            put an idea in the queue named work, made by its first idea
+read it later +@work   the whole draft, into the queue work
+/aside q               show the global list and every named queue, with its count and newest idea
+/aside q work          show the queue work; the commands of /aside g work on it, as in /aside q work here 1
+/aside q work clear    empty it, or with rename X move it all to the queue X, merged with any ideas there
 ```
 
-The global list waits in every project: the line above the prompt counts it, `/aside` leaves it out, and plan and run take only this queue, so `/aside g here` brings an idea in first. Several sessions can add to it at once. `/aside undo` does not bring back what left it.
+The global list and the named queues wait in every project: the line above the prompt counts them, as in `1 global, 2 @work`, `/aside` leaves them out, and plan and run take only this queue, so `/aside g here` or `/aside q work here` brings an idea in first. The global list is the queue named `global`, so `+@global` is `+g`. Several sessions can add to them at once. `/aside undo` does not bring back what left them; a queue's own `undo` brings back what its last `clear` took.
 
 `N` is a number as `/aside` shows it, and `[N]` may be left out. `FILE` is one word ending in `.md`. While Claude works, `/aside` opens the list in a pane. Tab completes every command.
 
@@ -126,14 +133,14 @@ Change these in `/config`:
 ## More
 
 > [!IMPORTANT]
-> **The queue stays on your machine**, one per project, beside one global list for ideas that belong to no project. Nothing reaches Claude's conversation until you run `/aside plan` or `/aside run`, or `afterClaudeAnswers` does. With `tidy` on, the text you type goes to Haiku to be corrected; what you copied never does. With `planModel` on a model, `/aside plan` sends the queue to that model in place of the conversation.
+> **The queue stays on your machine**, one per project, beside the global list and the named queues for ideas that belong to no project. Nothing reaches Claude's conversation until you run `/aside plan` or `/aside run`, or `afterClaudeAnswers` does. With `tidy` on, the text you type goes to Haiku to be corrected; what you copied never does. With `planModel` on a model, `/aside plan` sends the queue to that model in place of the conversation.
 
 <details>
 <summary>What <kbd>aside</kbd> reads, runs and sends</summary>
 
 <br>
 
-- **Keeps** the queue, the plan and what `/aside undo` brings back, one set per project, and the global list, shared by all projects, in Claude Code's store for the plugin (`~/.claude/plugins/store/`). It writes a file only when you run `/aside export`, and never over one it did not write.
+- **Keeps** the queue, the plan and what `/aside undo` brings back, one set per project, and the global list and the named queues, shared by all projects, in Claude Code's store for the plugin (`~/.claude/plugins/store/`). It writes a file only when you run `/aside export`, and never over one it did not write.
 - **Reads** `<!-- ? -->` tags in markdown files Claude wrote or edited this session, or that you `/aside scan`; for a comment, the clipboard, the lines you selected in Claude's reply, the last tool output and the project's markdown files; the project's git branch.
 - **Runs** a clipboard reader (`powershell.exe` on WSL and Windows, `pbpaste` on macOS, `wl-paste`, `xclip` or `xsel` on Linux), `git rev-parse --abbrev-ref HEAD`, and `grep -rlizP` over the project's markdown files.
 - **Sends** the entries to Claude only on `/aside plan`, `/aside run` or `afterClaudeAnswers`, with what you copied, and to the model `planModel` names instead on `/aside plan`; while `tidy` is on, the text you typed goes to Haiku through Claude Code, never what you copied.

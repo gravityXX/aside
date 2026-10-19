@@ -55,11 +55,26 @@ export const queueSection = (entries: readonly Entry[], root: string): ListingSe
     ? { title: 'The queue is empty.', rows: [] }
     : { title: summarizeQueue(entries), rows: entries.map((entry, i) => entryRow(entry, root, String(i + 1))) }
 
-// The global list, as /aside g shows it: ideas that belong to no project.
-export const globalSection = (entries: readonly Entry[]): ListingSection => ({
-  title: `${formatCount(entries.length, 'idea')} on the global list`,
+// A queue of no project, as /aside q NAME shows it: the global list (/aside g), or a named
+// queue.
+export const namedSection = (name: string, entries: readonly Entry[]): ListingSection => ({
+  title: `${formatCount(entries.length, 'idea')} ${name === 'global' ? 'on the global list' : `in @${name}`}`,
   rows: entries.map((entry, i) => entryRow(entry, '', String(i + 1))),
 })
+
+// Every queue of no project that holds an idea, as /aside q shows them: its name, how many
+// ideas and the newest one. The names are padded to the longest, as the row numbers they stand
+// in for would line up.
+export const queuesSection = (queues: readonly { name: string; count: number; newest: string }[]): ListingSection => {
+  const labels = queues.map(one => (one.name === 'global' ? 'global' : `@${one.name}`))
+  // Three at least, the width of a row number, which a shorter label would be pushed right to.
+  const width = Math.max(3, ...labels.map(label => label.length))
+
+  return {
+    title: `${formatCount(queues.length, 'queue')} outside this project`,
+    rows: queues.map((one, i) => ({ label: labels[i]!.padEnd(width), word: formatCount(one.count, 'idea'), lines: [shortenText(one.newest, 60)], about: [] })),
+  }
+}
 
 // The tags in files, each marked once an earlier /aside handed it over.
 export const tagsSection = (tags: readonly Entry[], root: string, isHandedOver: (tag: Entry) => boolean): ListingSection => ({

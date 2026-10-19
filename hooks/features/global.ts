@@ -3,16 +3,23 @@ import type { EngineInterface as Engine } from 'claude-code'
 import type { Entry } from '../../types'
 import type { Context } from '../context'
 import { inOrder } from '../core/entries'
-import { globalSection, listingText } from '../core/listing'
+import { listingText, namedSection, queuesSection } from '../core/listing'
 import { formatCount, shortenText } from '../core/text'
 import {
-  addGlobalIdeas,
+  addIdeas,
+  countQueues,
+  forgetCleared,
   forgetGlobalIdeas,
+  GLOBAL,
+  loadCleared,
   loadEntries,
-  loadGlobalIdeas,
+  loadIdeas,
+  NAME_PATTERN,
   projectKeys,
   rankOf,
   refreshBand,
+  restoreIdea,
+  saveCleared,
   saveEntries,
   saveGlobalEditing,
   saveGlobalIdea,
@@ -20,19 +27,28 @@ import {
 import type { GlobalIdea } from '../io/store'
 import { addEntries } from './capture'
 
-const EMPTY = 'The global list is empty. Start a message with "+g" to add an idea to it.'
+// How the commands name a queue of no project: the global list in the words it always had,
+// any other queue by its name.
+const nameOf = (name: string) => (name === GLOBAL ? 'the global list' : `@${name}`)
+const inName = (name: string) => (name === GLOBAL ? 'on the global list' : `in @${name}`)
+const commandOf = (name: string) => (name === GLOBAL ? '/aside g' : `/aside q ${name}`)
+const markOf = (name: string) => (name === GLOBAL ? '+g' : `+@${name}`)
+
+const emptyOf = (name: string) =>
+  name === GLOBAL ? 'The global list is empty. Start a message with "+g" to add an idea to it.' : `@${name} is empty. Start a message with "+@${name}" to add an idea to it.`
 
 const isPlace = (n: number, length: number) => Number.isInteger(n) && n >= 1 && n <= length
 
-const askPlaces = (length: number, count: number) => `Give ${count === 1 ? 'a number' : 'numbers'} from 1 to ${length}, as /aside g shows them.`
+const askPlaces = (name: string, length: number, count: number) =>
+  `Give ${count === 1 ? 'a number' : 'numbers'} from 1 to ${length}, as ${commandOf(name)} shows them.`
 
 // The same idea in two places: an idea moved half-way, by a command that failed after its
 // first write, is not moved a second time when the command runs again.
 const isSame = (a: Entry, b: Entry) => a.at === b.at && a.text === b.text
 
-// The global list as /aside g numbers it, in the order setting.
-async function shownGlobal($: Engine, ctx: Context): Promise<GlobalIdea[]> {
-  const ideas = await loadGlobalIdeas($)
+// A queue as /aside q NAME numbers it, in the order setting.
+async function shownIdeas($: Engine, ctx: Context, name: string): Promise<GlobalIdea[]> {
+  const ideas = await loadIdeas($, name)
 
   return ctx.settings.order === 'newest' ? ideas.reverse() : ideas
 }
@@ -43,32 +59,59 @@ const sayIdeas = (done: string, entries: readonly Entry[]) =>
 
 // While Claude works, a command's text shows only after the turn: the list goes into the
 // transcript at once instead.
-export async function showGlobal($: Engine, ctx: Context): Promise<string> {
-  const ideas = await shownGlobal($, ctx)
-  const text = ideas.length === 0 ? EMPTY : listingText([globalSection(ideas.map(idea => idea.entry))])
-  if (!ctx.session.isRunning || ideas.length === 0) {
+function shownNow($: Engine, ctx: Context, text: string, what: string): string {
+  if (!ctx.session.isRunning) {
     return text
   }
   $.ui.log(text)
 
-  return 'Wrote the global list above while Claude was working.'
+  return `Wrote ${what} above while Claude was working.`
 }
 
-// /aside g here N ...: ideas from the global list to the end of this project's queue, into the
-// queue first, so a failure between the writes leaves an idea in both, never in neither.
-async function moveHere($: Engine, ctx: Context, numbers: readonly number[]): Promise<string> {
-  const ideas = await shownGlobal($, ctx)
+async function showQueue($: Engine, ctx: Context, name: string): Promise<string> {
+  const ideas = await shownIdeas($, ctx, name)
   if (ideas.length === 0) {
-    return EMPTY
+    return emptyOf(name)
+  }
+
+  return shownNow($, ctx, listingText([namedSection(name, ideas.map(idea => idea.entry))]), nameOf(name))
+}
+
+export async function showGlobal($: Engine, ctx: Context): Promise<string> {
+  return showQueue($, ctx, GLOBAL)
+}
+
+// /aside q: every queue of no project that holds an idea, in the order countQueues gives.
+async function showQueues($: Engine, ctx: Context): Promise<string> {
+  const queues = await countQueues($)
+  if (queues.length === 0) {
+    return 'The global list and the named queues are empty. Start a message with "+@work" to add an idea to the queue work, or with "+g" to the global list.'
+  }
+  const rows = []
+  for (const one of queues) {
+    const ideas = await loadIdeas($, one.name)
+    const newest = ideas.reduce<GlobalIdea | undefined>((last, idea) => (last === undefined || idea.entry.at >= last.entry.at ? idea : last), undefined)
+    rows.push({ name: one.name, count: ideas.length, newest: newest?.entry.text ?? '' })
+  }
+
+  return shownNow($, ctx, listingText([queuesSection(rows)]), 'the queues')
+}
+
+// /aside q NAME here N ...: ideas from a queue to the end of this project's queue, into the
+// project's queue first, so a failure between the writes leaves an idea in both, never in neither.
+async function moveHere($: Engine, ctx: Context, name: string, numbers: readonly number[]): Promise<string> {
+  const ideas = await shownIdeas($, ctx, name)
+  if (ideas.length === 0) {
+    return emptyOf(name)
   }
   if (!numbers.every(n => isPlace(n, ideas.length))) {
-    return askPlaces(ideas.length, numbers.length)
+    return askPlaces(name, ideas.length, numbers.length)
   }
   const chosen = [...new Set(numbers)].map(n => ideas[n - 1]!)
   const keys = await projectKeys($)
   const stored = await loadEntries($, keys.queue)
-  // Typed as "+g idea", it is "+ idea" in the queue, so /aside edit keeps it here.
-  const moved = chosen.map(({ entry }) => ({ text: entry.text, at: entry.at, kind: entry.kind, ...(entry.raw ? { raw: entry.raw.replace(/^\+g(?=\s)/, '+') } : {}) }))
+  // Typed as "+g idea" or "+@work idea", it is "+ idea" in the queue, so /aside edit keeps it here.
+  const moved = chosen.map(({ entry }) => ({ text: entry.text, at: entry.at, kind: entry.kind, ...(entry.raw ? { raw: entry.raw.replace(/^\+(?:g|@[A-Za-z0-9_-]{1,20})(?=\s)/, '+') } : {}) }))
   const fresh = moved.filter(entry => !stored.some(one => isSame(one, entry)))
   await saveEntries($, keys.queue, [...stored, ...fresh])
   await forgetGlobalIdeas($, chosen.map(idea => idea.key))
@@ -77,9 +120,9 @@ async function moveHere($: Engine, ctx: Context, numbers: readonly number[]): Pr
   return `${sayIdeas('Moved here', moved)} (${stored.length + fresh.length} waiting)`
 }
 
-// /aside g add N ...: ideas from this project's queue to the end of the global list, onto
-// the list first, for the same reason. A comment stays in the queue.
-async function moveToGlobal($: Engine, ctx: Context, numbers: readonly number[]): Promise<string> {
+// /aside q NAME add N ...: ideas from this project's queue to the end of a queue of no project,
+// onto it first, for the same reason. A comment stays in the queue.
+async function moveToQueue($: Engine, ctx: Context, name: string, numbers: readonly number[]): Promise<string> {
   const keys = await projectKeys($)
   const list = inOrder(await loadEntries($, keys.queue), ctx.settings.order)
   if (list.length === 0) {
@@ -90,49 +133,49 @@ async function moveToGlobal($: Engine, ctx: Context, numbers: readonly number[])
   }
   const comments = [...new Set(numbers)].filter(n => list[n - 1]!.kind !== 'idea')
   if (comments.length > 0) {
-    return `Only ideas go to the global list; ${comments.join(', ')} ${comments.length === 1 ? 'is a comment' : 'are comments'}.`
+    return `Only ideas go to ${nameOf(name)}; ${comments.join(', ')} ${comments.length === 1 ? 'is a comment' : 'are comments'}.`
   }
   const chosen = [...new Set(numbers)].map(n => list[n - 1]!)
-  const there = await loadGlobalIdeas($)
+  const there = await loadIdeas($, name)
   const now = await $.clock.now()
   const fresh = chosen.filter(entry => !there.some(idea => isSame(idea.entry, entry)))
-  await addGlobalIdeas($, fresh.map(({ text, at }, i) => ({ text, at, kind: 'idea' as const, order: now + i / 1000 })))
+  await addIdeas($, name, fresh.map(({ text, at }, i) => ({ text, at, kind: 'idea' as const, order: now + i / 1000 })))
   await saveEntries($, keys.queue, inOrder(list.filter(entry => !chosen.includes(entry)), ctx.settings.order))
   await refreshBand($)
 
-  return sayIdeas('Moved to the global list', chosen)
+  return sayIdeas(`Moved to ${nameOf(name)}`, chosen)
 }
 
-async function removeGlobal($: Engine, ctx: Context, numbers: readonly number[]): Promise<string> {
-  const ideas = await shownGlobal($, ctx)
+async function removeIdeas($: Engine, ctx: Context, name: string, numbers: readonly number[]): Promise<string> {
+  const ideas = await shownIdeas($, ctx, name)
   if (ideas.length === 0) {
-    return EMPTY
+    return emptyOf(name)
   }
   if (!numbers.every(n => isPlace(n, ideas.length))) {
-    return askPlaces(ideas.length, numbers.length)
+    return askPlaces(name, ideas.length, numbers.length)
   }
   const chosen = [...new Set(numbers)].map(n => ideas[n - 1]!)
   await forgetGlobalIdeas($, chosen.map(idea => idea.key))
   await refreshBand($)
 
-  return sayIdeas('Removed from the global list', chosen.map(idea => idea.entry))
+  return sayIdeas(`Removed from ${nameOf(name)}`, chosen.map(idea => idea.entry))
 }
 
-// /aside g pop [N]: the idea in the prompt box, ready to send, and off the list once it is
-// there; the newest one unless named.
-async function popGlobal($: Engine, ctx: Context, n?: number): Promise<string> {
-  const ideas = await shownGlobal($, ctx)
+// /aside q NAME pop [N]: the idea in the prompt box, ready to send, and off its queue once it
+// is there; the newest one unless named.
+async function popIdea($: Engine, ctx: Context, name: string, n?: number): Promise<string> {
+  const ideas = await shownIdeas($, ctx, name)
   if (ideas.length === 0) {
-    return EMPTY
+    return emptyOf(name)
   }
   const at = n ?? (ctx.settings.order === 'newest' ? 1 : ideas.length)
   if (!isPlace(at, ideas.length)) {
-    return askPlaces(ideas.length, 1)
+    return askPlaces(name, ideas.length, 1)
   }
   const idea = ideas[at - 1]!
   const filled = await $.prompt.fill({ text: idea.entry.text, mode: 'insert' })
   if (!filled.isFilled) {
-    return 'The prompt box cannot take it now; the idea stays on the global list.'
+    return `The prompt box cannot take it now; the idea stays ${inName(name)}.`
   }
   await forgetGlobalIdeas($, [idea.key])
   await refreshBand($)
@@ -140,40 +183,42 @@ async function popGlobal($: Engine, ctx: Context, n?: number): Promise<string> {
   return `In the prompt box, ready to send: ${shortenText(idea.entry.text, 60)}`
 }
 
-// /aside g edit N: as /aside edit does for the queue, the idea leaves the list for the prompt
-// box as "+g idea", and the next message that is one "+g" idea takes its place again. The
-// record is written before the idea leaves, so a failure between keeps it in both.
-async function editGlobal($: Engine, ctx: Context, n: number): Promise<string> {
-  const ideas = await shownGlobal($, ctx)
+// /aside q NAME edit N: as /aside edit does for the queue, the idea leaves its queue for the
+// prompt box with its mark, "+@work idea", and the next message that is one such idea takes its
+// place again, or moves it to the queue it names. The record is written before the idea leaves,
+// so a failure between keeps it in both.
+async function editIdea($: Engine, ctx: Context, name: string, n: number): Promise<string> {
+  const ideas = await shownIdeas($, ctx, name)
   if (ideas.length === 0) {
-    return EMPTY
+    return emptyOf(name)
   }
   if (!isPlace(n, ideas.length)) {
-    return askPlaces(ideas.length, 1)
+    return askPlaces(name, ideas.length, 1)
   }
   const idea = ideas[n - 1]!
-  const filled = await $.prompt.fill({ text: `+g ${idea.entry.text}`, mode: 'insert' })
+  const filled = await $.prompt.fill({ text: `${markOf(name)} ${idea.entry.text}`, mode: 'insert' })
   if (!filled.isFilled) {
-    return 'The prompt box cannot take it now; the idea stays on the global list.'
+    return `The prompt box cannot take it now; the idea stays ${inName(name)}.`
   }
   await saveGlobalEditing($, idea)
   await forgetGlobalIdeas($, [idea.key])
   await refreshBand($)
+  const which = name === GLOBAL ? `Global idea ${n}` : `Idea ${n} of @${name}`
 
-  return `Global idea ${n} is in the prompt box: change it and press Enter; it goes back to place ${n}.`
+  return `${which} is in the prompt box: change it and press Enter; it goes back to place ${n}.`
 }
 
-// /aside g move N M: one write, to the idea moved, which takes a place between its new
+// /aside q NAME move N M: one write, to the idea moved, which takes a place between its new
 // neighbours, so other sessions adding meanwhile are left alone. Neighbours too close to
 // leave room between them are placed again, one after another, so the order shown is the
 // order stored.
-async function moveGlobal($: Engine, ctx: Context, from: number, to: number): Promise<string> {
-  const ideas = await shownGlobal($, ctx)
+async function moveIdea($: Engine, ctx: Context, name: string, from: number, to: number): Promise<string> {
+  const ideas = await shownIdeas($, ctx, name)
   if (ideas.length < 2) {
     return 'Nothing to move.'
   }
   if (!isPlace(from, ideas.length) || !isPlace(to, ideas.length)) {
-    return `Give two places from 1 to ${ideas.length}: /aside g move 3 1`
+    return `Give two places from 1 to ${ideas.length}: ${commandOf(name)} move 3 1`
   }
   const [idea] = ideas.splice(from - 1, 1)
   ideas.splice(to - 1, 0, idea!)
@@ -192,38 +237,129 @@ async function moveGlobal($: Engine, ctx: Context, from: number, to: number): Pr
     }
   }
 
-  return listingText([globalSection(ideas.map(one => one.entry))])
+  return listingText([namedSection(name, ideas.map(one => one.entry))])
+}
+
+// /aside q NAME clear: what the queue holds is kept for /aside q NAME undo first, and its ideas
+// deleted after, so a failure between the writes loses nothing.
+async function clearQueue($: Engine, name: string): Promise<string> {
+  const ideas = await loadIdeas($, name)
+  if (ideas.length === 0) {
+    return emptyOf(name)
+  }
+  await saveCleared($, name, ideas)
+  await forgetGlobalIdeas($, ideas.map(idea => idea.key))
+  await refreshBand($)
+
+  return `Cleared ${formatCount(ideas.length, 'idea')} from ${nameOf(name)}. ${commandOf(name)} undo brings ${ideas.length === 1 ? 'it' : 'them'} back.`
+}
+
+// /aside q NAME undo: what this session's last clear of that queue took, back under the keys it
+// had while they are free; each idea's record goes as soon as it is back, so an undo cut short,
+// run again, brings each idea back once.
+async function undoClear($: Engine, name: string): Promise<string> {
+  const cleared = await loadCleared($, name)
+  if (cleared.length === 0) {
+    return `Nothing to bring back to ${nameOf(name)}.`
+  }
+  for (const { record, idea } of cleared) {
+    await restoreIdea($, idea)
+    await forgetCleared($, record)
+  }
+  const band = await refreshBand($)
+  const count = name === GLOBAL ? `${band.global ?? 0} global` : `${band.named?.find(one => one.name === name)?.count ?? 0} in @${name}`
+
+  return `Brought back ${formatCount(cleared.length, 'idea')} to ${nameOf(name)} (${count}).`
+}
+
+// /aside q NAME rename NEW: every idea to the queue NEW, which may hold ideas already and then
+// holds both, in the order their places give. Each is written there first and taken from here
+// after, so a failure between leaves an idea in both, and running it again moves the rest.
+async function renameQueue($: Engine, name: string, to: string): Promise<string> {
+  if (name === GLOBAL) {
+    return `The global list keeps its name; /aside g here N ... moves its ideas into this queue.`
+  }
+  if (!NAME_PATTERN.test(to)) {
+    return `A queue's name has letters, digits, "-" and "_", at most 20 of them: ${commandOf(name)} rename ${name === 'office' ? 'work' : 'office'}`
+  }
+  const target = to.toLowerCase()
+  if (target === name) {
+    return `@${name} has that name already.`
+  }
+  const ideas = await loadIdeas($, name)
+  if (ideas.length === 0) {
+    return emptyOf(name)
+  }
+  const there = await loadIdeas($, target)
+  const fresh = ideas.filter(idea => !there.some(one => isSame(one.entry, idea.entry)))
+  await addIdeas($, target, fresh.map(idea => idea.entry))
+  await forgetGlobalIdeas($, ideas.map(idea => idea.key))
+  await refreshBand($)
+  const moved = formatCount(ideas.length, 'idea')
+
+  return there.length === 0
+    ? `@${name} is now ${nameOf(target)}: ${moved}.`
+    : `Moved ${moved} from @${name} to ${nameOf(target)}, which now has ${there.length + fresh.length}.`
 }
 
 const isNumbers = (words: readonly string[]) => words.length > 0 && words.every(word => /^\d+$/.test(word))
 
-// /aside g ...: a command on the global list when the words have its shape, else an idea for
-// it, as "+g TEXT" would.
-export async function runGlobal($: Engine, ctx: Context, args: readonly string[]): Promise<string> {
+// /aside q NAME ...: a command on that queue when the words have its shape, else an idea for it,
+// as "+@NAME TEXT" would.
+async function runQueue($: Engine, ctx: Context, name: string, args: readonly string[]): Promise<string> {
   const [first, ...rest] = args
   const verb = first?.toLowerCase()
   const numbers = rest.map(Number)
   if (verb === undefined) {
-    return showGlobal($, ctx)
+    return showQueue($, ctx, name)
   }
   if (verb === 'here' && isNumbers(rest)) {
-    return moveHere($, ctx, numbers)
+    return moveHere($, ctx, name, numbers)
   }
   if (verb === 'add' && isNumbers(rest)) {
-    return moveToGlobal($, ctx, numbers)
+    return moveToQueue($, ctx, name, numbers)
   }
   if ((verb === 'remove' || verb === 'rm') && isNumbers(rest)) {
-    return removeGlobal($, ctx, numbers)
+    return removeIdeas($, ctx, name, numbers)
   }
   if (verb === 'edit' && rest.length === 1 && isNumbers(rest)) {
-    return editGlobal($, ctx, numbers[0]!)
+    return editIdea($, ctx, name, numbers[0]!)
   }
   if (verb === 'pop' && (rest.length === 0 || (rest.length === 1 && isNumbers(rest)))) {
-    return popGlobal($, ctx, numbers[0])
+    return popIdea($, ctx, name, numbers[0])
   }
   if ((verb === 'move' || verb === 'mv') && rest.length === 2 && isNumbers(rest)) {
-    return moveGlobal($, ctx, numbers[0]!, numbers[1]!)
+    return moveIdea($, ctx, name, numbers[0]!, numbers[1]!)
+  }
+  if (verb === 'clear' && rest.length === 0) {
+    return clearQueue($, name)
+  }
+  if (verb === 'undo' && rest.length === 0) {
+    return undoClear($, name)
+  }
+  if (verb === 'rename' && rest.length === 1) {
+    return renameQueue($, name, rest[0]!.replace(/^@/, ''))
   }
 
-  return (await addEntries($, ctx, `+g ${args.join(' ')}`, undefined, undefined, { report: 'none' })) ?? showGlobal($, ctx)
+  return (await addEntries($, ctx, `${markOf(name)} ${args.join(' ')}`, undefined, undefined, { report: 'none' })) ?? showQueue($, ctx, name)
+}
+
+// /aside g ...: the same commands on the global list.
+export async function runGlobal($: Engine, ctx: Context, args: readonly string[]): Promise<string> {
+  return runQueue($, ctx, GLOBAL, args)
+}
+
+// /aside q [NAME ...]: the queues for no project, or one of them, by its name with or without
+// its "@", in any letter case.
+export async function runNamed($: Engine, ctx: Context, args: readonly string[]): Promise<string> {
+  const [first, ...rest] = args
+  if (first === undefined) {
+    return showQueues($, ctx)
+  }
+  const name = first.replace(/^@/, '')
+  if (!NAME_PATTERN.test(name)) {
+    return 'A queue\'s name has letters, digits, "-" and "_", at most 20 of them: /aside q work'
+  }
+
+  return runQueue($, ctx, name.toLowerCase(), rest)
 }
