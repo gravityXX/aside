@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.24.0 - 2026-10-19
 
 - `/aside plan` and the pane's <kbd>plan</kbd> button work while a step of the plan runs: they add the queue to the plan as new steps after its own, leaving the steps done, the one running and those to do as they are. Claude in the conversation organizes it once the step ends, and the run then waits for `/aside continue`; with `planModel` on a model, the steps are added at once and the run goes on to them. A step that ends, pauses or stops meanwhile loses none of them, a run of steps named with `/aside run 3 1` leaves them for `/aside run`, and a plan replaced meanwhile gets none.
 
