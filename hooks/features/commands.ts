@@ -114,8 +114,8 @@ const COMMANDS: readonly Command[] = [
     name: 'undo',
     takes: none,
     usage: 'undo',
-    help: ['/aside undo - bring back what plan, run or clear took'],
-    about: 'bring back what plan, run or clear took',
+    help: ['/aside undo - bring back what the last clear, or an unanswered plan or run, took'],
+    about: 'bring back what the last clear, or an unanswered plan or run, took',
   },
   {
     name: 'scan',
