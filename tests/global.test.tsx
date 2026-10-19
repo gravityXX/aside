@@ -25,15 +25,15 @@ describe('the global list', () => {
     expect((await aside('g')).split('\n').slice(2)).toEqual(['  1  idea  read it later', '  2  idea  write the post', '  3  idea  learn Rust'])
   })
 
-  test('/aside here moves global ideas to the end of the queue, and /aside global moves ideas back; a comment stays', async ($, on) => {
+  test('/aside g here moves global ideas to the end of the queue, and /aside g add moves ideas back; a comment stays', async ($, on) => {
     const { type, aside, shown } = world($, on)
     await type('+g a\n+g b\n+g c')
     await type('+ x\n+? y')
 
-    expect(await aside('here 1 3')).toBe('Moved here 2 ideas: a; c (4 waiting)')
+    expect(await aside('g here 1 3')).toBe('Moved here 2 ideas: a; c (4 waiting)')
     expect(await shown()).toEqual(['3 ideas and 1 comment waiting', '1 idea x', '2 question y', '3 idea a', '4 idea c'])
-    expect(await aside('global 2')).toBe('Only ideas go to the global list; 2 is a comment.')
-    expect(await aside('global 1 4')).toBe('Moved to the global list 2 ideas: x; c')
+    expect(await aside('g add 2')).toBe('Only ideas go to the global list; 2 is a comment.')
+    expect(await aside('g add 1 4')).toBe('Moved to the global list 2 ideas: x; c')
     expect(await shown()).toEqual(['1 idea and 1 comment waiting', '1 question y', '2 idea a'])
     expect((await aside('g')).split('\n').slice(2)).toEqual(['  1  idea  b', '  2  idea  x', '  3  idea  c'])
   })
@@ -99,10 +99,10 @@ describe('the global list', () => {
     const { aside, shown, fromAnotherSession } = world($, on, { stored: { 'queue:/proj': [idea] } })
     await fromAnotherSession('global:idea:1000:session-2:0', idea)
 
-    expect(await aside('here 1')).toBe('Moved here: dark mode (1 waiting)')
+    expect(await aside('g here 1')).toBe('Moved here: dark mode (1 waiting)')
     expect(await shown()).toEqual(['1 idea waiting', '1 idea dark mode'])
     await fromAnotherSession('global:idea:1000:session-2:0', idea)
-    await aside('global 1')
+    await aside('g add 1')
     expect(await aside('g')).toBe(['1 idea on the global list', '', '  1  idea  dark mode'].join('\n'))
   })
 
@@ -120,7 +120,7 @@ describe('the global list', () => {
   test('an idea moved here is edited as one of the queue, and the list shows at once while Claude works', async ($, on) => {
     const { filled, logged, type, aside, startTurn } = world($, on)
     await type('+g read the RFC')
-    await aside('here 1')
+    await aside('g here 1')
     await aside('edit 1')
     expect(filled.at(-1)).toBe('+ read the RFC')
 
@@ -153,9 +153,9 @@ describe('the global list', () => {
     const { type, aside } = world($, on)
 
     expect(await aside('g')).toBe('The global list is empty. Start a message with "+g" to add an idea to it.')
-    expect(await aside('here 1')).toBe('The global list is empty. Start a message with "+g" to add an idea to it.')
+    expect(await aside('g here 1')).toBe('The global list is empty. Start a message with "+g" to add an idea to it.')
     await type('+g a')
-    expect(await aside('here 5')).toBe('Give a number from 1 to 1, as /aside g shows them.')
+    expect(await aside('g here 5')).toBe('Give a number from 1 to 1, as /aside g shows them.')
     expect(await aside('g remove 1 7')).toBe('Give numbers from 1 to 1, as /aside g shows them.')
   })
 

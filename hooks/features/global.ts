@@ -54,9 +54,9 @@ export async function showGlobal($: Engine, ctx: Context): Promise<string> {
   return 'Wrote the global list above while Claude was working.'
 }
 
-// /aside here N ...: ideas from the global list to the end of this project's queue, into the
+// /aside g here N ...: ideas from the global list to the end of this project's queue, into the
 // queue first, so a failure between the writes leaves an idea in both, never in neither.
-export async function moveHere($: Engine, ctx: Context, numbers: readonly number[]): Promise<string> {
+async function moveHere($: Engine, ctx: Context, numbers: readonly number[]): Promise<string> {
   const ideas = await shownGlobal($, ctx)
   if (ideas.length === 0) {
     return EMPTY
@@ -77,9 +77,9 @@ export async function moveHere($: Engine, ctx: Context, numbers: readonly number
   return `${sayIdeas('Moved here', moved)} (${stored.length + fresh.length} waiting)`
 }
 
-// /aside global N ...: ideas from this project's queue to the end of the global list, onto
+// /aside g add N ...: ideas from this project's queue to the end of the global list, onto
 // the list first, for the same reason. A comment stays in the queue.
-export async function moveToGlobal($: Engine, ctx: Context, numbers: readonly number[]): Promise<string> {
+async function moveToGlobal($: Engine, ctx: Context, numbers: readonly number[]): Promise<string> {
   const keys = await projectKeys($)
   const list = inOrder(await loadEntries($, keys.queue), ctx.settings.order)
   if (list.length === 0) {
@@ -205,6 +205,12 @@ export async function runGlobal($: Engine, ctx: Context, args: readonly string[]
   const numbers = rest.map(Number)
   if (verb === undefined) {
     return showGlobal($, ctx)
+  }
+  if (verb === 'here' && isNumbers(rest)) {
+    return moveHere($, ctx, numbers)
+  }
+  if (verb === 'add' && isNumbers(rest)) {
+    return moveToGlobal($, ctx, numbers)
   }
   if ((verb === 'remove' || verb === 'rm') && isNumbers(rest)) {
     return removeGlobal($, ctx, numbers)

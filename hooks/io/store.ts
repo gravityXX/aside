@@ -286,7 +286,7 @@ export async function refreshBand($: Engine, tagCount?: number): Promise<Band> {
 // different projects add and take them at the same time without writing over each other's.
 // The key holds the idea's own `at`, the session that added it and a number free for that
 // pair, so ideas of one message keep the order typed. `order` places an idea elsewhere in the
-// list: set when it comes from a queue with /aside global, and when it is moved.
+// list: set when it comes from a queue with /aside g add, and when it is moved.
 const GLOBAL_IDEA = 'global:idea:'
 
 export type GlobalIdea = { key: string; entry: Entry & { order?: number } }

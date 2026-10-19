@@ -87,12 +87,12 @@ Requires <kbd>Claude Code</kbd> 2.1.301 or newer, whose plugin API is still in e
 +g TEXT                put an idea on the global list, which belongs to no project
 read it later +g       the whole draft, onto the global list
 /aside g               show the global list
-/aside here N ...      move ideas N of the global list to the end of this queue
-/aside global N ...    move ideas N of this queue to the global list
+/aside g here N ...    move ideas N of the global list to the end of this queue
+/aside g add N ...     move ideas N of this queue, numbered as /aside shows them, to the global list
 /aside g remove N ...  remove from the global list; g edit N, g pop [N] and g move N M as for the queue
 ```
 
-The global list waits in every project: the line above the prompt counts it, `/aside` leaves it out, and plan and run take only this queue, so `/aside here` brings an idea in first. Several sessions can add to it at once. `/aside undo` does not bring back what left it.
+The global list waits in every project: the line above the prompt counts it, `/aside` leaves it out, and plan and run take only this queue, so `/aside g here` brings an idea in first. Several sessions can add to it at once. `/aside undo` does not bring back what left it.
 
 `N` is a number as `/aside` shows it, and `[N]` may be left out. `FILE` is one word ending in `.md`. While Claude works, `/aside` opens the list in a pane. Tab completes every command.
 
