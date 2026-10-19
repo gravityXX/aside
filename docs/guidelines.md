@@ -179,7 +179,7 @@ The plugin runs on the Claude Code plugin API: hooks `($, e, next)` added with `
 
 ## 8. The pictures script
 
-`assets/make_svgs.py` draws every picture in the README, the timeline and the steps, light and dark.
+`assets/make_svgs.py` draws every picture in the README, the timeline and the steps, and those in `docs/use-cases.md`, light and dark.
 
 1. Python 3.12 or newer, the standard library only. It runs from the repository root: `python3 assets/make_svgs.py`.
 2. It is formatted with `uvx ruff@0.17.1 format --line-length 120 assets`, linted with `uvx ruff@0.17.1 check assets` and typed so that `uvx mypy@2.4.0 --strict assets/make_svgs.py` passes.
@@ -198,8 +198,8 @@ The plugin runs on the Claude Code plugin API: hooks `($, e, next)` added with `
 7. Do the tests check visible behaviour, and does each fix have a test that fails without it? (6)
 8. Do the comments say why, and are they still true? (4.20 to 4.22)
 9. Do the commit types and the CHANGELOG note match the release they make? (7)
-10. Are the README, `/aside help` and the Tab hints updated when a command changes?
-11. Do the pictures still match the README and the plugin's behaviour? (8)
+10. Are the README, `/aside help`, the Tab hints and `docs/use-cases.md` updated when a command or what it does changes?
+11. Do the pictures still match the README, `docs/use-cases.md` and the plugin's behaviour? (8)
 12. Have the checks run, with their real output?
 
 ```sh
