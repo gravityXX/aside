@@ -81,6 +81,9 @@ The plugin runs on the Claude Code plugin API: hooks `($, e, next)` added with `
 13. Claude Code writes the types to `.claude-plugin/types/` when a session loads the plugin. Load it once after a Claude Code update before type-checking.
 14. `<>` draws a column Box around its children, so a fragment inside a row starts a new line. Elements that stand side by side go into the row directly, each one conditional on its own.
 15. A pane opens at any width only while the person's press, command or prompt that asked for it lasts. A button that opens a pane returns its promise from `onPress` rather than voiding it, or the open comes after the press has ended and waits undrawn below 144 columns (seen on a 125-column terminal).
+16. Work that waits on a long call (a model, a timer) while the person keeps typing reads what it was given first and saves only if that is still there, unchanged; otherwise it saves nothing and says so. One such call runs at a time (`planOutside`).
+17. Several sessions share the store. Data more than one session writes at once gets a key per item rather than one list read and written back (the global list), and a command that moves data between two keys writes the place it goes first, so a failure between the writes leaves it in both, and running it again adds nothing twice.
+18. An SDK host (`claude -p`, Claude Code Desktop) stamps prompts with origin `sdk`; aside queues only `composer` and `bridge` prompts. Installed plugins' hooks modules load only where the account's rollout switch is on, which a signed-out machine may keep off.
 
 ## 4. TypeScript
 
@@ -106,7 +109,7 @@ The plugin runs on the Claude Code plugin API: hooks `($, e, next)` added with `
 12. A boolean reads as a question: `isRunning`, `isOwnTurn`, `isPinned`, `canPlan`.
 13. A function is named for what it does for the person: `popEntry`, `handOverQueue`, `refreshBand`. `tryX` returns `undefined` when it fails.
 14. A constant that holds fixed data is `UPPER_CASE`: `KINDS`, `STEP_MARKER`, `LIST_PANE`.
-15. The product's words mean one thing everywhere: an **entry** is an **idea** or a **comment**; a **tag** is a `<!-- ? -->` comment in a file; the **queue** holds entries; a **plan** has **steps**; entries are **handed over** and steps **run**.
+15. The product's words mean one thing everywhere: an **entry** is an **idea** or a **comment**; a **tag** is a `<!-- ? -->` comment in a file; the **queue** holds entries; the **global list** holds ideas that belong to no project; a **plan** has **steps**; entries are **handed over** and steps **run**.
 
 ### Style
 
@@ -140,7 +143,7 @@ The plugin runs on the Claude Code plugin API: hooks `($, e, next)` added with `
 5. The machine beneath the plugin (files, clipboard, branch, system, a narrow terminal, a hook that drops prompts) is set through `Machine`. The plugin's own files are never mocked.
 6. Time moves only through `clock` and `idle()`; no real waits.
 7. A test's name is a sentence about one behaviour, such as "a queued entry never reaches Claude and leaves a line in the transcript, not a toast". It may check several things that make up that behaviour.
-8. A test lives in the file of its area: `typing`, `comments`, `commands`, `plan`, `ui`, `matching`. A new area gets a new file.
+8. A test lives in the file of its area: `typing`, `comments`, `commands`, `plan`, `global`, `ui`, `matching`. A new area gets a new file.
 9. Every `feat:` comes with tests of what it adds. Every `fix:` comes with a test that fails without the fix.
 10. **Prefer** exact expectations (`toEqual` on the whole listing) over `toContain`, so a stray line fails the test.
 
