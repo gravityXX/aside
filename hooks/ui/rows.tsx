@@ -20,10 +20,12 @@ const WORD_COLOURS: Record<string, string> = {
   'dig deeper': 'success',
 }
 
-// A step's mark on the plan's line, in its state's colour: done, running, still to do.
+// A step's mark on the plan's line, in its state's colour: done, running, waiting for the
+// person, still to do.
 const STEP_MARKS: Record<string, { mark: string; colour?: string }> = {
   done: { mark: '●', colour: 'success' },
   running: { mark: '◉', colour: 'warning' },
+  waiting: { mark: '◉', colour: 'suggestion' },
   'to do': { mark: '○' },
 }
 
@@ -32,16 +34,18 @@ const isPlanSection = (section: ListingSection) => section.rows.length > 0 && se
 
 // The plan as a line of steps, top to bottom: each step's mark, its number and title, and
 // under it, on the line that joins it to the next, what it took and what it said. A double
-// line marks where a step paused the run.
+// line marks where a step paused the run, or the step that waits for the person.
 const planRows = ({ Box, Text }: Drawing, section: ListingSection) => {
   const pausedAfter = /^Plan paused after step (\d+)/.exec(section.title)?.[1]
 
   return section.rows.map((row, n) => {
     const { mark, colour } = STEP_MARKS[row.word]!
     const isLast = n === section.rows.length - 1
-    const join = row.label === pausedAfter ? '║' : isLast ? ' ' : '│'
+    const isWaiting = row.word === 'waiting'
+    const join = row.label === pausedAfter || isWaiting ? '║' : isLast ? ' ' : '│'
     const under = [...row.lines.slice(1), ...row.about.map(about => `↳ ${about}`)].map(line => line.trim()).filter(line => line !== '')
     if (row.label === pausedAfter) under.push('paused here: /aside continue')
+    if (isWaiting) under.push('waits for you here: /aside continue ends it')
 
     return (
       <Box flexDirection="column" marginTop={n === 0 ? 1 : 0}>
@@ -54,8 +58,8 @@ const planRows = ({ Box, Text }: Drawing, section: ListingSection) => {
           </Box>
           <Box flexShrink={1}>
             <Text dimColor={row.word === 'done'}>{row.lines[0]?.trim() ?? ''}</Text>
-            {row.word === 'running' ? <Text> </Text> : null}
-            {row.word === 'running' ? <Text color="warning">running</Text> : null}
+            {row.word === 'running' || isWaiting ? <Text> </Text> : null}
+            {row.word === 'running' || isWaiting ? <Text color={colour}>{row.word}</Text> : null}
           </Box>
         </Box>
         {under.map(line => (

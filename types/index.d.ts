@@ -37,14 +37,31 @@ export type Plan = {
   steps: Step[]
   // The step running now: isChain runs the next one when it ends, turnId names its turn
   // once it started, sessionId the session that runs it (the store is shared by all), and
-  // pausedFor what Claude asked for when it paused the plan from this step, and then the
-  // steps still to run after it when /aside run named them (in place of the chain).
-  // isPlanningAfter: /aside plan asked, while it ran, for the queue to be organized here once
-  // it ends, as Claude cannot be asked in the middle of a step.
-  active?: { step: number; isChain: boolean; turnId?: string; sessionId: string; pausedFor?: string; then?: number[]; isPlanningAfter?: true }
-  // A run that paused after a step, as the wait tool or /aside plan asked: the step it paused
-  // after, why, and how the run was to go on (as a chain, or with the steps /aside run named),
-  // until it goes on or stops.
+  // then the steps still to run after it when /aside run named them (in place of the chain).
+  // pausedFor: what Claude asked for with the wait tool. The step then waits for the person:
+  // every turn of that session but the plugin's own prompts is the step's, each with its turnId
+  // while it runs, until /aside continue or /aside stop ends it, and ms and result keep the time
+  // those turns took and what the last one said. isAnswered: a turn took the person's answer
+  // since Claude last asked. isEnding: continue or stop ended the step, which is done once the
+  // turn it has left ends, whatever ends it. isPlanningAfter: /aside plan asked, while a turn of
+  // the step ran, for the queue to be organized once it ends, as Claude cannot be asked in the
+  // middle of one.
+  active?: {
+    step: number
+    isChain: boolean
+    turnId?: string
+    sessionId: string
+    pausedFor?: string
+    then?: number[]
+    isPlanningAfter?: true
+    ms?: number
+    result?: string
+    isAnswered?: true
+    isEnding?: true
+  }
+  // A run that paused after a step, as /aside plan asked (or, in earlier releases, the wait
+  // tool): the step it paused after, why, and how the run was to go on (as a chain, or with the
+  // steps /aside run named), until it goes on or stops.
   paused?: { step: number; reason: string; isChain: boolean; then?: number[] }
   // A planning prompt that adds to the plan, sent by session sessionId: turnId names its turn
   // once it starts, and in that turn the plan tool saves its steps after the first `after`
@@ -60,6 +77,7 @@ export type Band = {
   steps: number
   done: number
   running?: number
+  waiting?: number
   paused?: number
   global?: number
   named?: { name: string; count: number }[]

@@ -11,7 +11,8 @@ type Action = 'stop' | 'continue' | 'run plan'
 
 // The press does the work itself: $.command.run from here skips this plugin's own command
 // hook, and a stop is applied at once rather than when the turn ends. Continue and run plan
-// are both /aside run: it goes on with a paused run, or starts one.
+// are both /aside run: it ends a step that waits and goes on, goes on with a paused run, or
+// starts one.
 async function pressAction($: Engine, ctx: Context, action: Action) {
   try {
     const said = action === 'stop' ? await stopPlan($, ctx) : await runPlan($, ctx)
@@ -22,8 +23,8 @@ async function pressAction($: Engine, ctx: Context, action: Action) {
 }
 
 // The line above the prompt: what waits and where the plan is, the list button, and beside it
-// the next move for the plan: stop while a step runs, continue while a run is paused, run plan
-// while steps are left.
+// the next move for the plan: stop while a step runs, continue while a step waits for the
+// person or a run is paused, run plan while steps are left.
 type BandRender = Parameters<MatchedHook<'ui.render', { readonly component: 'AbovePrompt' }>>
 
 export async function drawBand(ctx: Context, $: Engine, e: BandRender[1], next: BandRender[2]) {
@@ -37,6 +38,7 @@ export async function drawBand(ctx: Context, $: Engine, e: BandRender[1], next: 
   const parts: string[] = []
   const plan = `plan ${formatProgress(now.done, now.steps)}`
   if (now.running !== undefined) parts.push(`${plan} · step ${now.running} running`)
+  else if (now.waiting !== undefined) parts.push(`${plan} · step ${now.waiting} waits for you`)
   else if (now.paused !== undefined) parts.push(`${plan} · paused after step ${now.paused}`)
   else if (left > 0) parts.push(plan)
   if (now.ideas) parts.push(formatCount(now.ideas, 'idea'))
@@ -47,7 +49,7 @@ export async function drawBand(ctx: Context, $: Engine, e: BandRender[1], next: 
   parts.push(...queues.slice(0, 2))
   if (queues.length > 2) parts.push(`+${formatCount(queues.length - 2, 'queue')}`)
   const action: Action | undefined =
-    now.running !== undefined ? 'stop' : now.paused !== undefined ? 'continue' : left > 0 ? 'run plan' : undefined
+    now.running !== undefined ? 'stop' : now.waiting !== undefined || now.paused !== undefined ? 'continue' : left > 0 ? 'run plan' : undefined
 
   const { Box, Button, Text } = $.ui.resolve(e)
 

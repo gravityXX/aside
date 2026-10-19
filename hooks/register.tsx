@@ -3,7 +3,18 @@ import type { Register } from 'claude-code'
 import { createContext } from './context'
 import { dropFailedEntry, emptyBoxAfterQueue, queueTyped, rememberMarkdownFile, rememberToolOutput } from './features/capture'
 import { asideFailed, completeAside, runAside, startSession } from './features/commands'
-import { onTurnEnd, onTurnStart, pausePlanFromTool, planToolFailed, savePlanFromTool, turnEndFailed, turnStartFailed, waitToolFailed } from './features/plan'
+import {
+  noteStepAnswer,
+  onTurnEnd,
+  onTurnStart,
+  pausePlanFromTool,
+  planToolFailed,
+  savePlanFromTool,
+  stepAnswerFailed,
+  turnEndFailed,
+  turnStartFailed,
+  waitToolFailed,
+} from './features/plan'
 import { drawBand } from './ui/band'
 import { drawListingFrame, drawPlanTool, hidePlanToolResult } from './ui/output'
 import { drawPane } from './ui/pane'
@@ -15,6 +26,9 @@ export const register: Register = (on, options) => {
   on('session.start', ($, e, next) => startSession(ctx, $, e, next))
 
   on('prompt.submit', ($, e, next) => queueTyped(ctx, $, e, next)).catch(dropFailedEntry)
+  // Beneath the one above, which drops a queued entry before it comes here: what the person
+  // typed, at this terminal or through Remote Control.
+  on('prompt.submit', { origin: { kind: /^(composer|bridge)$/ } }, ($, e, next) => noteStepAnswer(ctx, $, e, next)).catch(stepAnswerFailed)
   on('prompt.change', ($, e, next) => emptyBoxAfterQueue(ctx, $, e, next))
   on('prompt.autocomplete', ($, e, next) => completeAside(ctx, $, e, next))
 
