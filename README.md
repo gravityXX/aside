@@ -133,6 +133,18 @@ Change these in `/config`:
 
 </details>
 
+## Contributing
+
+Found a bug or have an idea? [Open an issue](https://github.com/gravityXX/aside/issues/new) and say what you did, what you expected and what happened, with your Claude Code version (`claude --version`) and your system.
+
+To change something yourself, fork the repository, work on a branch and open a pull request. [CONTRIBUTING.md](CONTRIBUTING.md) shows how to run and test the plugin from your copy, and [docs/guidelines.md](docs/guidelines.md) how the code is laid out, written and reviewed. A pull request needs a passing CI run.
+
+## Support
+
+aside is free, and building it took a lot of time and everything I know about Claude Code. If it saves you time, star the repository so others can find it, or [sponsor its development](https://github.com/sponsors/gravityXX).
+
+Thank you to everyone who reports a problem, suggests an idea or sends a fix. Enjoy your queue.
+
 <br>
 
 <p><sub><a href="LICENSE">LICENSE</a> &#xB7; <a href="CHANGELOG.md">CHANGELOG</a> &#xB7; <a href="CONTRIBUTING.md">CONTRIBUTING</a> &#xB7; <a href="https://github.com/sponsors/gravityXX">SPONSOR</a></sub></p>
