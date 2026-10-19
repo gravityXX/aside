@@ -51,6 +51,8 @@ export type Machine = {
   grepExit?: number
   // The store refuses every write, as when it is full.
   isStoreFull?: boolean
+  // The disk refuses every file write, as a read-only folder does.
+  isReadOnly?: boolean
   // The store refuses the n-th write from now, once, as a store that fills up half-way.
   refuseWrite?: number
   // The text selected in a transcript row.
@@ -160,13 +162,13 @@ export const world = ($: Engine, on: On, given: Partial<Machine> = {}) => {
   // The kit hands a file hook the path as the system it runs on spells it: on Linux with its
   // own folder before a Windows path ("/kit/C:\\x"), on Windows with its drive before a path
   // under the project ("C:\\proj\\x"). Those, and the files a test names, come down to one
-  // spelling: the folder taken off, forward slashes, and the project at "/proj" on any drive.
+  // spelling: the folder taken off, forward slashes, and no drive, as a test names none twice.
   const onDisk = (path: string) => {
     const own = path.replace(/^.*\/(?=[A-Za-z]:(?:[\\/]|$))/, '')
     // A share, "\\\\host\\x", comes from the kit on Linux as "/host/x".
     if (/^[\\/]{2}[^\\/]/.test(own)) return onDisk(own.replace(/\\/g, '/').slice(1))
     const slashed = /^[A-Za-z]:(?:[\\/]|$)/.test(own) ? own.replace(/\\/g, '/') : own
-    const spelled = slashed.replace(/^[A-Za-z]:(?=\/proj(?:\/|$))/, '')
+    const spelled = slashed.replace(/^[A-Za-z]:(?=\/|$)/, '')
     return w.system === 'windows' ? spelled.toLowerCase() : spelled
   }
   const fileAt = (path: string) => Object.keys(w.files).find(name => onDisk(name) === onDisk(path))
@@ -175,6 +177,11 @@ export const world = ($: Engine, on: On, given: Partial<Machine> = {}) => {
     return name === undefined ? { deny: 'ENOENT' } : { value: w.files[name]! }
   })
   on('fs.exists', ($e, e) => ({ value: fileAt(e.path) !== undefined }))
+  on('fs.write', ($e, e) => {
+    if (w.isReadOnly) return { deny: 'EACCES: permission denied' }
+    w.files[fileAt(e.path) ?? onDisk(e.path)] = e.text
+    return { value: undefined }
+  })
   on('fs.list', ($e, e) => {
     const dir = onDisk(e.path).replace(/\/$/, '')
     const names = new Map<string, 'file' | 'dir'>()

@@ -76,10 +76,11 @@ Requires <kbd>Claude Code</kbd> 2.1.301 or newer. The plugin API <kbd>aside</kbd
 /aside clear           empty the queue
 /aside undo            bring back what the last plan, run or clear took
 /aside scan FILE       read the tags of a file Claude did not write
+/aside export [FILE]   save the list as Markdown, to aside.md or FILE
 /aside help            list every command
 ```
 
-`N` is a number as `/aside` shows it, and `[N]` may be left out. While Claude works, `/aside` opens the list in a pane. Tab completes every command.
+`N` is a number as `/aside` shows it, and `[N]` may be left out. `FILE` is one word ending in `.md`. While Claude works, `/aside` opens the list in a pane. Tab completes every command.
 
 ## More
 
@@ -91,7 +92,7 @@ Requires <kbd>Claude Code</kbd> 2.1.301 or newer. The plugin API <kbd>aside</kbd
 
 <br>
 
-- **Keeps** the queue, the plan and what `/aside undo` brings back, one set per project, in Claude Code's store for the plugin (`~/.claude/plugins/store/`). It writes no file of yours.
+- **Keeps** the queue, the plan and what `/aside undo` brings back, one set per project, in Claude Code's store for the plugin (`~/.claude/plugins/store/`). It writes a file only when you run `/aside export`, and never over one it did not write.
 - **Reads** `<!-- ? -->` tags in markdown files Claude wrote or edited this session, or that you `/aside scan`; for a comment, the clipboard, the lines you selected in Claude's reply, the last tool output and the project's markdown files; the project's git branch.
 - **Runs** a clipboard reader (`powershell.exe` on WSL and Windows, `pbpaste` on macOS, `wl-paste`, `xclip` or `xsel` on Linux), `git rev-parse --abbrev-ref HEAD`, and `grep -rlizP` over the project's markdown files.
 - **Sends** the entries to Claude only on `/aside plan`, `/aside run` or `afterClaudeAnswers`, and, while `tidy` is on, the text you typed to Haiku through Claude Code, never what you copied.

@@ -15,7 +15,7 @@ export const shortenText = (text: string, room = 40): string => {
 }
 
 // A Windows path, by its drive ("C:\\x", "c:/x") or a share ("\\\\host\\x", "//host/x").
-const isWindowsPath = (path: string) => /^(?:[A-Za-z]:[\\/]|[\\/]{2}[^\\/])/.test(path)
+export const isWindowsPath = (path: string) => /^(?:[A-Za-z]:[\\/]|[\\/]{2}[^\\/])/.test(path)
 
 // A drive on its own, as in "C:".
 const isDrive = (part: string | undefined) => part !== undefined && /^[A-Za-z]:$/.test(part)
@@ -53,6 +53,9 @@ export const pathKey = (path: string, root = path): string => {
 
   return isWindowsPath(own) || isWindowsPath(root) ? own.toLowerCase() : own
 }
+
+// Whether a path canonicalPath spelled starts from a root: "/home/...", "C:/..." or "//host/...".
+export const isAbsolutePath = (path: string) => /^(?:[A-Za-z]:)?\//.test(path)
 
 export const relativePath = (path: string, root: string): string => {
   const file = canonicalPath(path, root)

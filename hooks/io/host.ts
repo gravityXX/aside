@@ -1,7 +1,8 @@
 import type { EngineInterface as Engine } from 'claude-code'
 
+import { isExportText } from '../core/listing'
 import { MARKDOWN_PATH, MIN_FRAGMENT_WORDS } from '../core/markdown'
-import { canonicalPath, pathKey } from '../core/text'
+import { canonicalPath, describeError, isAbsolutePath, pathKey } from '../core/text'
 
 // A UTF-8 locale, so grep -P matches letters with \p{L} and ignores case beyond ASCII.
 const GREP_ENV = { LC_ALL: 'C.UTF-8' }
@@ -12,6 +13,23 @@ export async function tryReadFile($: Engine, path: string): Promise<string | und
     return (await $.fs.read(path)).replace(/^\uFEFF/, '')
   } catch {
     return undefined
+  }
+}
+
+// How writing an export went: written, refused as the file there is not an earlier export,
+// or failed with the engine's reason.
+export type ExportWrite = { isWritten: true } | { isWritten: false; isForeign: true } | { isWritten: false; reason: string }
+
+// Writes an export to `path`, over an earlier export but never over any other file.
+export async function writeExport($: Engine, path: string, text: string): Promise<ExportWrite> {
+  if ((await $.fs.exists(path).catch(() => false)) && !isExportText((await tryReadFile($, path)) ?? '')) {
+    return { isWritten: false, isForeign: true }
+  }
+  try {
+    await $.fs.write(path, text)
+    return { isWritten: true }
+  } catch (error) {
+    return { isWritten: false, reason: describeError(error) }
   }
 }
 
@@ -153,7 +171,7 @@ export async function searchMarkdown($: Engine, quote: string, root: string): Pr
 export async function resolveFile($: Engine, name: string, root: string, seen: readonly string[]): Promise<string> {
   const path = canonicalPath(name, root)
   // Absolute as written: "/home/...", or a Windows drive or share, "C:/..." or "//host/...".
-  const direct = /^(?:[A-Za-z]:)?\//.test(path) ? path : canonicalPath(`${root}/${path}`)
+  const direct = isAbsolutePath(path) ? path : canonicalPath(`${root}/${path}`)
   const known = seen.find(file => pathKey(file) === pathKey(direct))
   if (known) {
     return known

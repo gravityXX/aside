@@ -3,11 +3,11 @@ import type { EngineInterface as Engine } from 'claude-code'
 import type { Entry } from '../../types'
 import type { Context } from '../context'
 import { findTags, inOrder } from '../core/entries'
-import { listingText, planSection, queueSection, tagsSection } from '../core/listing'
+import { describeCount, isExportText, listingMarkdown, listingText, planSection, queueSection, tagsSection } from '../core/listing'
 import type { ListingSection } from '../core/listing'
 import { popPrompt } from '../core/prompts'
-import { formatCount, relativePath, shortenText } from '../core/text'
-import { resolveFile, tryReadFile } from '../io/host'
+import { canonicalPath, formatCount, isAbsolutePath, isWindowsPath, relativePath, shortenText } from '../core/text'
+import { resolveFile, tryReadFile, writeExport } from '../io/host'
 import {
   bringBackTake,
   loadEntries,
@@ -41,19 +41,69 @@ export async function tagsInFiles($: Engine, onlyNew = false): Promise<Entry[]> 
   return found
 }
 
-// What /aside shows: the queue, the tags in files and the plan.
-export async function currentListing($: Engine, ctx: Context): Promise<ListingSection[]> {
+// What /aside shows: the queue, the tags in files and the plan, with what each section holds.
+async function loadListing($: Engine, ctx: Context) {
   const { root, queue, plan: planKey, handed } = await projectKeys($)
   const list = inOrder(await loadEntries($, queue), ctx.settings.order)
   const tags = await tagsInFiles($)
   const handedOver = new Set(await loadHanded($, handed))
-  const plan = planSection(await loadPlan($, planKey))
-
-  return [
+  const plan = await loadPlan($, planKey)
+  const steps = planSection(plan)
+  const sections = [
     queueSection(list, root),
     ...(tags.length > 0 ? [tagsSection(tags, root, tag => handedOver.has(tagId(tag)))] : []),
-    ...(plan ? [plan] : []),
+    ...(steps ? [steps] : []),
   ]
+
+  return { root, list, tags, plan, sections }
+}
+
+export async function currentListing($: Engine, ctx: Context): Promise<ListingSection[]> {
+  return (await loadListing($, ctx)).sections
+}
+
+// Words joined as a sentence lists them: "a, b and c".
+const joinWords = (words: readonly string[]) => (words.length < 2 ? words.join('') : `${words.slice(0, -1).join(', ')} and ${words.at(-1)}`)
+
+// Why a FILE for /aside export would not land where its name says, if it would not: a home
+// folder or a variable nobody expands, or a path spelled for another system.
+const exportNameProblem = (name: string, root: string): string | undefined => {
+  if (/^(?:~|\$|%[^%]+%)/.test(name)) {
+    return 'Name a file in the project or by its full path, as ~, $HOME and %USERPROFILE% are not expanded: /aside export notes/queue.md'
+  }
+  if (!isWindowsPath(root)) {
+    return isWindowsPath(name) || name.includes('\\') ? `${name} is spelled as on Windows; name the file as this system does, such as notes/queue.md.` : undefined
+  }
+  // On Windows a path with no drive starts at the drive's root, and any other ":" names a
+  // stream inside a file.
+  const isUnplaced = /^[\\/](?![\\/])/.test(name) || name.replace(/^[A-Za-z]:(?=[\\/])/, '').includes(':')
+
+  return isUnplaced ? `${name} is not a full Windows path; name the file in the project or with its drive, such as C:\\notes\\queue.md.` : undefined
+}
+
+// Writes what /aside shows to a Markdown file in the project, aside.md unless named: over an
+// earlier export, never over another file. The queue stays as it is.
+export async function exportListing($: Engine, ctx: Context, name: string): Promise<string> {
+  const { root, list, tags, plan, sections } = await loadListing($, ctx)
+  if (list.length === 0 && tags.length === 0 && plan.steps.length === 0) {
+    return 'Nothing to export: the queue is empty.'
+  }
+  const problem = exportNameProblem(name, root)
+  if (problem) {
+    return problem
+  }
+  const named = canonicalPath(name || 'aside.md', root)
+  const path = isAbsolutePath(named) ? named : canonicalPath(`${root}/${named}`)
+  const shown = relativePath(path, root)
+  // In UTC: the clock gives the moment, not the person's time zone.
+  const made = new Date(await $.clock.now()).toISOString().slice(0, 16).replace('T', ' ')
+  const wrote = await writeExport($, path, listingMarkdown(sections, `${made} UTC`))
+  if (!wrote.isWritten) {
+    return 'isForeign' in wrote ? `${shown} is not an aside export; name another file: /aside export FILE` : `Could not write ${shown}: ${wrote.reason}.`
+  }
+  const what = [describeCount(list), tags.length > 0 ? formatCount(tags.length, 'tag') : '', plan.steps.length > 0 ? `the plan of ${formatCount(plan.steps.length, 'step')}` : '']
+
+  return `Exported ${joinWords(what.filter(Boolean))} to ${shown}.`
 }
 
 // The pane the band's list button opens; register.tsx names the same id in its matcher.
@@ -237,6 +287,9 @@ export async function scanFile($: Engine, name: string): Promise<string> {
   const source = await tryReadFile($, file)
   if (source === undefined) {
     return `Cannot read ${name}.`
+  }
+  if (isExportText(source)) {
+    return `${relativePath(file, root)} is an aside export; its tags are read from the files it lists.`
   }
   await trackFile($, file)
   const found = findTags(source).length

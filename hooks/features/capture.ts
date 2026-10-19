@@ -5,7 +5,7 @@ import { currentOutput, chainWrite } from '../context'
 import type { Context } from '../context'
 import { inOrder, KINDS, parseEntries } from '../core/entries'
 import type { Order, TypedEntry } from '../core/entries'
-import { formatPlace } from '../core/listing'
+import { formatPlace, isExportText } from '../core/listing'
 import { findFragment, findHeading, fragmentWords, MARKDOWN_PATH, MIN_FRAGMENT_WORDS } from '../core/markdown'
 import { readTidyReply, TIDY_SYSTEM, tidyPrompt } from '../core/prompts'
 import { describeError, relativePath, shortenText } from '../core/text'
@@ -90,7 +90,9 @@ async function pinToCopiedText(
     const more = named ? [] : (await searchMarkdown($, quote, root)).filter(file => !candidates.includes(file))
     for (const file of [...candidates, ...more]) {
       const text = await readSource(file)
-      const line = text === undefined ? undefined : findFragment(quote, text)
+      // An export quotes what it lists: the text was copied from somewhere else, unless the
+      // comment names the export itself.
+      const line = text === undefined || (file !== named && isExportText(text)) ? undefined : findFragment(quote, text)
       if (line !== undefined) return { file, line, quote: shortenText(quote, 300) }
     }
 

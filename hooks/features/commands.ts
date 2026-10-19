@@ -8,9 +8,9 @@ import { describeFailure, shortenText } from '../core/text'
 import { loadEntries, loadPlan, projectKeys, refreshBand } from '../io/store'
 import { addEntries } from './capture'
 import { handOverQueue, registerPlanTool, registerWaitTool, runChosen, runEntries, runPlan, stopPlan } from './plan'
-import { clearQueue, editEntry, moveEntry, popEntry, removeEntries, restoreTaken, scanFile, showListing } from './queue'
+import { clearQueue, editEntry, exportListing, moveEntry, popEntry, removeEntries, restoreTaken, scanFile, showListing } from './queue'
 
-type Name = 'list' | 'plan' | 'run' | 'stop' | 'pop' | 'edit' | 'move' | 'remove' | 'clear' | 'undo' | 'scan' | 'help'
+type Name = 'list' | 'plan' | 'run' | 'stop' | 'pop' | 'edit' | 'move' | 'remove' | 'clear' | 'undo' | 'scan' | 'export' | 'help'
 
 // A command's row: what it accepts and how help and Tab show it. runCommand does the work.
 type Command = {
@@ -125,6 +125,14 @@ const COMMANDS: readonly Command[] = [
     about: 'read the tags of a markdown file',
   },
   {
+    name: 'export',
+    // One word: "/aside export the notes to report.md" is an idea, not a file to write.
+    takes: args => args.length === 0 || (args.length === 1 && MARKDOWN_PATH.test(args[0]!)),
+    usage: 'export [FILE]',
+    help: ['/aside export [FILE] - save what /aside shows to aside.md, or to FILE (one word, ending in .md), as Markdown'],
+    about: 'save the list to a markdown file',
+  },
+  {
     name: 'help',
     takes: none,
     usage: 'help',
@@ -188,6 +196,8 @@ async function runCommand($: Engine, ctx: Context, name: Name, args: readonly st
       return restoreTaken($)
     case 'scan':
       return scanFile($, args.join(' '))
+    case 'export':
+      return exportListing($, ctx, args.join(' '))
     case 'help':
       return HELP
   }
