@@ -41,8 +41,9 @@ export type Session = {
   justQueued?: string
   // What /aside plan handed over, until the turn that organizes it ends: the items as the
   // planning prompt numbered them, that turn once it starts, and whether Claude saved a plan.
-  // A reload loses it, and the take then waits for /aside undo as it did before.
-  planning?: { items: Entry[]; turnId?: string; isSaved: boolean }
+  // A reload loses it, and the take then waits for /aside undo as it did before. isAdding: it
+  // adds to the plan, which a second hand-over before its turn ends would save over.
+  planning?: { items: Entry[]; turnId?: string; isSaved: boolean; isAdding: boolean }
   // The model organizing the queue outside the conversation right now: one at a time, so a
   // second plan never saves over the first one's.
   planner?: Exclude<PlanModel, 'session'>
@@ -51,6 +52,9 @@ export type Session = {
   tidies: Set<Promise<void>>
   // Writes of typed entries, one after another, so two quick ones never overwrite each other.
   writes: Promise<unknown>
+  // Changes to the plan, one after another for the same reason: a step that ends and a
+  // planner adding steps meanwhile each read the plan and save it back.
+  planWrites: Promise<unknown>
   clipboard: ClipboardState
 }
 
@@ -70,6 +74,7 @@ export const createContext = (options: Parameters<Register>[1]): Context => ({
     isOwnTurn: false,
     isRunning: false,
     writes: Promise.resolve(),
+    planWrites: Promise.resolve(),
     tidies: new Set(),
     clipboard: {},
   },

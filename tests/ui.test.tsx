@@ -150,7 +150,7 @@ describe('the list pane', () => {
     expect(sent).toEqual([])
   })
 
-  test('while a step runs, the pane lists the queue but offers no plan', async ($, on) => {
+  test('while a step runs, the pane lists the queue and still offers its plan button', async ($, on) => {
     const { sent, type, aside, savePlan, startTurn, pressBand, pane, idle } = world($, on)
     await savePlan(STEPS)
     await aside('run')
@@ -162,7 +162,7 @@ describe('the list pane', () => {
     const ui = await pane()
     expect((await ui.find({ type: 'Text', text: /^x$/ }))?.text).toBe('x')
     expect((await ui.find({ type: 'Text', text: /^running$/ }))?.props.color).toBe('warning')
-    expect(await ui.find({ key: 'plan' })).toBeUndefined()
+    expect(await ui.find({ key: 'plan' })).toBeDefined()
     await ui.unmount()
   })
 

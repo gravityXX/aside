@@ -55,6 +55,9 @@ export type Machine = {
   isReadOnly?: boolean
   // The store refuses the n-th write from now, once, as a store that fills up half-way.
   refuseWrite?: number
+  // Runs before the store takes a write, with its key: what else happens while a write is
+  // on its way.
+  beforeWrite?: (key: string) => Promise<unknown>
   // The text selected in a transcript row.
   selection?: string
   // The terminal is too narrow to seat a pane.
@@ -100,7 +103,8 @@ export const world = ($: Engine, on: On, given: Partial<Machine> = {}) => {
   // The plugin's store, as mock.store keeps it, but one that can refuse a write.
   const store = new Map<string, unknown>(Object.entries(w.stored ?? {}))
   on('store.get', ($e, e) => ({ value: store.get(e.key) }) as never)
-  on('store.set', ($e, e) => {
+  on('store.set', async ($e, e) => {
+    await w.beforeWrite?.(e.key)
     if (w.refuseWrite !== undefined && --w.refuseWrite === 0) {
       w.refuseWrite = undefined
       return { deny: 'the store is full' }

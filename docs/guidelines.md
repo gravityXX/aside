@@ -53,7 +53,7 @@ Each value lives where its lifetime fits:
 6. What belongs to one session names it, since the store is shared (`Plan.active.sessionId`).
 7. Stored data from the last release must still load. A new field is optional; renaming or removing one needs code that reads the old shape.
 8. A flag in stored data is `isX?: true`, left out when false.
-9. Writes that may overlap go one after another through `chainWrite`, so two quick entries never overwrite each other.
+9. Writes that may overlap go one after another through `chainWrite`, so two quick entries never overwrite each other. The plan is changed the same way through `changePlan`, which reads it inside the chain, so a step that ends and a planner that adds steps never save over each other.
 
 ## 3. The engine
 
@@ -81,7 +81,7 @@ The plugin runs on the Claude Code plugin API: hooks `($, e, next)` added with `
 13. Claude Code writes the types to `.claude-plugin/types/` when a session loads the plugin. Load it once after a Claude Code update before type-checking.
 14. `<>` draws a column Box around its children, so a fragment inside a row starts a new line. Elements that stand side by side go into the row directly, each one conditional on its own.
 15. A pane opens at any width only while the person's press, command or prompt that asked for it lasts. A button that opens a pane returns its promise from `onPress` rather than voiding it, or the open comes after the press has ended and waits undrawn below 144 columns (seen on a 125-column terminal).
-16. Work that waits on a long call (a model, a timer) while the person keeps typing reads what it was given first and saves only if that is still there, unchanged; otherwise it saves nothing and says so. One such call runs at a time (`planOutside`).
+16. Work that waits on a long call (a model, a timer) while the person keeps typing reads what it was given first and saves only if that is still there, unchanged; otherwise it saves nothing and says so. What may move on meanwhile by design, as the steps of a running plan a planner adds to, is checked for what it is (the same steps), not for where it stands. One such call runs at a time (`planOutside`).
 17. Several sessions share the store. Data more than one session writes at once gets a key per item rather than one list read and written back (the global list), and a command that moves data between two keys writes the place it goes first, so a failure between the writes leaves it in both, and running it again adds nothing twice.
 18. An SDK host (`claude -p`, Claude Code Desktop) stamps prompts with origin `sdk`; aside queues only `composer` and `bridge` prompts. Installed plugins' hooks modules load only where the account's rollout switch is on, which a signed-out machine may keep off.
 

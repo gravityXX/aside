@@ -39,10 +39,17 @@ export type Plan = {
   // once it started, sessionId the session that runs it (the store is shared by all), and
   // pausedFor what Claude asked for when it paused the plan from this step, and then the
   // steps still to run after it when /aside run named them (in place of the chain).
-  active?: { step: number; isChain: boolean; turnId?: string; sessionId: string; pausedFor?: string; then?: number[] }
-  // A run a step paused with the wait tool: the step that paused it, why, and how the run
-  // was to go on (as a chain, or with the steps /aside run named), until it goes on or stops.
+  // isPlanningAfter: /aside plan asked, while it ran, for the queue to be organized here once
+  // it ends, as Claude cannot be asked in the middle of a step.
+  active?: { step: number; isChain: boolean; turnId?: string; sessionId: string; pausedFor?: string; then?: number[]; isPlanningAfter?: true }
+  // A run that paused after a step, as the wait tool or /aside plan asked: the step it paused
+  // after, why, and how the run was to go on (as a chain, or with the steps /aside run named),
+  // until it goes on or stops.
   paused?: { step: number; reason: string; isChain: boolean; then?: number[] }
+  // A planning prompt that adds to the plan, sent by session sessionId: turnId names its turn
+  // once it starts, and in that turn the plan tool saves its steps after the first `after`
+  // steps, the plan's own, which it leaves as they are. Gone once that turn ends.
+  adding?: { after: number; sessionId: string; turnId?: string }
 }
 
 export type Band = { ideas: number; comments: number; tags: number; steps: number; done: number; running?: number; paused?: number; global?: number }

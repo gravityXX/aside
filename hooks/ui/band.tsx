@@ -14,7 +14,7 @@ type Action = 'stop' | 'continue' | 'run plan'
 // are both /aside run: it goes on with a paused run, or starts one.
 async function pressAction($: Engine, ctx: Context, action: Action) {
   try {
-    const said = action === 'stop' ? await stopPlan($) : await runPlan($, ctx)
+    const said = action === 'stop' ? await stopPlan($, ctx) : await runPlan($, ctx)
     if (said !== undefined) $.ui.toast(said)
   } catch (error) {
     $.ui.toast(`Could not ${action === 'stop' ? 'stop' : 'run'} the plan (${describeError(error)}).`)

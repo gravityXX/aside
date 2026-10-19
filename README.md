@@ -25,7 +25,7 @@
 
 ### 2. Answer Claude as usual
 
-Your reply goes to Claude. By default the queue just waits, in a line above the prompt. Its <kbd>list</kbd> button opens a pane with the queue, the tags in files and the plan, and <kbd>plan</kbd> to organize them. Beside it, <kbd>run plan</kbd> shows while the plan has steps left, <kbd>continue</kbd> after a step paused it, and <kbd>stop</kbd> while a step runs. `/aside` opens the same pane while Claude works.
+Your reply goes to Claude. By default the queue just waits, in a line above the prompt. Its <kbd>list</kbd> button opens a pane with the queue, the tags in files and the plan, and <kbd>plan</kbd> to organize them. Beside it, <kbd>run plan</kbd> shows while the plan has steps left, <kbd>continue</kbd> while a run is paused, and <kbd>stop</kbd> while a step runs. `/aside` opens the same pane while Claude works.
 
 ![Claude asks whether to update the docs. Above the prompt, the queue line shows 1 idea and 4 comments with a list button. You answer as usual; the queue keeps waiting.](assets/step-2-light.svg#gh-light-mode-only)
 ![Claude asks whether to update the docs. Above the prompt, the queue line shows 1 idea and 4 comments with a list button. You answer as usual; the queue keeps waiting.](assets/step-2-dark.svg#gh-dark-mode-only)
@@ -39,7 +39,7 @@ Nothing reaches Claude until you say so. `/aside` shows the queue in a frame, an
 
 ### 4. Plan and run
 
-`/aside plan` has Claude turn the queue into steps, shown in a frame. Anything unclear goes back to the queue with Claude's question.
+`/aside plan` has Claude turn the queue into steps, shown in a frame. Anything unclear goes back to the queue with Claude's question. While a step runs, it adds the queue as new steps after the plan's own and leaves those as they are: Claude organizes it once the step ends and the run waits for <kbd>continue</kbd>, or with `planModel` on a model, at once while the run goes on.
 
 `/aside run` sends one step at a time, each ending with a one-line result. A step that needs you pauses the plan: answer, then press <kbd>continue</kbd>. After the last step, Claude sums the run up.
 
@@ -64,11 +64,11 @@ Requires <kbd>Claude Code</kbd> 2.1.301 or newer, whose plugin API is still in e
 
 ```text
 /aside                 show the queue and the plan
-/aside plan            have Claude turn the queue into steps
+/aside plan            have Claude turn the queue into steps, or add them to a running plan
 /aside run             run the plan step by step, or the queue entry by entry
 /aside run 3 1         run only those steps, or those entries
 /aside run all         send the queue as is, no plan
-/aside continue        go on after a step paused to ask you
+/aside continue        go on with a paused run
 /aside stop            stop after the current step
 
 /aside TEXT            queue TEXT, as + would
