@@ -55,7 +55,7 @@ Nothing reaches Claude until you say so. `/aside` shows the queue in a frame, an
 
 Requires <kbd>Claude Code</kbd> 2.1.301 or newer. The plugin API <kbd>aside</kbd> builds on is in early access and may change between releases. Claude Code turns it on per account, so where `/aside` is an unknown command, sign in again with `/login`: a machine that has not reached your account for a while keeps it off.
 
-<kbd>aside</kbd> works in <kbd>Claude Code</kbd> in a terminal, on Linux, macOS, Windows and WSL, with its line above the prompt, the list pane and the frames. Through Remote Control from a phone or the web, entries you start with `+` are queued, and what aside draws shows in the terminal of the machine the session runs on. <kbd>Claude Code Desktop</kbd> runs a Claude Code of its own, which refuses <kbd>aside</kbd> until it reaches 2.1.301; there, add entries with `/aside TEXT`, since Desktop's message box turns a line that starts with `+ ` into a list item. Claude Code loads no plugins like it in cloud sessions or in Desktop sessions inside WSL, and in VS Code draws none of its parts yet.
+<kbd>aside</kbd> works in <kbd>Claude Code</kbd> in a terminal, on Linux, macOS, Windows and WSL, with its line above the prompt, the list pane and the frames. Through Remote Control from a phone or the web, entries you start with `+` are queued, and what <kbd>aside</kbd> draws shows in the terminal of the machine the session runs on. <kbd>Claude Code Desktop</kbd> runs a Claude Code of its own, which refuses <kbd>aside</kbd> until it reaches 2.1.301; there, add entries with `/aside TEXT`, since Desktop's message box turns a line that starts with `+ ` into a list item. Claude Code loads no plugins like it in cloud sessions or in Desktop sessions inside WSL, and in VS Code draws none of its parts yet.
 
 ## Commands
 
@@ -88,7 +88,7 @@ Requires <kbd>Claude Code</kbd> 2.1.301 or newer. The plugin API <kbd>aside</kbd
 > **The queue stays on your machine**, one per project. Nothing reaches Claude's conversation until you run `/aside plan` or `/aside run`, or `afterClaudeAnswers` does. With `tidy` on, the text you type goes to Haiku to be corrected; what you copied never does. With `planModel` on a model, `/aside plan` sends the queue to that model in place of the conversation.
 
 <details>
-<summary>What aside reads, runs and sends</summary>
+<summary>What <kbd>aside</kbd> reads, runs and sends</summary>
 
 <br>
 
@@ -97,7 +97,7 @@ Requires <kbd>Claude Code</kbd> 2.1.301 or newer. The plugin API <kbd>aside</kbd
 - **Runs** a clipboard reader (`powershell.exe` on WSL and Windows, `pbpaste` on macOS, `wl-paste`, `xclip` or `xsel` on Linux), `git rev-parse --abbrev-ref HEAD`, and `grep -rlizP` over the project's markdown files.
 - **Sends** the entries to Claude only on `/aside plan`, `/aside run` or `afterClaudeAnswers`, with what you copied, and to the model `planModel` names instead on `/aside plan`; while `tidy` is on, the text you typed goes to Haiku through Claude Code, never what you copied.
 
-aside opens no network connection of its own and installs nothing.
+<kbd>aside</kbd> opens no network connection of its own and installs nothing.
 
 </details>
 
@@ -126,7 +126,7 @@ In a tag, `!` is a change, `-` a drop and `+` dig deeper. Tags count in markdown
 
 Change these in `/config`:
 
-- `afterClaudeAnswers`: `wait` (default), `plan` or `run all`. What aside does once Claude answers.
+- `afterClaudeAnswers`: `wait` (default), `plan` or `run all`. What <kbd>aside</kbd> does once Claude answers.
 - `planModel`: `session` (default), `sonnet`, `haiku` or `opus`. Who organizes the queue on `/aside plan`: Claude in this conversation, knowing the work so far, or one call to that model outside it, which adds nothing to the conversation and runs while Claude works, but sees only the queue.
 - `order`: `oldest` (default) or `newest`. Which entry comes first in the list and in a run.
 - `tidy`: `on` (default) or `off`. Whether a small model fixes the spelling and wording of what you type.
@@ -141,7 +141,7 @@ To change something yourself, fork the repository, work on a branch and open a p
 
 ## Support
 
-aside is free, and I put time and effort into it. If it saves you time, star the repository so others can find it, or [sponsor its development and more useful skills to come](https://github.com/sponsors/gravityXX).
+<kbd>aside</kbd> is free, and I put time and effort into it. If it saves you time, star the repository so others can find it, or [sponsor its development and more useful skills to come](https://github.com/sponsors/gravityXX).
 
 Thank you to everyone who reports a problem, suggests an idea or sends a fix. Enjoy your queue.
 
