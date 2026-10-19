@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.26.0 - 2026-10-19
 
 - `/aside log` lists the plans run to their end, the last 5 with what each step did and how long it took, newest first, and `/aside log N` shows any of the 20 it keeps. A plan comes there once another takes its place, so `/aside` keeps showing the one just run.
 - `/aside find TEXT` finds the entries, the tags, the steps of the plan and the ideas of the global list and every named queue that hold all its words, in any case and with or without accents, so `zrob` finds `Zrób`. Each comes under the number its own command takes, as in `/aside pop 2` or `/aside q work here 1`.
