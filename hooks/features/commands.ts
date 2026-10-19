@@ -45,7 +45,7 @@ const COMMANDS: readonly Command[] = [
     name: 'plan',
     takes: none,
     usage: 'plan',
-    help: ['/aside plan - have Claude organize the queue into steps (related entries merged)'],
+    help: ['/aside plan - have Claude organize the queue into steps (related entries merged); while a step runs, the new steps go after the plan\'s own'],
     about: 'organize the queue into steps',
   },
   {
@@ -55,7 +55,7 @@ const COMMANDS: readonly Command[] = [
     usage: 'run [N ... | all]',
     help: [
       '/aside run - run the plan step by step; with no plan, each entry as its own step',
-      '/aside continue - go on with a run a step paused, as /aside run does',
+      '/aside continue - go on with a paused run, as /aside run does',
       '/aside run N [M ...] - run those steps of the plan, or those entries once no step is left to do',
       '/aside run all - send everything at once, no plan',
     ],
@@ -196,7 +196,7 @@ async function runCommand($: Engine, ctx: Context, name: Name, args: readonly st
     case 'run':
       return runQueue($, ctx, args)
     case 'stop':
-      return stopPlan($)
+      return stopPlan($, ctx)
     case 'pop':
       return popEntry($, ctx, first === undefined ? undefined : Number(first))
     case 'edit':

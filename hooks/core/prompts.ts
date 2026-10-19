@@ -1,4 +1,4 @@
-import type { Entry, Step } from '../../types'
+import type { Entry, Plan, Step } from '../../types'
 import { KINDS } from './entries'
 import { pathKey, relativePath, shortenText } from './text'
 
@@ -82,6 +82,25 @@ const pendingSection = (pending: readonly Step[]): string[] =>
         ].join('\n'),
       ]
 
+// The line that makes a planning prompt one that adds to the plan.
+const ADDING_LINE = 'The saved plan is under way, so its steps stay as they are, done or not.'
+
+export const isAddingPrompt = (text: string) => isPlanningPrompt(text) && text.includes(ADDING_LINE)
+
+// While the plan runs, every step with where it stands, numbered S1, S2 apart from the items
+// as pendingSection does: the planner adds the items after them as new steps and changes none.
+const addingSection = (plan: Plan): string[] => [
+  [
+    `${ADDING_LINE} Plan only the items above, as new steps: save only those, and they are added after the last of these steps, none of which you repeat.`,
+    ...plan.steps.map((step, i) => `S${i + 1}. ${shortenText(step.title, 60)} (${i === plan.active?.step ? 'running' : step.isDone ? 'done' : 'to do'})`),
+  ].join('\n'),
+]
+
+// What a planner reads of the saved plan: while it runs, all of it, to add to; otherwise the
+// steps still to do, to merge the items with.
+const savedPlanSection = (plan: Plan, isAdding: boolean): string[] =>
+  isAdding ? addingSection(plan) : pendingSection(plan.steps.filter(step => !step.isDone))
+
 // How to organize the items, the same for Claude in the session and for a model outside it;
 // `leftOut` says where an item left out goes.
 const organizeRules = (leftOut: string): string[] => [
@@ -93,10 +112,10 @@ const organizeRules = (leftOut: string): string[] => [
 ]
 
 // The queue handed over to be organized into steps, saved through the plan tool `tool`.
-export const planningPrompt = (entries: readonly Entry[], root: string, pending: readonly Step[], tool: string): string =>
+export const planningPrompt = (entries: readonly Entry[], root: string, plan: Plan, isAdding: boolean, tool: string): string =>
   [
     ...describeQueue(entries, root),
-    ...pendingSection(pending),
+    ...savedPlanSection(plan, isAdding),
     [
       `${ORGANIZE_ONLY}: do none of it and answer none of it yet. Use no tool but the ${tool} tool, so read nothing, run nothing and change nothing.`,
       ...organizeRules('pass each to the tool as unclear'),
@@ -112,10 +131,10 @@ export const PLANNER_SYSTEM =
 
 // The same queue for a model of its own, which answers with the plan as JSON; the plugin
 // saves it. The steps it writes go to Claude in the session, so they speak to Claude.
-export const planningRequest = (entries: readonly Entry[], root: string, pending: readonly Step[]): string =>
+export const planningRequest = (entries: readonly Entry[], root: string, plan: Plan, isAdding: boolean): string =>
   [
     ...describeQueue(entries, root),
-    ...pendingSection(pending),
+    ...savedPlanSection(plan, isAdding),
     [
       `${ORGANIZE_ONLY}, as a plan of steps for Claude Code to run; "you" in the notes is Claude:`,
       ...organizeRules('list each under unclear'),

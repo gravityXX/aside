@@ -346,7 +346,7 @@ describe('handing the queue over', () => {
     expect(await aside('undo')).toBe('Nothing to bring back.')
   })
 
-  test('while a step runs, /aside plan and /aside run all are refused and send nothing', async ($, on) => {
+  test('while a step runs, /aside run all is refused and sends nothing', async ($, on) => {
     const { sent, type, aside, shown, savePlan, startTurn, endTurn, idle } = world($, on)
     await savePlan(STEPS)
     await aside('run')
@@ -354,7 +354,6 @@ describe('handing the queue over', () => {
     await startTurn(sent[0]!, 's1')
     await type('+ z', 's1')
 
-    expect(await aside('plan')).toBe('Step 1 is running. /aside stop stops after it.')
     expect(await aside('run all')).toBe('Step 1 is running. /aside stop stops after it.')
     await idle()
     expect(sent).toHaveLength(1)
@@ -900,6 +899,521 @@ describe('organizing the queue again', () => {
   })
 })
 
+describe('adding to a running plan', () => {
+  // What Claude reads of the plan it adds to, after the queue.
+  const adding = (...steps: string[]) =>
+    [
+      'The saved plan is under way, so its steps stay as they are, done or not. Plan only the items above, as new steps: save only those, and they are added after the last of these steps, none of which you repeat.',
+      ...steps,
+    ].join('\n')
+  const LATER = "Step 1 is running; once it ends, Claude organizes the queue into steps after the plan's own, and /aside continue goes on."
+
+  test('/aside plan while a step runs waits for its end, then has Claude add steps after the plan\'s own, and continue runs them in turn', async ($, on) => {
+    const { sent, toasts, logged, type, aside, shown, savePlan, startTurn, endTurn, answer, idle } = world($, on)
+    await savePlan(STEPS)
+    await aside('run')
+    await idle()
+    await startTurn(sent[0]!, 's1')
+    await type('+ dark mode', 's1')
+
+    expect(await aside('plan')).toBe(LATER)
+    expect(logged.at(-1)).toBe(LATER)
+    await idle()
+    expect(sent).toHaveLength(1)
+    await endTurn('s1')
+    await idle()
+    expect(toasts).toEqual(['Plan paused after step 1: to organize the queue. /aside continue goes on.'])
+    expect(sent).toHaveLength(2)
+    expect(sent[1]).toContain('Ideas:\n1. dark mode (branch main)')
+    expect(sent[1]).toContain(`\n\n${adding('S1. One (done)', 'S2. Two (to do)', 'S3. Three (to do)')}\n\n`)
+    expect(sent[1]).not.toContain('S1. Two')
+
+    await startTurn(sent[1]!, 'p1')
+    await savePlan([{ title: 'Dark mode', prompt: 'Add a dark mode.' }])
+    await endTurn('p1')
+    expect(await shown()).toEqual([
+      'The queue is empty.',
+      'Plan paused after step 1 (to organize the queue), 3 of 4 steps to do (/aside continue)',
+      '1 done One',
+      '2 to do Two',
+      '3 to do Three',
+      '4 to do Dark mode',
+    ])
+    expect(await aside('continue')).toBe('Going on with the plan from step 2. /aside stop stops after the current one.')
+    await idle()
+    await answer('s2')
+    await answer('s3')
+    expect(sent.at(-1)).toContain('Add a dark mode.\n\n(Step 4 of 4 of the queue plan, "Dark mode"')
+    await answer('s4')
+    expect(toasts.at(-1)).toBe('Plan done: 4 steps')
+  })
+
+  test('a step that pauses for an answer keeps its question, and the queue is organized after it all the same', async ($, on) => {
+    const { sent, toasts, type, aside, shown, savePlan, wait, startTurn, endTurn, idle } = world($, on)
+    await savePlan(STEPS)
+    await aside('run')
+    await idle()
+    await startTurn(sent[0]!, 's1')
+    await type('+ dark mode', 's1')
+    await aside('plan')
+    await wait('which colours')
+
+    await endTurn('s1')
+    await idle()
+    expect(toasts).toEqual(['Plan paused after step 1: which colours. /aside continue goes on.'])
+    expect(sent[1]).toContain(adding('S1. One (done)', 'S2. Two (to do)', 'S3. Three (to do)'))
+    await startTurn(sent[1]!, 'p1')
+    await savePlan([{ title: 'Dark mode', prompt: 'Add a dark mode.' }])
+    await endTurn('p1')
+    expect((await shown())[1]).toBe('Plan paused after step 1 (which colours), 3 of 4 steps to do (/aside continue)')
+  })
+
+  test('a step that is interrupted organizes nothing, and the queue stays as it was', async ($, on) => {
+    const { sent, toasts, type, aside, shown, savePlan, startTurn, endTurn, idle } = world($, on)
+    await savePlan(STEPS)
+    await aside('run')
+    await idle()
+    await startTurn(sent[0]!, 's1')
+    await type('+ dark mode', 's1')
+    await aside('plan')
+
+    await endTurn('s1', 'aborted')
+    await idle()
+    expect(sent).toHaveLength(1)
+    expect(toasts).toEqual(['Plan stopped: step 1 was interrupted; /aside plan organizes the queue'])
+    expect((await shown()).slice(0, 3)).toEqual(['1 idea waiting', '1 idea dark mode', 'Plan: 3 of 3 steps to do (/aside run)'])
+  })
+
+  test('a queue emptied before the step ends sends nothing to organize, and the run goes on', async ($, on) => {
+    const { sent, toasts, type, aside, savePlan, startTurn, endTurn, idle } = world($, on)
+    await savePlan(STEPS)
+    await aside('run')
+    await idle()
+    await startTurn(sent[0]!, 's1')
+    await type('+ dark mode', 's1')
+    await aside('plan')
+    await aside('clear')
+
+    await endTurn('s1')
+    await idle()
+    expect(toasts).toEqual([])
+    expect(sent).toHaveLength(2)
+    expect(sent[1]).toContain('Do two.')
+  })
+
+  test('/aside plan with an empty queue while a step runs says so, and the run goes on', async ($, on) => {
+    const { sent, aside, savePlan, startTurn, endTurn, idle } = world($, on)
+    await savePlan(STEPS)
+    await aside('run')
+    await idle()
+    await startTurn(sent[0]!, 's1')
+
+    expect(await aside('plan')).toBe('The queue is empty. Start a message with "+" to add an idea, or "+?" to comment on a copied fragment.')
+    await endTurn('s1')
+    await idle()
+    expect(sent[1]).toContain('Do two.')
+  })
+
+  test('after the last step, or one /aside stop made the last, the queue is organized and the steps wait for /aside run', async ($, on) => {
+    const { sent, toasts, type, aside, shown, savePlan, startTurn, endTurn, answer, idle } = world($, on)
+    await savePlan(STEPS)
+    await aside('run')
+    await idle()
+    await startTurn(sent[0]!, 's1')
+    await type('+ dark mode', 's1')
+    await aside('plan')
+    expect(await aside('stop')).toBe('The plan stops after step 1.')
+
+    await endTurn('s1')
+    await idle()
+    expect(toasts).toEqual(['Step 1 done'])
+    await startTurn(sent[1]!, 'p1')
+    await savePlan([{ title: 'Dark mode', prompt: 'Add a dark mode.' }])
+    await endTurn('p1')
+    expect((await shown()).slice(1)).toEqual(['Plan: 3 of 4 steps to do (/aside run)', '1 done One', '2 to do Two', '3 to do Three', '4 to do Dark mode'])
+
+    // A plan run to its end makes way for the steps it was given to add.
+    await aside('run')
+    await idle()
+    await answer('s2')
+    await answer('s3')
+    await startTurn(sent.at(-1)!, 's4')
+    await type('+ light mode', 's4')
+    await aside('plan')
+    await endTurn('s4')
+    await idle()
+    expect(toasts.at(-1)).toBe('Plan done: 4 steps')
+    // With no step left to add after, the queue is organized as /aside plan would.
+    expect(sent.at(-1)).toContain('Ideas:\n1. light mode (branch main)\n\nOrganize all of it')
+    await startTurn(sent.at(-1)!, 'p2')
+    await savePlan([{ title: 'Light mode', prompt: 'Add a light mode.' }])
+    await endTurn('p2')
+    expect((await shown()).slice(1)).toEqual(['Plan: 1 of 1 step to do (/aside run)', '1 to do Light mode'])
+  })
+
+  test('while a step runs, the pane\'s plan button organizes the queue once it ends, saying so in a toast alone', async ($, on) => {
+    const { sent, toasts, logged, type, aside, savePlan, startTurn, endTurn, pressBand, pane, idle } = world($, on)
+    await savePlan(STEPS)
+    await aside('run')
+    await idle()
+    await startTurn(sent[0]!, 's1')
+    await type('+ dark mode', 's1')
+    const lines = logged.length
+    await pressBand()
+
+    const ui = await pane()
+    await ui.press({ key: 'plan' })
+    await ui.unmount()
+    await idle()
+    expect(toasts).toEqual([LATER])
+    expect(logged.slice(lines)).toEqual([])
+    await endTurn('s1')
+    await idle()
+    expect(sent[1]).toContain(adding('S1. One (done)', 'S2. Two (to do)', 'S3. Three (to do)'))
+  })
+
+  // A run of STEPS whose step 1 ends with /aside plan asked during it, and the prompt that
+  // adds the queue to the plan sent.
+  const organizing = async (t: ReturnType<typeof world>, ...ideas: string[]) => {
+    await t.savePlan(STEPS)
+    await t.aside('run')
+    await t.idle()
+    await t.startTurn(t.sent[0]!, 's1')
+    for (const idea of ideas) await t.type(`+ ${idea}`, 's1')
+    await t.aside('plan')
+    await t.endTurn('s1')
+    await t.idle()
+  }
+
+  test('the prompt that adds to a running plan names every step with where it stands, apart from the items, titles cut at 60', async ($, on) => {
+    const { sent, type, aside, savePlan, startTurn, endTurn, idle } = world($, on)
+    await savePlan([STEPS[0]!, { title: 'A step whose title runs on well past sixty characters, so it is cut short', prompt: 'Do the long one.' }])
+    await aside('run')
+    await idle()
+    await startTurn(sent[0]!, 's1')
+    await type('+ dark mode', 's1')
+    await aside('plan')
+    await endTurn('s1')
+    await idle()
+
+    expect(sent[1]).toBe(
+      [
+        'My queue, collected while you were working, oldest first.',
+        '',
+        'Ideas:',
+        '1. dark mode (branch main)',
+        '',
+        'The saved plan is under way, so its steps stay as they are, done or not. Plan only the items above, as new steps: save only those, and they are added after the last of these steps, none of which you repeat.',
+        'S1. One (done)',
+        'S2. A step whose title runs on well past sixty characters, so i… (to do)',
+        '',
+        'Organize all of it, and only organize it: do none of it and answer none of it yet. Use no tool but the mcp__aside__plan tool, so read nothing, run nothing and change nothing.',
+        '- merge related items into one step and keep unrelated ones apart; a question is an item like any other, answered when its step runs;',
+        '- order the steps so whatever the rest depends on comes first, and say why in a few words;',
+        '- for each step, write a prompt I could send you as it is; it must stand on its own, file paths included;',
+        '- leave items that look done, contradictory or unclear out of the steps: pass each to the tool as unclear, with its number and your question, and they go back to my queue;',
+        '- when a step handles a comment that is a <!-- --> tag in a file, the step removes that tag.',
+        'Then save the steps with the mcp__aside__plan tool and stop: I see the saved plan in a frame and run it with /aside run (all, in order) or /aside run N.',
+        '',
+        MARKER,
+      ].join('\n'),
+    )
+  })
+
+  test('a second /aside plan while Claude organizes the queue is refused, so the steps the first adds stand', async ($, on) => {
+    const t = world($, on)
+    await organizing(t, 'dark mode')
+    await t.startTurn(t.sent[1]!, 'p1')
+    await t.type('+ light mode', 'p1')
+
+    expect(await t.aside('plan')).toBe('Claude has yet to organize what the last /aside plan handed over; /aside plan works again once it has.')
+    await t.savePlan([{ title: 'Dark mode', prompt: 'Add a dark mode.' }])
+    await t.endTurn('p1')
+    await t.idle()
+    expect(t.sent).toHaveLength(2)
+    expect(await t.shown()).toEqual([
+      '1 idea waiting',
+      '1 idea light mode',
+      'Plan paused after step 1 (to organize the queue), 3 of 4 steps to do (/aside continue)',
+      '1 done One',
+      '2 to do Two',
+      '3 to do Three',
+      '4 to do Dark mode',
+    ])
+  })
+
+  test('while the prompt that adds waits behind a turn of the person\'s own, a second /aside plan is refused, and the steps it adds then stand', async ($, on) => {
+    const t = world($, on)
+    await organizing(t, 'dark mode')
+    await t.startTurn('a message queued during step 1', 'u1')
+    await t.type('+ light mode', 'u1')
+
+    expect(await t.aside('plan')).toBe('Claude has yet to organize what the last /aside plan handed over; /aside plan works again once it has.')
+    await t.endTurn('u1')
+    await t.startTurn(t.sent[1]!, 'p1')
+    await t.savePlan([{ title: 'Dark mode', prompt: 'Add a dark mode.' }])
+    await t.endTurn('p1')
+    expect((await t.shown()).slice(-4)).toEqual(['1 done One', '2 to do Two', '3 to do Three', '4 to do Dark mode'])
+  })
+
+  test('saved twice in the turn that adds to the plan, the second save takes the place of what the first added', async ($, on) => {
+    const t = world($, on)
+    await organizing(t, 'dark mode')
+    await t.startTurn(t.sent[1]!, 'p1')
+
+    await t.savePlan([{ title: 'Dark mode', prompt: 'Add a dark mode.' }])
+    await t.savePlan([{ title: 'Dark and light', prompt: 'Add both modes.' }])
+    await t.endTurn('p1')
+    expect((await t.shown()).slice(-4)).toEqual(['1 done One', '2 to do Two', '3 to do Three', '4 to do Dark and light'])
+  })
+
+  test('continue pressed while Claude organizes the queue starts the next step, and the steps saved still go after the plan\'s own', async ($, on) => {
+    const t = world($, on)
+    await organizing(t, 'dark mode')
+    await t.startTurn(t.sent[1]!, 'p1')
+
+    expect(await t.aside('continue')).toBe('Going on with the plan from step 2. /aside stop stops after the current one.')
+    await t.idle()
+    expect((await t.savePlan([{ title: 'Dark mode', prompt: 'Add a dark mode.' }])).deny).toBeUndefined()
+    await t.endTurn('p1')
+    await t.idle()
+    expect(t.sent.at(-1)).toContain('Do two.')
+    expect((await t.shown()).slice(1)).toEqual(['Plan: 3 of 4 steps to do (/aside run)', '1 done One', '2 running Two', '3 to do Three', '4 to do Dark mode'])
+  })
+
+  test('a step that never runs, stopped before it starts or its prompt dropped, says /aside plan organizes the queue', async ($, on) => {
+    const { w, sent, toasts, type, aside, savePlan, idle } = world($, on)
+    await type('+ dark mode')
+    await savePlan(STEPS)
+    await aside('run')
+    expect(await aside('plan')).toBe(LATER)
+    expect(await aside('stop')).toBe('The plan stopped before step 1; /aside plan organizes the queue.')
+    await idle()
+    expect(sent).toEqual([])
+
+    w.isDropping = true
+    await aside('run')
+    await aside('plan')
+    await idle()
+    expect(sent).toEqual([])
+    expect(toasts).toEqual(['Could not send step 1 of the plan: blocked by a hook; /aside plan organizes the queue'])
+  })
+
+  test('an interrupted step after /aside plan and a clear offers nothing to organize', async ($, on) => {
+    const { sent, toasts, type, aside, savePlan, startTurn, endTurn, idle } = world($, on)
+    await savePlan(STEPS)
+    await aside('run')
+    await idle()
+    await startTurn(sent[0]!, 's1')
+    await type('+ dark mode', 's1')
+    await aside('plan')
+    await aside('clear')
+
+    await endTurn('s1', 'aborted')
+    expect(toasts).toEqual(['Plan stopped: step 1 was interrupted'])
+  })
+
+  test('an /aside plan that lands as the last step ends hands the queue over at once', async ($, on) => {
+    const { w, sent, toasts, clock, type, aside, savePlan, startTurn, endTurn, idle } = world($, on)
+    await savePlan([STEPS[0]!])
+    await aside('run')
+    await idle()
+    await startTurn(sent[0]!, 's1')
+    await type('+ dark mode', 's1')
+    let said = Promise.resolve('')
+    w.beforeWrite = async key => {
+      if (!key.startsWith('plan:')) return
+      w.beforeWrite = undefined
+      said = aside('plan')
+      await clock.settle()
+    }
+
+    await endTurn('s1')
+    await idle()
+    expect(await said).toBe('Organizing 1 idea.')
+    expect(toasts).toEqual(['Plan done: 1 step'])
+    expect(sent).toHaveLength(2)
+    expect(sent[1]).toContain('Ideas:\n1. dark mode (branch main)\n\nOrganize all of it')
+  })
+
+  test('an /aside plan that lands as a step of a chain ends waits for the next step, and nothing goes beside it', async ($, on) => {
+    const { w, sent, clock, type, aside, shown, savePlan, startTurn, endTurn, idle } = world($, on)
+    await savePlan(STEPS)
+    await aside('run')
+    await idle()
+    await startTurn(sent[0]!, 's1')
+    await type('+ dark mode', 's1')
+    let said = Promise.resolve('')
+    w.beforeWrite = async key => {
+      if (!key.startsWith('plan:')) return
+      w.beforeWrite = undefined
+      said = aside('plan')
+      await clock.settle()
+    }
+
+    await endTurn('s1')
+    await idle()
+    expect(await said).toBe(LATER.replace('Step 1', 'Step 2'))
+    expect(sent).toHaveLength(2)
+    expect(sent[1]).toContain('Do two.')
+    expect((await shown()).slice(0, 2)).toEqual(['1 idea waiting', '1 idea dark mode'])
+  })
+
+  test('once the turn that adds to the plan is over, a plan saved later replans as usual', async ($, on) => {
+    const t = world($, on)
+    await organizing(t, 'dark mode')
+    await t.startTurn(t.sent[1]!, 'p1')
+    await t.savePlan([{ title: 'Dark mode', prompt: 'Add a dark mode.' }])
+    await t.endTurn('p1')
+
+    await t.savePlan([{ title: 'Fresh', prompt: 'Do it.' }])
+    expect((await t.shown()).slice(1)).toEqual(['Plan: 1 of 2 steps to do (/aside run)', '1 done One', '2 to do Fresh'])
+  })
+
+  test('a plan saved in a turn that is not the one that adds replans as usual', async ($, on) => {
+    const t = world($, on)
+    await organizing(t, 'dark mode')
+    await t.startTurn('a turn aside did not see begin', 'p1')
+    await t.endTurn('p1')
+    await t.aside('continue')
+    await t.idle()
+    await t.answer('s2')
+    expect(await t.aside('stop')).toBe('The plan stopped before step 3.')
+
+    await t.savePlan([{ title: 'Fresh', prompt: 'Do it.' }])
+    expect((await t.shown()).slice(-3)).toEqual(['1 done One', '2 done Two', '3 to do Fresh'])
+  })
+
+  // /aside continue pressed as step 1's end is handing the queue over, so step 2's prompt goes
+  // out ahead of the one that adds, and then step 2 runs to its end.
+  const continuedEarly = async (t: ReturnType<typeof world>) => {
+    await t.savePlan(STEPS)
+    await t.aside('run')
+    await t.idle()
+    await t.startTurn(t.sent[0]!, 's1')
+    await t.type('+ dark mode', 's1')
+    await t.aside('plan')
+    t.w.beforeWrite = async key => {
+      if (!key.startsWith('taken:')) return
+      t.w.beforeWrite = undefined
+      void t.aside('continue')
+      await t.clock.settle()
+    }
+    await t.endTurn('s1')
+    await t.idle()
+    expect(t.sent[1]).toContain('Do two.')
+    expect(t.sent[2]).toContain('The saved plan is under way')
+    await t.startTurn(t.sent[1]!, 's2')
+    await t.endTurn('s2')
+    await t.idle()
+    await t.startTurn(t.sent[2]!, 'p1')
+  }
+
+  test('a step that runs ahead of the prompt that adds leaves its steps to be added after the plan\'s own', async ($, on) => {
+    const t = world($, on)
+    await continuedEarly(t)
+
+    expect((await t.savePlan([{ title: 'Dark mode', prompt: 'Add a dark mode.' }])).deny).toBeUndefined()
+    await t.endTurn('p1')
+    expect((await t.shown()).slice(1)).toEqual(['Plan: 2 of 4 steps to do (/aside run)', '1 done One', '2 done Two', '3 running Three', '4 to do Dark mode'])
+  })
+
+  test('a step that runs ahead of the prompt that adds leaves its hand-over to be given back when nothing is saved', async ($, on) => {
+    const t = world($, on)
+    await continuedEarly(t)
+
+    await t.endTurn('p1')
+    expect(t.toasts.at(-1)).toBe('No plan was saved: 1 entry back in the queue.')
+    expect((await t.shown()).slice(0, 2)).toEqual(['1 idea waiting', '1 idea dark mode'])
+  })
+
+  test('a plan run to its end before the prompt that adds is organized makes way for its steps, saved once or twice', async ($, on) => {
+    const { w, sent, clock, type, aside, shown, savePlan, startTurn, endTurn, idle } = world($, on)
+    await savePlan([STEPS[0]!, STEPS[1]!])
+    await aside('run')
+    await idle()
+    await startTurn(sent[0]!, 's1')
+    await type('+ dark mode', 's1')
+    await aside('plan')
+    w.beforeWrite = async key => {
+      if (!key.startsWith('taken:')) return
+      w.beforeWrite = undefined
+      void aside('continue')
+      await clock.settle()
+    }
+    await endTurn('s1')
+    await idle()
+    await startTurn(sent[1]!, 's2')
+    await endTurn('s2')
+    await idle()
+    await startTurn(sent[2]!, 'p1')
+
+    await savePlan([{ title: 'Dark mode', prompt: 'Add a dark mode.' }])
+    await savePlan([{ title: 'Dark and light', prompt: 'Add both modes.' }])
+    await endTurn('p1')
+    expect((await shown()).slice(1)).toEqual(['Plan: 1 of 1 step to do (/aside run)', '1 to do Dark and light'])
+  })
+
+  test('a mark another session left on the plan is not this session\'s: a plan saved here replans', async ($, on) => {
+    const { sent, type, aside, shown, savePlan, startTurn, endTurn, fromAnotherSession, idle } = world($, on)
+    await type('+ light mode')
+    fromAnotherSession('plan:/proj', { steps: [{ ...STEPS[0]!, isDone: true }, STEPS[1]!, STEPS[2]!], adding: { after: 3, sessionId: 'session-2', turnId: 'p1' } })
+    await aside('plan')
+    await idle()
+    await startTurn(sent.at(-1)!, 'p1')
+
+    await savePlan([STEPS[1]!, STEPS[2]!, { title: 'Light mode', prompt: 'Add a light mode.' }])
+    await endTurn('p1')
+    expect((await shown()).slice(1)).toEqual(['Plan: 3 of 4 steps to do (/aside run)', '1 done One', '2 to do Two', '3 to do Three', '4 to do Light mode'])
+  })
+
+  test('a prompt that adds, dropped beneath the plugin, gives the entries back, and the next /aside plan replans', async ($, on) => {
+    const { w, sent, toasts, type, aside, shown, savePlan, startTurn, endTurn, idle } = world($, on)
+    await savePlan(STEPS)
+    await aside('run')
+    await idle()
+    await startTurn(sent[0]!, 's1')
+    await type('+ dark mode', 's1')
+    await aside('plan')
+    w.isDropping = true
+    await endTurn('s1')
+    await idle()
+    expect(toasts.at(-1)).toBe('Could not hand the queue over (blocked by a hook); the entries are back in it')
+    expect((await shown()).slice(0, 2)).toEqual(['1 idea waiting', '1 idea dark mode'])
+
+    await aside('plan')
+    await idle()
+    expect(sent.at(-1)).toContain('S1. Two\n   Do two.')
+    await startTurn(sent.at(-1)!, 'p1')
+    await savePlan([{ title: 'Fresh', prompt: 'Do it.' }])
+    await endTurn('p1')
+    expect((await shown()).slice(-2)).toEqual(['1 done One', '2 to do Fresh'])
+  })
+
+  test('a planning turn that saves no steps gives the queue back, and the run stays paused', async ($, on) => {
+    const { sent, type, aside, shown, savePlan, startTurn, endTurn, idle } = world($, on)
+    await savePlan(STEPS)
+    await aside('run')
+    await idle()
+    await startTurn(sent[0]!, 's1')
+    await type('+ dark mode', 's1')
+    await aside('plan')
+    await endTurn('s1')
+    await idle()
+
+    await startTurn(sent[1]!, 'p1')
+    await endTurn('p1')
+    expect(await shown()).toEqual([
+      '1 idea waiting',
+      '1 idea dark mode',
+      'Plan paused after step 1 (to organize the queue), 2 of 3 steps to do (/aside continue)',
+      '1 done One',
+      '2 to do Two',
+      '3 to do Three',
+    ])
+  })
+})
+
 describe('what a run keeps', () => {
   test('each step keeps the result its answer gives, in markdown too, or else its last paragraph, and /aside shows it under the step', async ($, on) => {
     const { aside, shown, savePlan, answer, idle } = world($, on)
@@ -1132,6 +1646,252 @@ describe('planning on a model of its own', () => {
 
     expect(await aside('plan')).toBe("Could not save Sonnet's plan (the store is full); the queue is as it was.")
     expect(await shown()).toEqual(['1 idea waiting', '1 idea dark mode'])
+  })
+
+  // What the planner reads of a plan it adds to, after the queue.
+  const ADDING = 'The saved plan is under way, so its steps stay as they are, done or not. Plan only the items above, as new steps: save only those, and they are added after the last of these steps, none of which you repeat.'
+  const DARK = '{"steps": [{"title": "Dark mode", "prompt": "Add a dark mode."}]}'
+
+  test('while a step runs, the planner adds its steps after the plan\'s own at once, and the run goes on to them', SONNET, async ($, on) => {
+    const { w, sent, planned, panes, type, aside, shown, savePlan, startTurn, endTurn, answer, idle } = world($, on)
+    await savePlan(STEPS)
+    await aside('run')
+    await idle()
+    await startTurn(sent[0]!, 's1')
+    await type('+ dark mode', 's1')
+    w.planReply = DARK
+
+    const text = ['Plan: 4 of 4 steps to do (/aside run)', '', '  1  running  One', '  2  to do    Two', '  3  to do    Three', '  4  to do    Dark mode'].join('\n')
+    expect(await aside('plan')).toBe(text)
+    expect(planned[0]!.prompt).toContain(`\n\n${ADDING}\nS1. One (running)\nS2. Two (to do)\nS3. Three (to do)\n\n`)
+    expect(planned[0]!.prompt).not.toContain('S1. One\n   Do one.')
+    expect(panes).toEqual(['aside'])
+    expect(sent).toHaveLength(1)
+
+    await endTurn('s1')
+    await idle()
+    expect((await shown())[0]).toBe('The queue is empty.')
+    await answer('s2')
+    await answer('s3')
+    expect(sent.at(-1)).toContain('Add a dark mode.\n\n(Step 4 of 4 of the queue plan, "Dark mode"')
+  })
+
+  test('a step that ends while the planner thinks, and the next that starts, change nothing it was given', SONNET, async ($, on) => {
+    const { w, sent, type, aside, shown, savePlan, startTurn, endTurn, idle } = world($, on)
+    await savePlan(STEPS)
+    await aside('run')
+    await idle()
+    await startTurn(sent[0]!, 's1')
+    await type('+ dark mode', 's1')
+    w.planReply = DARK
+    w.meanwhile = async () => {
+      w.meanwhile = undefined
+      await endTurn('s1')
+      await idle()
+      await startTurn(sent[1]!, 's2')
+    }
+
+    expect(await aside('plan')).toBe(['Plan: 3 of 4 steps to do (/aside run)', '', '  1  done     One', '  2  running  Two', '  3  to do    Three', '  4  to do    Dark mode'].join('\n'))
+  })
+
+  test('a planner that answers while the step\'s end saves the plan waits for it, so both stand: the step done and the steps added', SONNET, async ($, on) => {
+    const { w, sent, clock, type, aside, shown, savePlan, startTurn, endTurn, idle } = world($, on)
+    await savePlan(STEPS)
+    await aside('run')
+    await idle()
+    await startTurn(sent[0]!, 's1')
+    await type('+ dark mode', 's1')
+    w.planReply = DARK
+    let reply = () => {}
+    w.meanwhile = () => new Promise<void>(resolve => (reply = resolve))
+    const planning = aside('plan')
+    await clock.settle()
+    w.beforeWrite = async key => {
+      if (!key.startsWith('plan:')) return
+      w.beforeWrite = undefined
+      reply()
+      await clock.settle()
+    }
+
+    await endTurn('s1')
+    await planning
+    await idle()
+    expect(sent).toHaveLength(2)
+    expect((await shown()).slice(1)).toEqual(['Plan: 3 of 4 steps to do (/aside run)', '1 done One', '2 running Two', '3 to do Three', '4 to do Dark mode'])
+  })
+
+  test('a step that ends just as the planner saves keeps both: the step done and the steps added', SONNET, async ($, on) => {
+    const { w, sent, type, aside, shown, savePlan, startTurn, endTurn, idle } = world($, on)
+    await savePlan(STEPS)
+    await aside('run')
+    await idle()
+    await startTurn(sent[0]!, 's1')
+    await type('+ dark mode', 's1')
+    w.planReply = DARK
+    let ending: Promise<unknown> = Promise.resolve()
+    w.meanwhile = async () => {
+      w.meanwhile = undefined
+      ending = endTurn('s1')
+    }
+
+    await aside('plan')
+    await ending
+    await idle()
+    expect(sent).toHaveLength(2)
+    expect((await shown()).slice(1)).toEqual(['Plan: 3 of 4 steps to do (/aside run)', '1 done One', '2 running Two', '3 to do Three', '4 to do Dark mode'])
+  })
+
+  test('a pause, a stop or an interruption while the planner thinks keeps the steps it adds', SONNET, async ($, on) => {
+    const { w, sent, type, aside, shown, savePlan, wait, startTurn, endTurn, idle } = world($, on)
+    await savePlan(STEPS)
+    await aside('run')
+    await idle()
+    await startTurn(sent[0]!, 's1')
+    await type('+ dark mode', 's1')
+    w.planReply = DARK
+    w.meanwhile = async () => {
+      w.meanwhile = undefined
+      await wait('which colours')
+      await endTurn('s1')
+      await idle()
+    }
+
+    await aside('plan')
+    expect((await shown()).slice(1)).toEqual([
+      'Plan paused after step 1 (which colours), 3 of 4 steps to do (/aside continue)',
+      '1 done One',
+      '2 to do Two',
+      '3 to do Three',
+      '4 to do Dark mode',
+    ])
+
+    await aside('continue')
+    await idle()
+    await startTurn(sent.at(-1)!, 's2')
+    await type('+ light mode', 's2')
+    w.planReply = '{"steps": [{"title": "Light mode", "prompt": "Add a light mode."}]}'
+    w.meanwhile = async () => {
+      w.meanwhile = undefined
+      await aside('stop')
+      await endTurn('s2', 'aborted')
+      await idle()
+    }
+    await aside('plan')
+    expect((await shown()).slice(1)).toEqual(['Plan: 4 of 5 steps to do (/aside run)', '1 done One', '2 to do Two', '3 to do Three', '4 to do Dark mode', '5 to do Light mode'])
+  })
+
+  test('a run of named steps leaves the steps added to wait for /aside run', SONNET, async ($, on) => {
+    const { w, sent, toasts, type, aside, shown, savePlan, startTurn, answer, idle } = world($, on)
+    await savePlan(STEPS)
+    await aside('run 2 1')
+    await idle()
+    await startTurn(sent[0]!, 's2')
+    await type('+ dark mode', 's2')
+    w.planReply = DARK
+    await aside('plan')
+
+    await answer('s2')
+    await answer('s1')
+    expect(sent).toHaveLength(2)
+    expect(toasts.at(-1)).toBe('Step 1 done')
+    expect((await shown()).slice(-2)).toEqual(['3 to do Three', '4 to do Dark mode'])
+  })
+
+  test('a plan replaced while the planner adds to it is not added to', SONNET, async ($, on) => {
+    const { w, sent, type, aside, shown, savePlan, startTurn, endTurn, idle } = world($, on)
+    await savePlan(STEPS)
+    await aside('run')
+    await idle()
+    await startTurn(sent[0]!, 's1')
+    await type('+ dark mode', 's1')
+    w.planReply = DARK
+    w.meanwhile = async () => {
+      w.meanwhile = undefined
+      await endTurn('s1', 'aborted')
+      await idle()
+      await savePlan([{ title: 'Other', prompt: 'Do other.' }])
+    }
+
+    expect(await aside('plan')).toBe('The queue or the plan changed while Sonnet planned; nothing was saved. /aside plan tries again.')
+    expect((await shown()).slice(0, 2)).toEqual(['1 idea waiting', '1 idea dark mode'])
+  })
+
+  test('a plan replaced while the planner adds to it is not added to, however close the new one is', SONNET, async ($, on) => {
+    const { w, sent, type, aside, shown, savePlan, startTurn, endTurn, idle } = world($, on)
+    const others = [
+      [STEPS[0]!, { title: 'Two', prompt: 'Do two, and the dark mode.' }, STEPS[2]!],
+      [STEPS[0]!, STEPS[1]!, { title: 'Third', prompt: 'Do three.' }],
+      [STEPS[0]!, STEPS[1]!],
+    ]
+    await type('+ dark mode')
+    w.planReply = DARK
+    for (const [i, other] of others.entries()) {
+      await savePlan(STEPS)
+      await aside('run')
+      await idle()
+      await startTurn(sent.at(-1)!, `s${i}`)
+      w.meanwhile = async () => {
+        w.meanwhile = undefined
+        await endTurn(`s${i}`, 'aborted')
+        await idle()
+        await savePlan(other)
+      }
+
+      expect(await aside('plan')).toBe('The queue or the plan changed while Sonnet planned; nothing was saved. /aside plan tries again.')
+      expect((await shown()).slice(3)).toEqual(other.map((step, n) => `${n + 1} to do ${step.title}`))
+    }
+  })
+
+  test('the planner adding to a running plan is asked in full words, every step with where it stands', SONNET, async ($, on) => {
+    const { w, sent, planned, type, aside, savePlan, startTurn, idle } = world($, on)
+    await savePlan(STEPS)
+    await aside('run 2')
+    await idle()
+    await startTurn(sent[0]!, 's2')
+    await type('+ dark mode', 's2')
+    w.planReply = DARK
+
+    await aside('plan')
+    expect(planned[0]!.prompt).toBe(
+      [
+        'My queue, collected while you were working, oldest first.',
+        '',
+        'Ideas:',
+        '1. dark mode (branch main)',
+        '',
+        `${ADDING}`,
+        'S1. One (to do)',
+        'S2. Two (running)',
+        'S3. Three (to do)',
+        '',
+        'Organize all of it, and only organize it, as a plan of steps for Claude Code to run; "you" in the notes is Claude:',
+        '- merge related items into one step and keep unrelated ones apart; a question is an item like any other, answered when its step runs;',
+        '- order the steps so whatever the rest depends on comes first, and say why in a few words;',
+        '- for each step, write a prompt I could send you as it is; it must stand on its own, file paths included;',
+        '- leave items that look done, contradictory or unclear out of the steps: list each under unclear, with its number and your question, and they go back to my queue;',
+        '- when a step handles a comment that is a <!-- --> tag in a file, the step removes that tag.',
+        'Answer with this JSON object alone, no other text: {"steps": [{"title": "a few words", "prompt": "the whole prompt"}], "unclear": [{"item": 3, "question": "..."}]}',
+      ].join('\n'),
+    )
+  })
+
+  test('a plan run to its end while the planner adds to it makes way for the steps added', SONNET, async ($, on) => {
+    const { w, sent, type, aside, shown, savePlan, startTurn, endTurn, idle } = world($, on)
+    await savePlan([{ title: 'One', prompt: 'Do one.' }])
+    await aside('run')
+    await idle()
+    await startTurn(sent[0]!, 's1')
+    await type('+ dark mode', 's1')
+    w.planReply = DARK
+    w.meanwhile = async () => {
+      w.meanwhile = undefined
+      await endTurn('s1')
+      await idle()
+    }
+
+    await aside('plan')
+    expect(await shown()).toEqual(['The queue is empty.', 'Plan: 1 of 1 step to do (/aside run)', '1 to do Dark mode'])
+    expect(sent).toHaveLength(1)
   })
 
   test('the pane\'s plan button says the planner\'s plan in one line', SONNET, async ($, on) => {

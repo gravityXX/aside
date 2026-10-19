@@ -16,8 +16,8 @@ export async function drawPane(ctx: Context, $: Engine, e: PaneRender[1], next: 
   }
   const now = await readBand($)
   const sections = await currentListing($, ctx)
-  // Planning while a step runs would send a second prompt into the running plan.
-  const canPlan = now.ideas + now.comments + now.tags > 0 && now.running === undefined
+  // While a step runs, the plan button adds the queue to the plan, as /aside plan does.
+  const canPlan = now.ideas + now.comments + now.tags > 0
   // The pane closes at once, as a planner may think a while; how the hand-over went, a
   // failure included, is told as a toast.
   const planFromPane = async () => {
