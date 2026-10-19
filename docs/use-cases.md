@@ -41,6 +41,8 @@ A fresh copy comes first. In fullscreen mode, with the clipboard unchanged since
 - **`/aside edit N`** takes entry N off the queue into the prompt box, as typed. If the next entry you queue has the same mark, it goes back to place N, still pointing where it did; anything else goes at the end.
 - **`/aside move N M`**, **`/aside remove N ...`** and **`/aside clear`** reorder and empty the queue.
 - **`/aside undo`** brings back what the last clear took, or what the last plan or run took until Claude has answered it.
+- **`/aside find TEXT`** finds every entry, tag, step and idea of a queue that holds all the words, in any case and with or without accents, each with the number its own command takes.
+- **`/aside import FILE`** queues the items of a markdown list in FILE, each an entry, leaving out ticked items and those already queued; `/aside g import FILE` and `/aside q work import FILE` put them on those queues.
 - **`/aside export [FILE]`** saves what `/aside` shows as Markdown, to `aside.md` or `FILE`.
 
 ## Turn the queue into a plan
@@ -65,6 +67,7 @@ With the `planModel` setting on `sonnet`, `haiku` or `opus`, one call to that mo
 - **With no step left to do**, `/aside run` runs the queue instead, each entry and each new tag a step of its own, and `/aside run 3 1` runs those entries.
 - **`/aside run all`** sends the whole queue as one prompt, with no plan.
 - **`/aside stop`** lets the step running now finish, as the last one; a step not started yet does not start.
+- **`/aside log`** lists the plans run to their end once another took their place, the last 5 with what each step did, and `/aside log N` any of the 20 it keeps.
 
 ## Answer a step that asks you
 

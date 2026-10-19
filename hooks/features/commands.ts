@@ -7,11 +7,14 @@ import { MARKDOWN_PATH } from '../core/markdown'
 import { describeFailure, formatCount, shortenText } from '../core/text'
 import { countQueues, GLOBAL, loadEntries, loadIdeas, loadPlan, projectKeys, refreshBand } from '../io/store'
 import { addEntries } from './capture'
+import { findEntries } from './find'
+import { showLog } from './history'
+import { importFile } from './importing'
 import { handOverQueue, registerPlanTool, registerWaitTool, runChosen, runEntries, runPlan, stopPlan } from './plan'
 import { runGlobal, runNamed } from './global'
 import { clearQueue, editEntry, exportListing, moveEntry, popEntry, removeEntries, restoreTaken, scanFile, showListing } from './queue'
 
-type Name = 'list' | 'plan' | 'run' | 'stop' | 'pop' | 'edit' | 'move' | 'remove' | 'clear' | 'undo' | 'scan' | 'export' | 'g' | 'q' | 'help'
+type Name = 'list' | 'plan' | 'run' | 'stop' | 'log' | 'pop' | 'edit' | 'move' | 'remove' | 'clear' | 'undo' | 'find' | 'import' | 'scan' | 'export' | 'g' | 'q' | 'help'
 
 // A command's row: what it accepts and how help and Tab show it. runCommand does the work.
 type Command = {
@@ -70,6 +73,13 @@ const COMMANDS: readonly Command[] = [
     about: 'stop after the current step',
   },
   {
+    name: 'log',
+    takes: args => none(args) || oneNumber(args),
+    usage: 'log [N]',
+    help: ['/aside log [N] - the plans run to their end, the last 5 with what each step did, or plan N of them'],
+    about: 'the plans run to their end',
+  },
+  {
     name: 'pop',
     takes: args => none(args) || oneNumber(args),
     usage: 'pop [N]',
@@ -118,6 +128,21 @@ const COMMANDS: readonly Command[] = [
     about: 'bring back what the last clear, or an unanswered plan or run, took',
   },
   {
+    name: 'find',
+    takes: args => args.length > 0,
+    usage: 'find TEXT',
+    help: ['/aside find TEXT - the entries, tags, steps and ideas of every queue that hold all the words, in any case and with or without accents, each with its number'],
+    about: 'look for words in every queue and the plan',
+  },
+  {
+    name: 'import',
+    // A file name with spaces is one name, as for /aside scan.
+    takes: args => args.length > 0 && MARKDOWN_PATH.test(args.join(' ')),
+    usage: 'import FILE',
+    help: ['/aside import FILE - queue the items of a markdown list in FILE, each an entry, leaving out ticked ones and those already queued; the file stays as it is'],
+    about: 'queue the items of a markdown list',
+  },
+  {
     name: 'scan',
     // A file name with spaces is one name: the words are taken together.
     takes: args => args.length > 0 && MARKDOWN_PATH.test(args.join(' ')),
@@ -137,13 +162,13 @@ const COMMANDS: readonly Command[] = [
     name: 'g',
     // Anything after it: a command on the global list, or an idea for it.
     takes: () => true,
-    usage: 'g [TEXT | here N ... | add N ... | remove N ... | edit N | pop [N] | move N M | clear | undo]',
+    usage: 'g [TEXT | here N ... | add N ... | remove N ... | edit N | pop [N] | move N M | clear | undo | import FILE]',
     help: [
       '/aside g - show the global list: ideas that belong to no project',
       '/aside g TEXT - put TEXT on the global list, as "+g TEXT" would',
       '/aside g here N [M ...] - move ideas N of the global list to the end of this queue',
       '/aside g add N [M ...] - move ideas N of this queue (numbers as /aside shows them) to the global list',
-      '/aside g remove N [M ...] | edit N | pop [N] | move N M | clear | undo - the same as for the queue, on the global list',
+      '/aside g remove N [M ...] | edit N | pop [N] | move N M | clear | undo | import FILE - the same as for the queue, on the global list',
     ],
     about: 'the global list: ideas for no project',
   },
@@ -151,7 +176,7 @@ const COMMANDS: readonly Command[] = [
     name: 'q',
     // Anything after it: the queues for no project, a command on one of them, or an idea for it.
     takes: () => true,
-    usage: 'q [NAME [TEXT | here N ... | add N ... | remove N ... | edit N | pop [N] | move N M | clear | undo | rename NEW]]',
+    usage: 'q [NAME [TEXT | here N ... | add N ... | remove N ... | edit N | pop [N] | move N M | clear | undo | import FILE | rename NEW]]',
     help: [
       '/aside q - show the named queues, which belong to no project, and the global list among them',
       '/aside q NAME [TEXT] - show the queue NAME, or put TEXT in it, as "+@NAME TEXT" would; the commands of /aside g work on it too',
@@ -210,6 +235,8 @@ async function runCommand($: Engine, ctx: Context, name: Name, args: readonly st
       return runQueue($, ctx, args)
     case 'stop':
       return stopPlan($, ctx)
+    case 'log':
+      return showLog($, ctx, first === undefined ? undefined : Number(first))
     case 'pop':
       return popEntry($, ctx, first === undefined ? undefined : Number(first))
     case 'edit':
@@ -222,6 +249,10 @@ async function runCommand($: Engine, ctx: Context, name: Name, args: readonly st
       return clearQueue($)
     case 'undo':
       return restoreTaken($)
+    case 'find':
+      return findEntries($, ctx, args.join(' '))
+    case 'import':
+      return importFile($, ctx, args.join(' '))
     case 'scan':
       return scanFile($, args.join(' '))
     case 'export':
@@ -296,6 +327,7 @@ const GLOBAL_VERBS = [
   { text: 'move', description: 'move a global idea to another place' },
   { text: 'clear', description: 'empty the global list' },
   { text: 'undo', description: 'bring back what its last clear took' },
+  { text: 'import', description: 'put the items of a markdown list on it' },
 ]
 
 // What Tab offers after "/aside q NAME ": the same commands on that queue, and its clear, undo
@@ -309,6 +341,7 @@ const NAMED_VERBS = [
   { text: 'move', description: 'move one of its ideas to another place' },
   { text: 'clear', description: 'empty it' },
   { text: 'undo', description: 'bring back what its last clear took' },
+  { text: 'import', description: 'put the items of a markdown list in it' },
   { text: 'rename', description: 'move all of it to a queue of another name' },
 ]
 

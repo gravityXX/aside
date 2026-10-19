@@ -17,7 +17,7 @@ How the code in this repository is designed, written, tested and released. Read 
 
 - **`hooks/register.tsx`** - every hook the plugin has, each handing its event to the function that does the work.
 - **`hooks/ui/`** - what the person sees: the band above the prompt (`band`), the list pane (`pane`), the framed `/aside` output (`output`) and the rows they share (`rows`).
-- **`hooks/features/`** - what the plugin does: `capture` (a typed `+` to a stored entry), `queue` (the listing and the commands on entries), `plan` (handing the queue over, the steps), `global` (the global list and the named queues: ideas for no project) and `commands` (`/aside`, its help and Tab). Within the layer `commands` imports the others, `plan` imports `queue` and `global` imports `capture`.
+- **`hooks/features/`** - what the plugin does: `capture` (a typed `+` to a stored entry), `queue` (the listing and the commands on entries), `plan` (handing the queue over, the steps), `global` (the global list and the named queues: ideas for no project), `history` (the log of plans run to their end), `find` (`/aside find`), `importing` (`/aside import`) and `commands` (`/aside`, its help and Tab). Within the layer `commands` imports the others, `plan` imports `queue` and `history`, `find` imports `queue`, and `global` imports `capture` and `importing`.
 - **`hooks/context.ts`** - the settings and the session's state, made once per load and passed to the hooks.
 - **`hooks/io/`** - the only files that reach the engine's store and the machine: `store` and `host`.
 - **`hooks/core/`** - plain functions on text, with no `$`: `text`, `markdown`, `entries`, `listing` and `prompts`.

@@ -1,7 +1,7 @@
 import type { HookFailure } from 'claude-code'
 
 // Lower case, without diacritics, ł as l: how two spellings of a word are compared.
-const foldText = (s: string) =>
+export const foldText = (s: string) =>
   s.normalize('NFD').replace(/\p{M}/gu, '').replace(/ł/g, 'l').replace(/Ł/g, 'L').toLowerCase()
 
 export const splitWords = (s: string): string[] => foldText(s).split(/[^\p{L}\p{N}]+/u).filter(Boolean)
@@ -66,7 +66,7 @@ export const relativePath = (path: string, root: string): string => {
   return isUnder ? file.slice(dir.length + 1) : file
 }
 
-const PLURALS = { idea: 'ideas', comment: 'comments', tag: 'tags', step: 'steps', entry: 'entries', queue: 'queues' } as const
+const PLURALS = { idea: 'ideas', comment: 'comments', tag: 'tags', step: 'steps', entry: 'entries', queue: 'queues', run: 'runs' } as const
 
 export const formatCount = (n: number, noun: keyof typeof PLURALS): string => `${n} ${n === 1 ? noun : PLURALS[noun]}`
 
@@ -78,6 +78,21 @@ export const formatDuration = (ms: number): string => {
   }
 
   return minutes < 60 ? `${minutes} min` : `${Math.floor(minutes / 60)} h${minutes % 60 > 0 ? ` ${minutes % 60} min` : ''}`
+}
+
+// How long ago something was, by the clock: "just now", "5 min ago", "3 h ago", "2 days ago".
+// No date, which would need the person's time zone.
+export const formatAge = (ms: number): string => {
+  const minutes = Math.floor(ms / 60_000)
+  if (minutes < 1) {
+    return 'just now'
+  }
+  if (minutes < 60) {
+    return `${minutes} min ago`
+  }
+  const hours = Math.floor(minutes / 60)
+
+  return hours < 24 ? `${hours} h ago` : `${Math.floor(hours / 24)} ${Math.floor(hours / 24) === 1 ? 'day' : 'days'} ago`
 }
 
 // What went wrong, in a few words for the person: the first line of the error's message,

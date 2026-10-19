@@ -282,6 +282,9 @@ describe('tab completion', () => {
     await type('+ dark mode\n+? why so slow')
 
     expect(await complete($, '/aside cl')).toEqual(['clear: empty the queue'])
+    expect(await complete($, '/aside l')).toEqual(['list: show the queue and the plan', 'log: the plans run to their end'])
+    expect(await complete($, '/aside f')).toEqual(['find: look for words in every queue and the plan'])
+    expect(await complete($, '/aside i')).toEqual(['import: queue the items of a markdown list'])
     expect(await complete($, '/aside u')).toEqual(['undo: bring back what the last clear, or an unanswered plan or run, took'])
     expect(await complete($, '/aside p')).toEqual(['plan: organize the queue into steps', 'pop: put an entry in the box, ready to send'])
     expect(await complete($, '/aside pop ')).toEqual(['1: dark mode', '2: question: why so slow'])
@@ -297,6 +300,7 @@ describe('tab completion', () => {
     await type('+g read the RFC\n+g learn Rust')
 
     expect(await complete($, '/aside g h')).toEqual(['here: move global ideas into this queue'])
+    expect(await complete($, '/aside g i')).toEqual(['import: put the items of a markdown list on it'])
     expect(await complete($, '/aside g here 1 ')).toEqual(['1: read the RFC', '2: learn Rust'])
     expect(await complete($, '/aside g r')).toEqual(['remove: remove ideas from the global list'])
     expect(await complete($, '/aside g remove 1 ')).toEqual(['1: read the RFC', '2: learn Rust'])
@@ -495,5 +499,221 @@ describe('exporting the list', () => {
     await aside('export')
 
     expect(await queue('+? and this')).toBe('queued ? docs/report.md:5 "Revenue grew by 12% in the th…" (2 waiting)')
+  })
+})
+
+describe('finding entries', () => {
+  test('/aside find looks in the queue, the tags, the plan, the global list and every named queue, with the numbers each shows', async ($, on) => {
+    const { type, write, aside, shown, savePlan } = world($, on, { files: { [REPORT_PATH]: REPORT } })
+    await write(REPORT_PATH)
+    await type('+ fix the login bug')
+    await type('+ Dark mode for the pane')
+    await type('+g dark mode later')
+    await type('+@work Zrób ciemny tryb, dark')
+    await savePlan([{ title: 'Docs', prompt: 'Write the docs.' }, { title: 'Theme', prompt: 'Add a DARK mode.' }])
+
+    expect(await shown('find dark mode')).toEqual([
+      'In the queue (/aside)',
+      '2 idea Dark mode for the pane',
+      'In the plan (/aside run N)',
+      '2 to do Theme',
+      'On the global list (/aside g)',
+      '1 idea dark mode later',
+    ])
+    expect(await shown('find zrob')).toEqual(['In @work (/aside q work)', '1 idea Zrób ciemny tryb, dark'])
+    expect(await shown('find poland')).toEqual(['Tags in files', '· question is this the same for Poland', '↳ docs/report.md:9 · "Costs stayed flat across all regions."'])
+    // What an entry is about counts too: its quote and its file, as its row shows them.
+    expect(await shown('find costs flat')).toEqual(['Tags in files', '· question is this the same for Poland', '↳ docs/report.md:9 · "Costs stayed flat across all regions."'])
+    expect(await shown('find docs report')).toEqual(['Tags in files', '· question is this the same for Poland', '↳ docs/report.md:9 · "Costs stayed flat across all regions."'])
+    expect(await aside('find proj')).toBe('Nothing holds "proj": not the queue, the tags, the plan, the global list or a named queue.')
+  })
+
+  test('/aside find says where it looked when nothing holds the words, and with order newest numbers as /aside does', { options: { order: 'newest' } }, async ($, on) => {
+    const { type, aside, shown } = world($, on)
+    await type('+ dark mode')
+    await type('+ fix the login bug')
+
+    expect(await shown('find login')).toEqual(['In the queue (/aside)', '1 idea fix the login bug'])
+    expect(await aside('find nothing here')).toBe('Nothing holds "nothing here": not the queue, the tags, the plan, the global list or a named queue.')
+    await type('+g read the RFC')
+    await type('+g read the book')
+    expect(await shown('find read')).toEqual(['On the global list (/aside g)', '1 idea read the book', '2 idea read the RFC'])
+    expect(await aside('find !!')).toBe('Give words to look for: /aside find dark mode')
+  })
+
+  test('/aside find finds a step by what it said, leaves out the plugin\'s own words, and gives a plan done no number to run', async ($, on) => {
+    const { write, type, aside, shown, savePlan, answer, idle } = world($, on, { files: { [REPORT_PATH]: REPORT } })
+    await savePlan([{ title: 'Theme', prompt: 'Add a dark mode.' }])
+    await aside('run')
+    await idle()
+    await answer('s1', 'Result: the colours are cached.')
+    await type('+ fix the login bug')
+
+    expect(await shown('find colours cached')).toEqual(['In the plan, done (/aside)', '1 done Theme', '↳ the colours are cached.'])
+    await write(REPORT_PATH)
+    await aside('run')
+    expect(await aside('find remove the tag')).toBe('Nothing holds "remove the tag": not the queue, the tags, the plan, the global list or a named queue.')
+  })
+
+  test('while Claude works, what /aside find finds goes into the transcript at once', async ($, on) => {
+    const { logged, type, aside, startTurn } = world($, on)
+    await type('+ dark mode')
+    await startTurn('build it', 't1')
+
+    expect(await aside('find dark')).toBe('Wrote what was found above while Claude was working.')
+    expect(logged.at(-1)).toBe(['In the queue (/aside)', '', '  1  idea  dark mode'].join('\n'))
+  })
+})
+
+describe('importing a list', () => {
+  const NOTES = [
+    '---',
+    'tags:',
+    '  - project',
+    '---',
+    '# Notes',
+    '',
+    'A paragraph, no entry.',
+    '',
+    '- dark mode',
+    '  - for the pane too',
+    '- [ ] fix the login bug',
+    '- [x] done already',
+    '  - and its detail',
+    '1. +? why is it slow',
+    '* ++ the cache',
+    '- +! a bigger font',
+    '- +- the old flag',
+    '+ try zellij',
+    '2) ship it',
+    'and run it on the way',
+    '- [X] also done',
+    '- [ ]',
+    '',
+    '* * *',
+    '',
+    '```',
+    '- not this one',
+    '```',
+  ].join('\n')
+
+  test('/aside import queues each item of a markdown list, its own lines with it and its mark giving its kind, and leaves the file as it was', async ($, on) => {
+    const { w, filled, aside, shown } = world($, on, { files: { '/proj/notes.md': NOTES } })
+
+    expect(await aside('import notes.md')).toBe('Imported 4 ideas and 4 comments from notes.md, 8 waiting. Left out: 2 ticked.')
+    expect(await shown()).toEqual([
+      '4 ideas and 4 comments waiting',
+      '1 idea dark mode',
+      '- for the pane too',
+      '2 idea fix the login bug',
+      '3 question why is it slow',
+      '4 dig deeper the cache',
+      '5 change a bigger font',
+      '6 drop the old flag',
+      '7 idea try zellij',
+      '8 idea ship it',
+      'and run it on the way',
+    ])
+    expect(w.files['/proj/notes.md']).toBe(NOTES)
+    expect(await aside('edit 4')).toBe('Entry 4 is in the prompt box: change it and press Enter; it goes back to place 4, still pointing where it did.')
+    expect(filled.at(-1)).toBe('++ the cache')
+    await aside('pop 4')
+    expect(await aside('edit 3')).toBe('Entry 3 is in the prompt box: change it and press Enter; it goes back to place 3, still pointing where it did.')
+    expect(filled.at(-1)).toBe('+? why is it slow')
+  })
+
+  test('an import made again adds nothing twice', async ($, on) => {
+    const { aside, shown } = world($, on, { files: { '/proj/notes.md': NOTES } })
+    await aside('import notes.md')
+
+    expect(await aside('import notes.md')).toBe('Nothing new in notes.md: its items are in the queue already. Left out: 2 ticked.')
+    expect((await shown())[0]).toBe('4 ideas and 4 comments waiting')
+  })
+
+  test('an import counts apart what the queue holds already and what the file repeats, and kinds count as well as words', async ($, on) => {
+    const { type, aside, shown } = world($, on, { files: { '/proj/notes.md': '- a\n- x\n- x\n- +? a' } })
+    await type('+ a')
+
+    expect(await aside('import notes.md')).toBe('Imported 1 idea and 1 comment from notes.md, 3 waiting. Left out: 1 already in the queue, 1 repeated in the file.')
+    expect(await shown()).toEqual(['2 ideas and 1 comment waiting', '1 idea a', '2 idea x', '3 question a'])
+  })
+
+  test('an item of several lines comes back whole after /aside edit, here and on the global list', async ($, on) => {
+    const notes = ['- run the tool', '  -v for more', '  -q for less', '- dark mode', '  + for the pane too', '- ', '  under an empty item'].join('\n')
+    const { sent, filled, type, aside, shown } = world($, on, { files: { '/proj/notes.md': notes } })
+    await aside('import notes.md')
+    expect(await shown()).toEqual([
+      '3 ideas waiting',
+      '1 idea run the tool; -v for more; -q for less',
+      '2 idea dark mode',
+      '- for the pane too',
+      '3 idea under an empty item',
+    ])
+
+    for (const n of [1, 2]) {
+      await aside(`edit ${n}`)
+      await type(filled.at(-1)!)
+    }
+    expect(sent).toEqual([])
+    expect((await shown()).slice(1, 4)).toEqual(['1 idea run the tool; -v for more; -q for less', '2 idea dark mode', '- for the pane too'])
+
+    await aside('g import notes.md')
+    await aside('g edit 2')
+    await type(filled.at(-1)!)
+    expect(await shown('g')).toEqual(['3 ideas on the global list', '1 idea run the tool; -v for more; -q for less', '2 idea dark mode', '- for the pane too', '3 idea under an empty item'])
+    expect((await shown())[0]).toBe('3 ideas waiting')
+  })
+
+  test('an import updates the line above the prompt at once, here and on the global list', async ($, on) => {
+    const { type, aside, band } = world($, on, { files: { '/proj/notes.md': '- dark mode\n- try zellij' } })
+    await type('+ local work')
+    const read = async () => {
+      const ui = await band()
+      const text = (await ui.find({ type: 'Text', text: /^aside: / }))?.text
+      await ui.unmount()
+      return text
+    }
+
+    await aside('import notes.md')
+    expect(await read()).toBe('aside: 3 ideas · ')
+    await aside('g import notes.md')
+    expect(await read()).toBe('aside: 3 ideas, 2 global · ')
+  })
+
+  test('/aside import refuses an aside export, a file it cannot read, one with no list and one of more than 100 items', async ($, on) => {
+    const big = Array.from({ length: 101 }, (_, i) => `- item ${i + 1}`).join('\n')
+    const { type, aside, shown } = world($, on, { files: { '/proj/plain.md': '# Title\n\nJust text.', '/proj/big.md': big } })
+    await type('+ dark mode')
+    await aside('export')
+
+    expect(await aside('import aside.md')).toBe('aside.md is an aside export; /aside import takes a list of your own.')
+    expect(await aside('import nope.md')).toBe('Cannot read nope.md.')
+    expect(await aside('import plain.md')).toBe('plain.md holds no list items to import.')
+    expect(await aside('import big.md')).toBe('big.md holds 101 list items; /aside import takes 100 at most.')
+    // Words that name no markdown file are an idea, as before.
+    await aside('import the notes from the meeting')
+    expect((await shown()).slice(0, 3)).toEqual(['2 ideas waiting', '1 idea dark mode', '2 idea import the notes from the meeting'])
+  })
+
+  test('an import while a typed entry is being stored waits for it, so neither writes over the other', async ($, on) => {
+    const { w, clock, aside, shown, idle } = world($, on, { files: { '/proj/notes.md': '- a\n- b' } })
+    let imported: Promise<string> | undefined
+    w.beforeWrite = async key => {
+      if (!key.startsWith('queue:')) return
+      w.beforeWrite = undefined
+      // The import comes while the typed entry's write is on its way, and has every chance to
+      // write first: the typed entry's write goes on once the import is done, or as late as can be.
+      let isDone = false
+      imported = aside('import notes.md')
+      void imported.then(() => (isDone = true))
+      for (let i = 0; i < 2000 && !isDone; i++) await Promise.resolve()
+    }
+    await $.prompt.submit({ text: '+ typed meanwhile', origin: { kind: 'composer' }, wait: false })
+    await clock.advance(2)
+    await clock.settle()
+
+    expect(await imported).toBe('Imported 2 ideas from notes.md, 3 waiting.')
+    await idle()
+    expect(await shown()).toEqual(['3 ideas waiting', '1 idea typed meanwhile', '2 idea a', '3 idea b'])
   })
 })

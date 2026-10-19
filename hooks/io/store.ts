@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface as Engine } from 'claude-code'
 
-import type { Band, Entry, Plan } from '../../types'
+import type { Band, Entry, PastRun, Plan } from '../../types'
 import { isWaiting } from '../core/listing'
 import { canonicalPath, pathKey } from '../core/text'
 
@@ -45,6 +45,8 @@ export type Keys = {
   plan: string
   handed: string
   editing: string
+  // The start of the keys of the plans in the log, one key each (saveRun).
+  history: string
 }
 
 // `root` is spelled as canonicalPath spells files, to compare them with; the keys keep the
@@ -61,6 +63,7 @@ export async function projectKeys($: Engine): Promise<Keys> {
     plan: `plan:${root}`,
     handed: `handed:${root}`,
     editing: `editing:${root}`,
+    history: `history:${root}:`,
   }
 }
 
@@ -90,6 +93,42 @@ export async function savePlan($: Engine, key: string, plan: Plan) {
   } else {
     await $.store.set(key, plan)
   }
+}
+
+// How many plans the log keeps, the newest.
+const RUNS_KEPT = 20
+
+// The steps' titles as a short hash, so one plan's key is the same each time it is saved.
+const fingerprint = (run: PastRun) => {
+  let hash = 5381
+  for (const char of run.steps.map(step => step.title).join('\u0000')) hash = ((hash * 33) ^ char.charCodeAt(0)) >>> 0
+
+  return hash.toString(36)
+}
+
+// A plan run to its end, into the log under a key of its own: `stamp`, when it ended, and what
+// it held, so sessions that end plans at once never write over each other's, and saving the same
+// plan again, as a save that failed half-way and is made again, keeps one. The oldest beyond the
+// last RUNS_KEPT go.
+export async function saveRun($: Engine, prefix: string, run: PastRun, stamp = run.at) {
+  await $.store.set(`${prefix}${stamp}:${fingerprint(run)}`, run)
+  const keys = (await $.store.keys()).filter(key => key.startsWith(prefix))
+  const oldest = keys.sort((a, b) => b.localeCompare(a, undefined, { numeric: true })).slice(RUNS_KEPT)
+  for (const key of oldest) await $.store.delete(key)
+}
+
+const isPastRun = (value: unknown): value is PastRun =>
+  typeof value === 'object' && value !== null && typeof (value as PastRun).at === 'number' && Array.isArray((value as PastRun).steps)
+
+// The plans in the log, the one that ended last first.
+export async function loadRuns($: Engine, prefix: string): Promise<PastRun[]> {
+  const runs: { key: string; run: PastRun }[] = []
+  for (const key of (await $.store.keys()).filter(one => one.startsWith(prefix))) {
+    const value = await $.store.get(key)
+    if (isPastRun(value)) runs.push({ key, run: value })
+  }
+
+  return runs.sort((a, b) => b.run.at - a.run.at || b.key.localeCompare(a.key)).map(one => one.run)
 }
 
 // A tag is known by its file and text: lines move as the file is edited.

@@ -1,6 +1,6 @@
-import type { Entry, Plan } from '../../types'
+import type { Entry, PastRun, Plan } from '../../types'
 import { KINDS } from './entries'
-import { formatCount, formatDuration, relativePath, shortenText } from './text'
+import { formatAge, formatCount, formatDuration, relativePath, shortenText } from './text'
 
 // The /aside listing as data: sections of a title and rows, each row a number (or a
 // bullet), a kind or a step's state, its lines of text and what it is about.
@@ -76,6 +76,12 @@ export const queuesSection = (queues: readonly { name: string; count: number; ne
   }
 }
 
+// What /aside find found in one list: each entry under the number its list shows it at.
+export const foundSection = (title: string, found: readonly { entry: Entry; label: string }[], root: string): ListingSection => ({
+  title,
+  rows: found.map(({ entry, label }) => entryRow(entry, root, label)),
+})
+
 // The tags in files, each marked once an earlier /aside handed it over.
 export const tagsSection = (tags: readonly Entry[], root: string, isHandedOver: (tag: Entry) => boolean): ListingSection => ({
   title: 'Tags in files',
@@ -130,6 +136,21 @@ export const planSection = (plan: Plan): ListingSection | null => {
       const about = said.filter(Boolean).join(' · ')
 
       return { label: String(i + 1), word: stateOf(i), lines: [step.title], about: about ? [about] : [] }
+    }),
+  }
+}
+
+// A plan in the log, as /aside log numbers it from the one that ended last: how long ago it
+// ended, by `now`, and each step done with its time and result, as the plan showed them.
+export const runSection = (run: PastRun, n: number, now: number): ListingSection => {
+  const ms = run.steps.reduce((sum, step) => sum + (step.ms ?? 0), 0)
+
+  return {
+    title: `Run ${n}, ${formatAge(now - run.at)}: ${formatCount(run.steps.length, 'step')}${ms > 0 ? ` in ${formatDuration(ms)}` : ''}`,
+    rows: run.steps.map((step, i) => {
+      const about = [step.ms ? formatDuration(step.ms) : '', step.result ?? ''].filter(Boolean).join(' · ')
+
+      return { label: String(i + 1), word: 'done', lines: [step.title], about: about ? [about] : [] }
     }),
   }
 }

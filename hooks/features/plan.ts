@@ -40,6 +40,7 @@ import {
   tagId,
 } from '../io/store'
 import type { Keys } from '../io/store'
+import { archivePlan } from './history'
 import { openListPane, tagsInFiles } from './queue'
 
 // Submits the prompt `compose` gives as the person's own, or nothing when it gives none. It
@@ -196,10 +197,11 @@ async function handOver($: Engine, ctx: Context, mode: 'plan' | 'send', isAdding
 // unless something else took its place meanwhile. A step that continue ended, whose prompt
 // was only to sum the run up, is done as it stands.
 async function releaseStep($: Engine, ctx: Context, index: number, why: string) {
+  const now = await $.clock.now()
   const gone = await changePlan($, ctx, plan => {
     const active = plan.active
     if (active?.step !== index || active.turnId !== undefined) return undefined
-    if (active.isEnding) completeStep(plan, active, active.sessionId, false)
+    if (active.isEnding) completeStep(plan, active, active.sessionId, false, now)
     else delete plan.active
     return active
   })
@@ -300,12 +302,12 @@ async function runningHere($: Engine, plan: Plan): Promise<string | undefined> {
     : `Step ${n} is running. /aside stop stops after it.`
 }
 
-// Marks the step `active` runs done, with the time its turns took and what the last one said,
-// and with isGoingOn, the next step of its run running in that same change, so nothing in
-// between finds the run with no step. Answers that step, or -1 with none.
-function completeStep(plan: Plan, active: NonNullable<Plan['active']>, me: string, isGoingOn: boolean): number {
+// Marks the step `active` runs done at `now`, with the time its turns took and what the last
+// one said, and with isGoingOn, the next step of its run running in that same change, so nothing
+// in between finds the run with no step. Answers that step, or -1 with none.
+function completeStep(plan: Plan, active: NonNullable<Plan['active']>, me: string, isGoingOn: boolean, now: number): number {
   const step = plan.steps[active.step]!
-  plan.steps[active.step] = { ...step, isDone: true, ms: active.ms ?? 0, ...(active.result ? { result: active.result } : {}) }
+  plan.steps[active.step] = { ...step, isDone: true, ms: active.ms ?? 0, doneAt: now, ...(active.result ? { result: active.result } : {}) }
   delete plan.active
   const after = isGoingOn ? nextInRun(plan.steps, active.step, active.isChain, active.then) : -1
   if (after >= 0) {
@@ -323,6 +325,7 @@ function completeStep(plan: Plan, active: NonNullable<Plan['active']>, me: strin
 // nothing after it: steps added meanwhile wait for /aside run. Undefined when no step waits.
 async function goOnFromWaiting($: Engine, ctx: Context): Promise<string | undefined> {
   const me = await $.session.id()
+  const now = await $.clock.now()
   const end = await changePlan($, ctx, plan => {
     const active = plan.active
     if (!active || !isWaiting(active)) return undefined
@@ -335,7 +338,7 @@ async function goOnFromWaiting($: Engine, ctx: Context): Promise<string | undefi
       active.sessionId = me
       return { active: structuredClone(active), after: -1, isClosing: true, steps: structuredClone(plan.steps), note }
     }
-    const after = completeStep(plan, active, me, true)
+    const after = completeStep(plan, active, me, true, now)
     return { active, after, isClosing: false, steps: structuredClone(plan.steps), note }
   })
   if (end === undefined) {
@@ -444,7 +447,10 @@ async function runChosenEntries($: Engine, ctx: Context, keys: Keys, plan: Plan,
   const entries = chosen.map(n => list[n - 1]!)
   const steps = entries.map(entry => entryStep(entry, keys.root))
   await takeChosen($, keys, stored, entries)
-  await changePlan($, ctx, plan => replaceSteps(plan, steps))
+  await changePlan($, ctx, async plan => {
+    await archivePlan($, plan)
+    replaceSteps(plan, steps)
+  })
   await refreshBand($)
   await startStep($, ctx, 0, true)
 
@@ -480,7 +486,10 @@ export async function runEntries($: Engine, ctx: Context): Promise<string> {
   }
   const steps = all.map(entry => entryStep(entry, keys.root))
   await takeForHandOver($, keys, stored, tags)
-  await changePlan($, ctx, plan => replaceSteps(plan, steps))
+  await changePlan($, ctx, async plan => {
+    await archivePlan($, plan)
+    replaceSteps(plan, steps)
+  })
   await refreshBand($, 0)
   await startStep($, ctx, 0, true)
 
@@ -493,6 +502,7 @@ export async function runEntries($: Engine, ctx: Context): Promise<string> {
 // session is let go here. A step that waited ends with the turn running now, whatever ends it.
 export async function stopPlan($: Engine, ctx: Context): Promise<string> {
   const me = await $.session.id()
+  const now = await $.clock.now()
   const text = await changePlan($, ctx, async plan => {
     const active = plan.active
     if (!active && plan.paused) {
@@ -504,7 +514,7 @@ export async function stopPlan($: Engine, ctx: Context): Promise<string> {
     }
     const n = active.step + 1
     if (isWaiting(active) || (active.isEnding && active.turnId === undefined)) {
-      completeStep(plan, active, me, false)
+      completeStep(plan, active, me, false, now)
       return `Step ${n} is done as it stands, and the plan stops there.`
     }
     if (active.turnId === undefined || active.sessionId !== me) {
@@ -670,7 +680,7 @@ type SaveMode = 'add' | 'tool' | 'replan'
 // plan a planner was given, nothing is saved, and undefined comes back, unless the plan is still
 // that one: only further on while adding to it, else just as it was.
 async function savePlanSteps($: Engine, ctx: Context, steps: readonly Step[], mode: SaveMode, given?: Plan): Promise<Plan | undefined> {
-  return changePlan($, ctx, plan => {
+  return changePlan($, ctx, async plan => {
     if (given && !(mode === 'add' ? isSamePlan(given, plan) : JSON.stringify(plan) === JSON.stringify(given))) {
       return undefined
     }
@@ -680,6 +690,8 @@ async function savePlanSteps($: Engine, ctx: Context, steps: readonly Step[], mo
     if (base !== undefined && isLeft) {
       plan.steps = [...kept, ...steps]
     } else {
+      // A plan run to its end goes to the log as the new one takes its place.
+      if (!isLeft) await archivePlan($, plan)
       replaceSteps(plan, [...(isLeft ? kept.filter(step => step.isDone) : []), ...steps])
     }
 
@@ -940,6 +952,7 @@ const PLANNING_PAUSE = 'to organize the queue'
 // Claude now, and a run with steps left waits for it.
 async function finishStep($: Engine, ctx: Context, e: TurnComplete[1]) {
   const me = await $.session.id()
+  const now = await $.clock.now()
   const end = await changePlan($, ctx, async plan => {
     const active = plan.active
     if (active?.turnId !== e.turnId || active.sessionId !== me) {
@@ -953,7 +966,7 @@ async function finishStep($: Engine, ctx: Context, e: TurnComplete[1]) {
     const result = isAnswer ? readStepResult(e.answer) : undefined
     if (result !== undefined) active.result = result
     if (active.isEnding) {
-      completeStep(plan, active, me, false)
+      completeStep(plan, active, me, false, now)
       return { active, waits: false, after: -1, isPausing: false, isPlanning: isPlanning && isAnswer, hint, steps: structuredClone(plan.steps) }
     }
     if (active.pausedFor !== undefined) {
@@ -967,7 +980,7 @@ async function finishStep($: Engine, ctx: Context, e: TurnComplete[1]) {
     }
     const after = nextInRun(plan.steps, active.step, active.isChain, active.then)
     const isPausing = after >= 0 && isPlanning
-    completeStep(plan, active, me, !isPausing)
+    completeStep(plan, active, me, !isPausing, now)
     if (isPausing) plan.paused = { step: active.step, reason: PLANNING_PAUSE, isChain: active.isChain, ...(active.then ? { then: active.then } : {}) }
 
     return { active, waits: false, after, isPausing, isPlanning, hint: '', steps: structuredClone(plan.steps) }

@@ -4,6 +4,7 @@ import type { Entry } from '../../types'
 import type { Context } from '../context'
 import { inOrder } from '../core/entries'
 import { listingText, namedSection, queuesSection } from '../core/listing'
+import { MARKDOWN_PATH } from '../core/markdown'
 import { formatCount, shortenText } from '../core/text'
 import {
   addIdeas,
@@ -26,6 +27,7 @@ import {
 } from '../io/store'
 import type { GlobalIdea } from '../io/store'
 import { addEntries } from './capture'
+import { importFile } from './importing'
 
 // How the commands name a queue of no project: the global list in the words it always had,
 // any other queue by its name.
@@ -336,6 +338,9 @@ async function runQueue($: Engine, ctx: Context, name: string, args: readonly st
   }
   if (verb === 'undo' && rest.length === 0) {
     return undoClear($, name)
+  }
+  if (verb === 'import' && rest.length > 0 && MARKDOWN_PATH.test(rest.join(' '))) {
+    return importFile($, ctx, rest.join(' '), name)
   }
   if (verb === 'rename' && rest.length === 1) {
     return renameQueue($, name, rest[0]!.replace(/^@/, ''))
