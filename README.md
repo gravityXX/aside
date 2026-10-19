@@ -77,7 +77,7 @@ Requires <kbd>Claude Code</kbd> 2.1.301 or newer, whose plugin API is still in e
 /aside move N M        move entry N to place M
 /aside remove N ...    remove one entry, or several
 /aside clear           empty the queue
-/aside undo            bring back what the last plan, run or clear took
+/aside undo            bring back what the last clear, or an unanswered plan or run, took
 /aside scan FILE       read the tags of a file Claude did not write
 /aside export [FILE]   save the list as Markdown, to aside.md or FILE
 /aside help            list every command
