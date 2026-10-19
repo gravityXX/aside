@@ -8,10 +8,10 @@ import { describeFailure, shortenText } from '../core/text'
 import { loadEntries, loadGlobalIdeas, loadPlan, projectKeys, refreshBand } from '../io/store'
 import { addEntries } from './capture'
 import { handOverQueue, registerPlanTool, registerWaitTool, runChosen, runEntries, runPlan, stopPlan } from './plan'
-import { moveHere, moveToGlobal, runGlobal } from './global'
+import { runGlobal } from './global'
 import { clearQueue, editEntry, exportListing, moveEntry, popEntry, removeEntries, restoreTaken, scanFile, showListing } from './queue'
 
-type Name = 'list' | 'plan' | 'run' | 'stop' | 'pop' | 'edit' | 'move' | 'remove' | 'clear' | 'undo' | 'scan' | 'export' | 'g' | 'here' | 'global' | 'help'
+type Name = 'list' | 'plan' | 'run' | 'stop' | 'pop' | 'edit' | 'move' | 'remove' | 'clear' | 'undo' | 'scan' | 'export' | 'g' | 'help'
 
 // A command's row: what it accepts and how help and Tab show it. runCommand does the work.
 type Command = {
@@ -26,7 +26,7 @@ type Command = {
   // What Tab shows beside the name, and the numbers it offers after it: entries, or what
   // /aside run counts (the steps while the plan has steps to do, else the entries).
   about: string
-  completes?: 'entries' | 'ideas' | 'run' | 'global'
+  completes?: 'entries' | 'run'
 }
 
 const isNumber = (word: string | undefined) => word !== undefined && /^\d+$/.test(word)
@@ -137,29 +137,15 @@ const COMMANDS: readonly Command[] = [
     name: 'g',
     // Anything after it: a command on the global list, or an idea for it.
     takes: () => true,
-    usage: 'g [TEXT | remove N ... | edit N | pop [N] | move N M]',
+    usage: 'g [TEXT | here N ... | add N ... | remove N ... | edit N | pop [N] | move N M]',
     help: [
       '/aside g - show the global list: ideas that belong to no project',
       '/aside g TEXT - put TEXT on the global list, as "+g TEXT" would',
+      '/aside g here N [M ...] - move ideas N of the global list to the end of this queue',
+      '/aside g add N [M ...] - move ideas N of this queue (numbers as /aside shows them) to the global list',
       '/aside g remove N [M ...] | edit N | pop [N] | move N M - the same as for the queue, on the global list',
     ],
     about: 'the global list: ideas for no project',
-  },
-  {
-    name: 'here',
-    takes: args => args.length > 0 && args.every(isNumber),
-    usage: 'here N [M ...]',
-    help: ['/aside here N [M ...] - move ideas N of the global list to the end of this queue'],
-    about: 'move global ideas into this queue',
-    completes: 'global',
-  },
-  {
-    name: 'global',
-    takes: args => args.length > 0 && args.every(isNumber),
-    usage: 'global N [M ...]',
-    help: ['/aside global N [M ...] - move ideas N of this queue to the global list'],
-    about: 'move ideas to the global list',
-    completes: 'ideas',
   },
   {
     name: 'help',
@@ -229,10 +215,6 @@ async function runCommand($: Engine, ctx: Context, name: Name, args: readonly st
       return exportListing($, ctx, args.join(' '))
     case 'g':
       return runGlobal($, ctx, args)
-    case 'here':
-      return moveHere($, ctx, args.map(Number))
-    case 'global':
-      return moveToGlobal($, ctx, args.map(Number))
     case 'help':
       return HELP
   }
@@ -291,6 +273,8 @@ type Autocomplete = Parameters<Hook<'prompt.autocomplete'>>
 
 // What Tab offers after "/aside g ": the commands on the global list.
 const GLOBAL_VERBS = [
+  { text: 'here', description: 'move global ideas into this queue' },
+  { text: 'add', description: 'move ideas of this queue to the global list' },
   { text: 'remove', description: 'remove ideas from the global list' },
   { text: 'edit', description: 'rework a global idea' },
   { text: 'pop', description: 'put a global idea in the box, ready to send' },
@@ -301,7 +285,7 @@ export async function completeAside(ctx: Context, $: Engine, e: Autocomplete[1],
   const typed = e.text.slice(0, e.cursor)
   // On the global list: its commands after "g", then its numbers, as many as the command takes.
   const globalVerb = /^\/aside\s+g\s+(\S*)$/i.exec(typed)
-  const globalLater = /^\/aside\s+g\s+(remove|rm|edit|pop|move|mv)\s+((?:\d+\s+)*)(\d*)$/i.exec(typed)
+  const globalLater = /^\/aside\s+g\s+(here|add|remove|rm|edit|pop|move|mv)\s+((?:\d+\s+)*)(\d*)$/i.exec(typed)
   if (globalVerb || globalLater) {
     const own = (await next(e)).suggestions
     if (globalVerb) {
@@ -310,9 +294,11 @@ export async function completeAside(ctx: Context, $: Engine, e: Autocomplete[1],
     }
     const verb = globalLater![1]!.toLowerCase()
     const count = globalLater![2]!.split(/\s+/).filter(Boolean).length
-    const room = verb === 'remove' || verb === 'rm' ? Infinity : verb === 'move' || verb === 'mv' ? 2 : 1
+    const room = ['here', 'add', 'remove', 'rm'].includes(verb) ? Infinity : verb === 'move' || verb === 'mv' ? 2 : 1
+    // "g add" takes numbers of this queue, its ideas only; every other command those of the global list.
+    const rows = count < room ? await numberRows($, ctx, verb === 'add' ? 'ideas' : 'global', globalLater![3]!) : []
 
-    return { suggestions: [...own, ...(count < room ? await numberRows($, ctx, 'global', globalLater![3]!) : [])] }
+    return { suggestions: [...own, ...rows] }
   }
   const first = /^\/aside\s+(\S*)$/.exec(typed)
   // A number after a command, with the numbers already typed before it: offered only where
