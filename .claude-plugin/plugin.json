@@ -34,6 +34,18 @@
         "run all"
       ]
     },
+    "planModel": {
+      "type": "string",
+      "title": "Model for /aside plan",
+      "description": "session: Claude plans in this conversation, knowing the work so far, on the session's model. sonnet, haiku, opus: one call to that model plans outside the conversation; it adds nothing to the context and runs while Claude works, but sees only the queue.",
+      "default": "session",
+      "options": [
+        "session",
+        "sonnet",
+        "haiku",
+        "opus"
+      ]
+    },
     "order": {
       "type": "string",
       "title": "Which entry comes first",

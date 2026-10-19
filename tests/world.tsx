@@ -65,7 +65,11 @@ export type Machine = {
   isDropping?: boolean
   // The small model's reply to each note it is asked to tidy; a note with none fails.
   tidy?: Record<string, string>
-  // Runs while the small model thinks.
+  // What a planner model answers /aside plan with, when planModel names one; with none
+  // the call fails.
+  planReply?: string
+  // Runs while a model call is out: the small model tidying a note, or a planner organizing
+  // the queue.
   meanwhile?: () => Promise<unknown>
 }
 
@@ -80,7 +84,8 @@ const ran = (stdout: string, exitCode = 0) => ({
 // A project at /proj (C:\\proj on Windows) with the plugin loaded, and what reaches the person and Claude:
 // `sent` the prompts Claude got, `toasts` the notices in the corner, `logged` the lines in
 // the transcript, `filled` what went into the prompt box, `asked` the notes the small model
-// was asked to tidy, `panes` the panes open, `runs` the commands the plugin ran.
+// was asked to tidy, `planned` the calls to a planner model, `panes` the panes open, `runs`
+// the commands the plugin ran.
 export const world = ($: Engine, on: On, given: Partial<Machine> = {}) => {
   const w: Machine = { files: {}, clip: '', grep: '', branch: 'main', system: 'wsl', ...given }
   const sent: string[] = []
@@ -88,6 +93,7 @@ export const world = ($: Engine, on: On, given: Partial<Machine> = {}) => {
   const logged: string[] = []
   const filled: string[] = []
   const asked: string[] = []
+  const planned: { model: string; system: unknown; prompt: string }[] = []
   const panes: string[] = []
   const runs: string[] = []
 
@@ -149,9 +155,12 @@ export const world = ($: Engine, on: On, given: Partial<Machine> = {}) => {
     return { isFilled: true } as never
   })
   on('model.complete', async ($e, e) => {
-    asked.push(e.prompt)
+    // The planner's call, told apart by what it asks for.
+    const isPlanning = e.prompt.includes('as a plan of steps for Claude Code')
+    if (isPlanning) planned.push({ model: e.model, system: e.system, prompt: e.prompt })
+    else asked.push(e.prompt)
     await w.meanwhile?.()
-    const reply = w.tidy?.[/<note>\n([\s\S]*)\n<\/note>/.exec(e.prompt)?.[1] ?? '']
+    const reply = isPlanning ? w.planReply : w.tidy?.[/<note>\n([\s\S]*)\n<\/note>/.exec(e.prompt)?.[1] ?? '']
     return {
       value: (reply === undefined
         ? { isAnswered: false, reason: 'api-error', status: null, kind: 'unknown' }
@@ -313,6 +322,7 @@ export const world = ($: Engine, on: On, given: Partial<Machine> = {}) => {
     logged,
     filled,
     asked,
+    planned,
     panes,
     runs,
     clock,

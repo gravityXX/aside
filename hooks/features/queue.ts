@@ -119,7 +119,7 @@ async function listPaneState($: Engine): Promise<'closed' | 'hidden' | 'shown'> 
 
 // Shows the list pane: opens it, or brings it to the front when it is open out of sight. The
 // reason is the surface's when it cannot place the pane.
-async function openListPane($: Engine): Promise<{ isPlaced: true } | { isPlaced: false; reason: string }> {
+export async function openListPane($: Engine): Promise<{ isPlaced: true } | { isPlaced: false; reason: string }> {
   if ((await listPaneState($)) === 'shown') {
     return { isPlaced: true }
   }

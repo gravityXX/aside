@@ -18,11 +18,11 @@ export async function drawPane(ctx: Context, $: Engine, e: PaneRender[1], next: 
   const sections = await currentListing($, ctx)
   // Planning while a step runs would send a second prompt into the running plan.
   const canPlan = now.ideas + now.comments + now.tags > 0 && now.running === undefined
-  // A hand-over that fails is caught and told as a toast; the pane closes either way.
+  // The pane closes at once, as a planner may think a while; how the hand-over went, a
+  // failure included, is told as a toast.
   const planFromPane = async () => {
-    const said = await handOverQueue($, ctx, 'plan').catch(error => `Could not organize the queue (${describeError(error)}).`)
     await $.ui.close({ id: LIST_PANE }).catch(() => undefined)
-    $.ui.toast(said)
+    $.ui.toast(await handOverQueue($, ctx, 'plan', 'pane').catch(error => `Could not organize the queue (${describeError(error)}).`))
   }
 
   const ui = $.ui.resolve(e)

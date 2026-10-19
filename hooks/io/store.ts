@@ -169,6 +169,20 @@ export async function forgetAnsweredTake($: Engine, keys: Keys) {
   }
 }
 
+// Takes what a plan saved outside the conversation holds out of the queue: its entries, and
+// its tags as handed over, the tags first, so a failed write leaves the entries in the queue.
+// No take is kept: the plan answers for them at once, as Claude's answer does for a planning
+// turn, so undo has nothing of it, nor of a take before it, to bring back.
+export async function takePlanned($: Engine, keys: Keys, items: readonly Entry[]) {
+  const tagIds = items.filter(item => item.isTag).map(tagId)
+  if (tagIds.length > 0) {
+    await $.store.set(keys.handed, [...new Set([...(await loadHanded($, keys.handed)), ...tagIds])].slice(-500))
+  }
+  const isItem = (entry: Entry) => items.some(item => item.at === entry.at && item.text === entry.text)
+  await saveEntries($, keys.queue, (await loadEntries($, keys.queue)).filter(entry => !isItem(entry)))
+  await forgetTake($, keys).catch(() => undefined)
+}
+
 // Puts back all the last take took: its entries at the head of the queue, its tags in their
 // files for the next hand-over. Returns what it put back.
 export async function bringBackTake($: Engine, keys: Keys): Promise<Take> {

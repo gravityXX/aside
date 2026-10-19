@@ -245,7 +245,11 @@ export async function addEntries(
   await saveEntries($, keys.queue, all)
   if (editing) await forgetEditing($, keys.editing)
   await refreshBand($)
-  if (ctx.settings.tidy) for (const entry of added) void tidyEntry($, ctx, entry)
+  for (const entry of ctx.settings.tidy ? added : []) {
+    const tidy = tidyEntry($, ctx, entry).catch(() => undefined)
+    ctx.session.tidies.add(tidy)
+    void tidy.then(() => ctx.session.tidies.delete(tidy))
+  }
   if (images > 0) notes.push('the image was not kept')
   const said = reportQueued(added, notes, keys.root, all.length)
   if (report === 'log') $.ui.log(said)
