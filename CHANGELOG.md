@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.35.0 - 2026-10-20
 
 - While a run goes on, a step running, waiting or paused after, `/aside`, the list pane and `/aside export` show the plan first and the queue under it, so what happens now is at the top however long the queue is.
 
