@@ -7,19 +7,19 @@ describe('the global list', () => {
     const { type, queue, aside, shown, band } = world($, on)
     await type('+ local work')
 
-    expect(await queue('+g read the RFC')).toBe('queued "read the RFC" to the global list (1 global)')
+    expect(await queue('+g read the RFC')).toBe('queued "read the RFC" to the global list · 1 global')
     expect(await shown()).toEqual(['1 idea waiting', '1 idea local work'])
     expect(await aside('g')).toBe(['1 idea on the global list', '', '  1  idea  read the RFC'].join('\n'))
     const ui = await band()
-    expect((await ui.find({ type: 'Text', text: /^aside: / }))?.text).toBe('aside: 1 idea, 1 global · ')
+    expect((await ui.find({ type: 'Text', text: /^aside: / }))?.text).toBe('aside: 1 idea, 1 in another queue · ')
   })
 
   test('a draft that ends with +g, /aside g TEXT and a +g line among others go there too; "+go" stays an idea here', async ($, on) => {
     const { type, queue, aside, shown } = world($, on)
 
-    expect(await queue('read it later +g')).toBe('queued "read it later" to the global list (1 global)')
-    expect(await aside('g write the post')).toBe('queued "write the post" to the global list (2 global)')
-    expect(await queue('+ fix the build\n+g learn Rust')).toBe('queued "fix the build" (1 waiting); queued "learn Rust" to the global list (3 global)')
+    expect(await queue('read it later +g')).toBe('queued "read it later" to the global list · 1 global')
+    expect(await aside('g write the post')).toBe('queued "write the post" to the global list · 2 global')
+    expect(await queue('+ fix the build\n+g learn Rust')).toBe('queued "fix the build" · 1 waiting; queued "learn Rust" to the global list · 3 global')
     await type('+go home')
     expect(await shown()).toEqual(['2 ideas waiting', '1 idea fix the build', '2 idea go home'])
     expect((await aside('g')).split('\n').slice(2)).toEqual(['  1  idea  read it later', '  2  idea  write the post', '  3  idea  learn Rust'])
@@ -48,7 +48,7 @@ describe('the global list', () => {
     expect(await aside('g edit 1')).toBe('Global idea 1 is in the prompt box: change it and press Enter; it goes back to place 1.')
     expect(filled).toEqual(['c', '+g d'])
     expect(await aside('g')).toBe(['1 idea on the global list', '', '  1  idea  e'].join('\n'))
-    expect(await queue('+g d, sharper')).toBe('queued "d, sharper" to the global list (2 global)')
+    expect(await queue('+g d, sharper')).toBe('queued "d, sharper" to the global list · 2 global')
     expect((await aside('g')).split('\n').slice(2)).toEqual(['  1  idea  d, sharper', '  2  idea  e'])
   })
 
@@ -60,7 +60,7 @@ describe('the global list', () => {
     expect((await aside('g')).split('\n').slice(2)).toEqual(['  1  idea  b', '  2  idea  x', '  3  idea  y'])
     await fromAnotherSession('unrelated', 'value')
 
-    expect(await queue('+g a, sharper')).toBe('queued "a, sharper" to the global list (4 global)')
+    expect(await queue('+g a, sharper')).toBe('queued "a, sharper" to the global list · 4 global')
     expect((await aside('g')).split('\n').slice(2)).toEqual(['  1  idea  a, sharper', '  2  idea  b', '  3  idea  x', '  4  idea  y'])
   })
 
@@ -179,21 +179,21 @@ describe('named queues', () => {
     await type('+ local work')
 
     expect(await queue('+@work write the report')).toBe('queued "write the report" to @work, a new queue for every project; /aside q work local keeps it for this one')
-    expect(await queue('+@Work call the bank')).toBe('queued "call the bank" to @work (2 in @work)')
+    expect(await queue('+@Work call the bank')).toBe('queued "call the bank" to @work · 2 in @work')
     expect(await shown()).toEqual(['1 idea waiting', '1 idea local work'])
     expect(await aside('q work')).toBe(['2 ideas in @work', '', '  1  idea  write the report', '  2  idea  call the bank'].join('\n'))
     expect(await aside('q @WORK')).toBe(await aside('q work'))
     const ui = await band()
-    expect((await ui.find({ type: 'Text', text: /^aside: / }))?.text).toBe('aside: 1 idea, 2 @work · ')
+    expect((await ui.find({ type: 'Text', text: /^aside: / }))?.text).toBe('aside: 1 idea, 2 in another queue · ')
   })
 
   test('a draft that ends with +@work, /aside q work TEXT and lines among others go there too', async ($, on) => {
     const { queue, aside, shown } = world($, on)
 
     expect(await queue('read it later +@work')).toBe('queued "read it later" to @work, a new queue for every project; /aside q work local keeps it for this one')
-    expect(await aside('q work send the invoice')).toBe('queued "send the invoice" to @work (2 in @work)')
+    expect(await aside('q work send the invoice')).toBe('queued "send the invoice" to @work · 2 in @work')
     expect(await queue('+ fix the build\n+@home water the plants\n+g learn Rust\n+@work book the room')).toBe(
-      'queued "fix the build" (1 waiting); queued "water the plants" to @home, a new queue for every project; /aside q home local keeps it for this one; queued "learn Rust" to the global list (1 global); queued "book the room" to @work (3 in @work)',
+      'queued "fix the build" · 1 waiting; queued "water the plants" to @home, a new queue for every project; /aside q home local keeps it for this one; queued "learn Rust" to the global list · 1 global; queued "book the room" to @work · 3 in @work',
     )
     expect(await shown()).toEqual(['1 idea waiting', '1 idea fix the build'])
     expect((await aside('q work')).split('\n').slice(2)).toEqual(['  1  idea  read it later', '  2  idea  send the invoice', '  3  idea  book the room'])
@@ -222,7 +222,7 @@ describe('named queues', () => {
   test('+@global is the global list, and /aside q global works as /aside g does', async ($, on) => {
     const { queue, aside } = world($, on)
 
-    expect(await queue('+@global read the RFC')).toBe('queued "read the RFC" to the global list (1 global)')
+    expect(await queue('+@global read the RFC')).toBe('queued "read the RFC" to the global list · 1 global')
     expect(await aside('q global')).toBe(await aside('g'))
     expect(await aside('q global here 1')).toBe('Moved here: read the RFC (1 waiting)')
   })
@@ -236,7 +236,7 @@ describe('named queues', () => {
 
     expect(await aside('q')).toBe(["3 queues beside this project's queue", '', 'global  1 idea   c', '@work   2 ideas  d', '@home   1 idea   b'].join('\n'))
     const ui = await band()
-    expect((await ui.find({ type: 'Text', text: /^aside: / }))?.text).toBe('aside: 1 global, 2 @work, +1 queue · ')
+    expect((await ui.find({ type: 'Text', text: /^aside: / }))?.text).toBe('aside: 4 in other queues · ')
   })
 
   test('here, add, remove, move and pop work on a named queue as on the global list', async ($, on) => {
@@ -262,7 +262,7 @@ describe('named queues', () => {
 
     expect(await aside('q work edit 1')).toBe('Idea 1 of @work is in the prompt box: change it and press Enter; it goes back to place 1.')
     expect(filled).toEqual(['+@work a'])
-    expect(await queue('+@work a, sharper')).toBe('queued "a, sharper" to @work (2 in @work)')
+    expect(await queue('+@work a, sharper')).toBe('queued "a, sharper" to @work · 2 in @work')
     expect((await aside('q work')).split('\n').slice(2)).toEqual(['  1  idea  a, sharper', '  2  idea  b'])
 
     await aside('q work edit 1')
@@ -277,7 +277,7 @@ describe('named queues', () => {
     await queue('+@solo a')
     await aside('q solo edit 1')
 
-    expect(await queue('+@solo a, sharper')).toBe('queued "a, sharper" to @solo (1 in @solo)')
+    expect(await queue('+@solo a, sharper')).toBe('queued "a, sharper" to @solo · 1 in @solo')
   })
 
   test('an idea sent back after q edit, or brought back by undo, never writes over another idea at its old key', async ($, on) => {
@@ -327,7 +327,7 @@ describe('named queues', () => {
     expect(await aside('q work undo')).toBe('Nothing to bring back to @work.')
     expect((await aside('q work')).split('\n').slice(2)).toEqual(['  1  idea  a', '  2  idea  b'])
     const ui = await band()
-    expect((await ui.find({ type: 'Text', text: /^aside: / }))?.text).toBe('aside: 2 @work · ')
+    expect((await ui.find({ type: 'Text', text: /^aside: / }))?.text).toBe('aside: 2 in another queue · ')
     await type('+g x')
     expect(await aside('g clear')).toBe('Cleared 1 idea from the global list. /aside g undo brings it back.')
     expect(await aside('g undo')).toBe('Brought back 1 idea to the global list (1 global).')
@@ -447,10 +447,10 @@ describe('named queues', () => {
     await queue('+@solo a')
     await aside('q solo edit 1')
 
-    expect(await queue('+@solo b\n+@solo c')).toBe('queued 2 ideas to @solo (2 in @solo)')
+    expect(await queue('+@solo b\n+@solo c')).toBe('queued 2 ideas to @solo · 2 in @solo')
   })
 
-  test('the band counts two named queues when the global list is empty, the one added to last first, and the rest as +2 queues', async ($, on) => {
+  test('the band sums the ideas of every other queue into one count, and /aside q lists them, the one added to last first', async ($, on) => {
     const { type, aside, band } = world($, on)
     await type('+@a one')
     await type('+@b one\n+@b two')
@@ -458,7 +458,7 @@ describe('named queues', () => {
     await type('+@d one')
 
     const ui = await band()
-    expect((await ui.find({ type: 'Text', text: /^aside: / }))?.text).toBe('aside: 1 @d, 1 @c, +2 queues · ')
+    expect((await ui.find({ type: 'Text', text: /^aside: / }))?.text).toBe('aside: 5 in other queues · ')
     expect((await aside('q')).split('\n').slice(2)).toEqual(['@d   1 idea   one', '@c   1 idea   one', '@b   2 ideas  two', '@a   1 idea   one'])
   })
 
@@ -470,7 +470,8 @@ describe('named queues', () => {
     await aside('q work add 1')
 
     const ui = await band()
-    expect((await ui.find({ type: 'Text', text: /^aside: / }))?.text).toBe('aside: 2 @work, 1 @home · ')
+    expect((await ui.find({ type: 'Text', text: /^aside: / }))?.text).toBe('aside: 3 in other queues · ')
+    expect((await aside('q')).split('\n')[2]).toMatch(/^@work /)
   })
 
   test('a queue whose name starts another\'s holds only its own ideas', async ($, on) => {
@@ -564,7 +565,7 @@ describe('queues for this project alone', () => {
     expect(await queue('+@later read the RFC')).toBe('queued "read the RFC" to @later, a new queue of this project\'s; /aside q later global shares it with every project')
     expect(await shown('q')).toEqual(["1 queue beside this project's queue", '@later 1 idea read the RFC', "↳ this project's"])
     expect(await shown('q later')).toEqual(["1 idea in @later, this project's", '1 idea read the RFC'])
-    expect(await read()).toBe('aside: 1 @later · ')
+    expect(await read()).toBe('aside: 1 in another queue · ')
 
     w.root = '/other'
     expect(await aside('q')).toBe('The global list and the named queues are empty. Start a message with "+@work" to add an idea to the queue work, or with "+g" to the global list.')
@@ -591,10 +592,10 @@ describe('queues for this project alone', () => {
       "↳ this project's",
     ])
     expect(await shown('find b')).toEqual(["In @work for every project, hidden here by this project's", '1 idea b'])
-    expect(await queue('+@work c')).toBe('queued "c" to @work (2 in @work)')
+    expect(await queue('+@work c')).toBe('queued "c" to @work · 2 in @work')
     // The line above the prompt counts this project's @work, not the one it hides.
     const ui = await band()
-    expect((await ui.find({ type: 'Text', text: /^aside: / }))?.text).toBe('aside: 2 @work · ')
+    expect((await ui.find({ type: 'Text', text: /^aside: / }))?.text).toBe('aside: 2 in another queue · ')
     await ui.unmount()
 
     expect(await aside('q work global')).toBe('Moved 2 ideas into @work for every project, which now has 3.')

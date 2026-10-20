@@ -96,10 +96,16 @@ describe('the prompt box', () => {
   test('a queued entry never reaches Claude and leaves a line in the transcript, not a toast', async ($, on) => {
     const { sent, toasts, logged, queue } = world($, on)
 
-    expect(await queue('+ dark mode')).toBe('queued "dark mode" (1 waiting)')
-    expect(logged).toEqual(['queued "dark mode" (1 waiting)'])
+    expect(await queue('+ dark mode')).toBe('queued "dark mode" · 1 waiting')
+    expect(logged).toEqual(['queued "dark mode" · 1 waiting'])
     expect(toasts).toEqual([])
     expect(sent).toEqual([])
+  })
+
+  test('the transcript line quotes a long idea up to 30 characters', async ($, on) => {
+    const { queue } = world($, on)
+
+    expect(await queue('+ rename the loader and update every caller of it')).toBe('queued "rename the loader and update…" · 1 waiting')
   })
 
   test('Enter is answered at once, and two quick entries are both stored, in order', async ($, on) => {

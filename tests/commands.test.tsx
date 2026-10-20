@@ -92,8 +92,8 @@ describe('/aside', () => {
   test('/aside TEXT queues TEXT as + would, and answers with the line alone', async ($, on) => {
     const { toasts, logged, aside, shown } = world($, on)
 
-    expect(await aside('add tests for the parser')).toBe('queued "add tests for the parser" (1 waiting)')
-    expect(await aside('+? why this order')).toBe('queued ? "why this order" - no text on the clipboard (2 waiting)')
+    expect(await aside('add tests for the parser')).toBe('queued "add tests for the parser" · 1 waiting')
+    expect(await aside('+? why this order')).toBe('queued ? "why this order" - no text on the clipboard · 2 waiting')
     expect(toasts).toEqual([])
     expect(logged).toEqual([])
     expect(await shown()).toEqual(['1 idea and 1 comment waiting', '1 idea add tests for the parser', '2 question why this order'])
@@ -103,10 +103,10 @@ describe('/aside', () => {
     const { sent, type, aside, idle } = world($, on)
     await type('+ a')
 
-    expect(await aside('send a summary to the team')).toBe('queued "send a summary to the team" (2 waiting)')
-    expect(await aside('run the tests before merge')).toBe('queued "run the tests before merge" (3 waiting)')
-    expect(await aside('clear the cache docs')).toBe('queued "clear the cache docs" (4 waiting)')
-    expect(await aside('+ run 3')).toBe('queued "run 3" (5 waiting)')
+    expect(await aside('send a summary to the team')).toBe('queued "send a summary to the team" · 2 waiting')
+    expect(await aside('run the tests before merge')).toBe('queued "run the tests before merge" · 3 waiting')
+    expect(await aside('clear the cache docs')).toBe('queued "clear the cache docs" · 4 waiting')
+    expect(await aside('+ run 3')).toBe('queued "run 3" · 5 waiting')
     await idle()
     expect(sent).toEqual([])
   })
@@ -479,11 +479,11 @@ describe('exporting the list', () => {
   test('an export is no file to read tags from, nor one a copied fragment comes from', async ($, on) => {
     const { write, queue, aside, shown } = world($, on, { files: { [REPORT_PATH]: REPORT }, clip: 'Revenue grew by 12% in the third quarter' })
     await write(REPORT_PATH)
-    expect(await queue('+? where from')).toBe('queued ? docs/report.md:5 "Revenue grew by 12% in the th…" (1 waiting)')
+    expect(await queue('+? where from')).toBe('queued ? docs/report.md:5 "Revenue grew by 12% in the th…" · 1 waiting')
     await aside('export')
     await write('/proj/aside.md')
 
-    expect(await queue('+? and this')).toBe('queued ? docs/report.md:5 "Revenue grew by 12% in the th…" (2 waiting)')
+    expect(await queue('+? and this')).toBe('queued ? docs/report.md:5 "Revenue grew by 12% in the th…" · 2 waiting')
     expect(await aside('scan aside.md')).toBe('aside.md is an aside export; its tags are read from the files it lists.')
     expect((await shown()).filter(line => line.startsWith('·'))).toEqual(['· question is this the same for Poland'])
   })
@@ -510,19 +510,19 @@ describe('exporting the list', () => {
 
   test('a copied fragment is found by grep in its own file, not in an export that quotes it', async ($, on) => {
     const { w, queue, aside } = world($, on, { files: { [REPORT_PATH]: REPORT }, grep: REPORT_PATH, clip: 'Revenue grew by 12% in the third quarter' })
-    expect(await queue('+? where from')).toBe('queued ? docs/report.md:5 "Revenue grew by 12% in the th…" (1 waiting)')
+    expect(await queue('+? where from')).toBe('queued ? docs/report.md:5 "Revenue grew by 12% in the th…" · 1 waiting')
     await aside('export')
     w.grep = `/proj/aside.md\n${REPORT_PATH}`
 
-    expect(await queue('+? and this')).toBe('queued ? docs/report.md:5 "Revenue grew by 12% in the th…" (2 waiting)')
+    expect(await queue('+? and this')).toBe('queued ? docs/report.md:5 "Revenue grew by 12% in the th…" · 2 waiting')
   })
 
   test('a copied fragment is found by a walk in its own file, not in an export that quotes it', async ($, on) => {
     const { queue, aside } = world($, on, { system: 'mac', files: { [REPORT_PATH]: REPORT }, clip: 'Revenue grew by 12% in the third quarter' })
-    expect(await queue('+? where from')).toBe('queued ? docs/report.md:5 "Revenue grew by 12% in the th…" (1 waiting)')
+    expect(await queue('+? where from')).toBe('queued ? docs/report.md:5 "Revenue grew by 12% in the th…" · 1 waiting')
     await aside('export')
 
-    expect(await queue('+? and this')).toBe('queued ? docs/report.md:5 "Revenue grew by 12% in the th…" (2 waiting)')
+    expect(await queue('+? and this')).toBe('queued ? docs/report.md:5 "Revenue grew by 12% in the th…" · 2 waiting')
   })
 })
 
@@ -701,7 +701,7 @@ describe('importing a list', () => {
     await aside('import notes.md')
     expect(await read()).toBe('aside: 3 ideas · ')
     await aside('g import notes.md')
-    expect(await read()).toBe('aside: 3 ideas, 2 global · ')
+    expect(await read()).toBe('aside: 3 ideas, 2 in another queue · ')
   })
 
   test('/aside import refuses an aside export, a file it cannot read, one with no list and one of more than 100 items', async ($, on) => {

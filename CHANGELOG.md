@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- The line above the prompt counts the ideas of all other queues as one number, `3 in other queues`, in place of each queue by name; `/aside q` names them. The line a queued entry leaves in the transcript is shorter: a quote of 30 characters and `· 2 waiting` in place of `(2 waiting)`.
+
 ## 0.32.0 - 2026-10-20
 
 - A step that leaves work going in the background, a workflow, an agent or a command started in its turn, no longer ends, or waits for you, while that work runs: it shows as running in the background, `working in the background: review` under it, and the turn of the work's notification ends it and runs the next step; work Claude stops ends there too. Your own messages meanwhile are not the step's. `/aside continue` ends such a step and goes on, and `/aside stop` ends it as it stands. A last step leaving work in the background writes its summary once that work is done.

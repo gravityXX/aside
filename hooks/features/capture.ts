@@ -165,17 +165,17 @@ async function pinComment($: Engine, entry: TypedEntry, root: string, seen: read
 const reportQueued = (entries: readonly Entry[], notes: readonly string[], root: string, waiting: number) => {
   const why = notes.length > 0 ? ` - ${[...new Set(notes)].join('; ')}` : ''
   if (entries.length > 1) {
-    return `queued ${entries.length} entries${why} (${waiting} waiting)`
+    return `queued ${entries.length} entries${why} · ${waiting} waiting`
   }
   const entry = entries[0]!
   if (entry.kind === 'idea') {
-    return `queued "${shortenText(entry.text)}" (${waiting} waiting)`
+    return `queued "${shortenText(entry.text, 30)}" · ${waiting} waiting`
   }
   const at = formatPlace(entry, root)
   const quote = entry.quote ? ` "${shortenText(entry.quote, 30)}"` : ''
   const spot = at || quote ? `${at}${quote}`.trimStart() : `"${shortenText(entry.text, 30)}"`
 
-  return `queued ${KINDS[entry.kind].mark} ${spot}${why} (${waiting} waiting)`
+  return `queued ${KINDS[entry.kind].mark} ${spot}${why} · ${waiting} waiting`
 }
 
 // An edited entry back at its place as /aside showed it.
@@ -231,14 +231,14 @@ async function storeListed($: Engine, ideas: readonly Listed[], isSingle: boolea
 const reportListed = (ideas: readonly Listed[], band: Band, isNew: (list: string) => boolean): string[] =>
   [...new Set(ideas.map(one => one.list))].map(list => {
     const own = ideas.filter(one => one.list === list)
-    const what = own.length === 1 ? `"${shortenText(own[0]!.entry.text)}"` : formatCount(own.length, 'idea')
+    const what = own.length === 1 ? `"${shortenText(own[0]!.entry.text, 30)}"` : formatCount(own.length, 'idea')
     if (list === GLOBAL) {
-      return `queued ${what} to the global list (${band.global ?? 0} global)`
+      return `queued ${what} to the global list · ${band.global ?? 0} global`
     }
     const name = queueName(list)
     const count = band.named?.find(one => one.name === name)?.count ?? own.length
 
-    return isNew(list) ? `queued ${what} to @${name}, ${newQueueNote(name, isLocalQueue(list))}` : `queued ${what} to @${name} (${count} in @${name})`
+    return isNew(list) ? `queued ${what} to @${name}, ${newQueueNote(name, isLocalQueue(list))}` : `queued ${what} to @${name} · ${count} in @${name}`
   })
 
 // A tidied text from the small model, or undefined when none comes in time.
