@@ -42,6 +42,8 @@ export async function tagsInFiles($: Engine, onlyNew = false): Promise<Entry[]> 
 }
 
 // What /aside shows: the queue, the tags in files and the plan, with what each section holds.
+// While a run goes on, a step running, waiting or paused after, the plan comes first, so what
+// happens now is at the top however long the queue is.
 async function loadListing($: Engine, ctx: Context) {
   const { root, queue, plan: planKey, handed } = await projectKeys($)
   const list = inOrder(await loadEntries($, queue), ctx.settings.order)
@@ -49,11 +51,9 @@ async function loadListing($: Engine, ctx: Context) {
   const handedOver = new Set(await loadHanded($, handed))
   const plan = await loadPlan($, planKey)
   const steps = planSection(plan, await $.clock.now())
-  const sections = [
-    queueSection(list, root),
-    ...(tags.length > 0 ? [tagsSection(tags, root, tag => handedOver.has(tagId(tag)))] : []),
-    ...(steps ? [steps] : []),
-  ]
+  const queued = [queueSection(list, root), ...(tags.length > 0 ? [tagsSection(tags, root, tag => handedOver.has(tagId(tag)))] : [])]
+  const isRunGoing = plan.active !== undefined || plan.paused !== undefined
+  const sections = steps === null ? queued : isRunGoing ? [steps, ...queued] : [...queued, steps]
 
   return { root, list, tags, plan, sections }
 }

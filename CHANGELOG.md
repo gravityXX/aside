@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- While a run goes on, a step running, waiting or paused after, `/aside`, the list pane and `/aside export` show the plan first and the queue under it, so what happens now is at the top however long the queue is.
+
 ## 0.34.0 - 2026-10-20
 
 - `/aside q` shows each queue under its own heading, `@work · 4 ideas`, with its first three ideas numbered as `/aside q work` numbers them, in place of columns that came apart on a narrow screen; a line under them says how to see them all. The mobile app frames `/aside` listings and the saved plan as the terminal does.
