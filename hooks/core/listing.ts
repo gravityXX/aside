@@ -121,9 +121,10 @@ export const awayWork = (active: NonNullable<Plan['active']>) => [...new Set((ac
 export const isWaiting = (active: NonNullable<Plan['active']>) => active.pausedFor !== undefined && active.turnId === undefined
 
 // The plan, with what each step done took and said under it, and how long the step running
-// or waiting has gone on by `now`; null with no plan. A plan run to its end stays in the
-// listing until the next one takes its place.
-export const planSection = (plan: Plan, now: number): ListingSection | null => {
+// or waiting has gone on by `now`, with what the one running does now (`doing`, its turn's
+// last tool) or waits for; null with no plan. A plan run to its end stays in the listing until
+// the next one takes its place.
+export const planSection = (plan: Plan, now: number, doing?: string): ListingSection | null => {
   if (plan.steps.length === 0) {
     return null
   }
@@ -154,14 +155,16 @@ export const planSection = (plan: Plan, now: number): ListingSection | null => {
             : `Plan: ${toDo} (/aside run)${soFar}`,
     rows: plan.steps.map((step, i) => {
       const going = timeOf(sinceStart)
+      // Its time first, then what it did, waits for or does now: the mark and the word beside
+      // the title say its state.
       const said = step.isDone
-        ? [timeOf(step.ms) && `took ${timeOf(step.ms)}`, step.result ?? '']
+        ? [timeOf(step.ms), step.result ?? '']
         : waiting?.step === i
-          ? [going && `waiting for you, ${going}`, waiting.result ?? '']
+          ? [going, waiting.result ?? '']
           : active?.step === i && isAway(active)
-            ? [`working in the background${awayWork(active) && `: ${awayWork(active)}`}${going && `, ${going}`}`]
+            ? [going, `in the background${awayWork(active) && `: ${awayWork(active)}`}`]
             : active?.step === i
-              ? [going && `running for ${going}`]
+              ? [going, doing ? `now: ${doing}` : '']
               : []
       const about = said.filter(Boolean).join(' · ')
 
@@ -178,7 +181,7 @@ export const runSection = (run: PastRun, n: number, now: number): ListingSection
   return {
     title: `Run ${n}, ${formatAge(now - run.at)}: ${formatCount(run.steps.length, 'step')}${timeOf(ms) && ` in ${timeOf(ms)}`}`,
     rows: run.steps.map((step, i) => {
-      const about = [timeOf(step.ms) && `took ${timeOf(step.ms)}`, step.result ?? ''].filter(Boolean).join(' · ')
+      const about = [timeOf(step.ms), step.result ?? ''].filter(Boolean).join(' · ')
 
       return { label: String(i + 1), word: 'done', lines: [step.title], about: about ? [about] : [] }
     }),

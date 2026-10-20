@@ -339,10 +339,16 @@ def step4(c: Theme) -> str:
             "1",
             "done",
             "cache the parsed config",
-            "↳ cached once at start-up; the tests pass",
+            "↳ 2 min · cached once at start-up; the tests pass",
             "k",
         ),
-        ("2", "running", "where is this from", "", "kquestion"),
+        (
+            "2",
+            "running",
+            "where is this from",
+            "↳ 1 min · now: Grep, revenue",
+            "kquestion",
+        ),
         ("3", "to do", "a shorter results section", "", ""),
     ]
     y: float = TOP
@@ -381,7 +387,8 @@ def step4(c: Theme) -> str:
     label = (
         "In Claude Code: /aside plan has Claude save the queue as steps, and /aside run all sends them one after another. "
         "Above the prompt, aside: step 2/3 running, 1 idea, with list and stop buttons. The list shows the plan: step 1 done "
-        "with its result under it, cached once at start-up; the tests pass, step 2 running, step 3 to do. After the last "
+        "with its time and result under it, 2 min, cached once at start-up; the tests pass, step 2 running for 1 min, "
+        "now in Grep, step 3 to do. After the last "
         "step, Claude ends with a summary of the run: what was done, what is open and what comes next."
     )
     return window(c, int(y + 26), "Claude Code", body, label)
