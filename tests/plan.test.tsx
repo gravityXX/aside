@@ -2823,6 +2823,36 @@ describe('planning on a model of its own', () => {
     expect((await shown()).slice(0, 1)).toEqual(['The queue is empty.'])
   })
 
+  test('a tidy reply that comes while a new entry is being stored is in the queue before the planner reads it', SONNET, async ($, on) => {
+    const { w, planned, clock, type, enter, aside, shown } = world($, on, { tidy: { 'dark mod': '<note>Dark mode.</note>' } })
+    let release = () => {}
+    const held = new Promise<void>(resolve => {
+      release = resolve
+    })
+    // The tidying of the first entry waits to be let go; every model call after it, the
+    // planner's among them, takes a moment.
+    w.meanwhile = async () => {
+      w.meanwhile = () => clock.sleep(1)
+      await held
+    }
+    await type('+ dark mod')
+    w.planReply = '{"steps": [{"title": "Dark mode", "prompt": "Add a dark mode."}, {"title": "Login", "prompt": "Fix the login bug."}]}'
+    // The tidy reply comes while the second entry is on its way to the store.
+    w.beforeWrite = async key => {
+      if (!key.startsWith('queue:')) return
+      w.beforeWrite = undefined
+      release()
+      await clock.sleep(1)
+    }
+
+    await enter('+ fix the login bug')
+    const planning = aside('plan')
+    await clock.advance(5)
+    expect(await planning).toBe(['Plan: 2 of 2 steps to do (/aside run)', '', '  1  to do  Dark mode', '  2  to do  Login'].join('\n'))
+    expect(planned[0]!.prompt).toContain('1. Dark mode.')
+    expect((await shown()).slice(0, 1)).toEqual(['The queue is empty.'])
+  })
+
   test('two asks at once start one planner', SONNET, async ($, on) => {
     const { w, planned, type, aside } = world($, on)
     await type('+ dark mode')

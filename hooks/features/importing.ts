@@ -1,13 +1,13 @@
 import type { EngineInterface as Engine } from 'claude-code'
 
 import type { Entry, Kind } from '../../types'
-import type { Context } from '../context'
 import { KINDS, parseEntries } from '../core/entries'
 import { describeCount, isExportText } from '../core/listing'
 import { listItems } from '../core/markdown'
 import { formatCount, newQueueNote, relativePath } from '../core/text'
 import { resolveFile, tryReadFile } from '../io/host'
-import { addIdeas, GLOBAL, isLocalQueue, loadEntries, loadIdeas, projectKeys, queueName, readTrackedFiles, refreshBand, saveEntries } from '../io/store'
+import { changeQueue } from '../io/queue'
+import { addIdeas, GLOBAL, isLocalQueue, loadIdeas, projectKeys, queueName, readTrackedFiles, refreshBand } from '../io/store'
 
 // How many list items one /aside import takes, so a long file is not queued by mistake.
 const MOST_ITEMS = 100
@@ -46,7 +46,7 @@ const leftOut = (parts: readonly string[]) => (parts.some(Boolean) ? ` Left out:
 
 // /aside import FILE, or /aside g import FILE and /aside q NAME import FILE with `queue`: the items
 // of a markdown list in the file become entries at the end of that queue, the file as it was.
-export async function importFile($: Engine, ctx: Context, name: string, queue?: string): Promise<string> {
+export async function importFile($: Engine, name: string, queue?: string): Promise<string> {
   const { root } = await projectKeys($)
   const file = await resolveFile($, name, root, await readTrackedFiles($))
   const shown = relativePath(file, root)
@@ -68,24 +68,22 @@ export async function importFile($: Engine, ctx: Context, name: string, queue?: 
     return `${shown} holds ${items.length} list items; /aside import takes ${MOST_ITEMS} at most.`
   }
 
-  return queue === undefined ? importHere($, ctx, shown, items, ticked) : importInto($, queue, shown, items, ticked)
+  return queue === undefined ? importHere($, shown, items, ticked) : importInto($, queue, shown, items, ticked)
 }
 
-// Into this project's queue, after every write this session chained before it, as typed entries
-// are, so neither writes over the other; read and written in one go, so a failure leaves the
-// queue as it was.
-async function importHere($: Engine, ctx: Context, shown: string, items: readonly Item[], ticked: string): Promise<string> {
-  const done = ctx.session.writes.then(async () => {
-    const keys = await projectKeys($)
-    const stored = await loadEntries($, keys.queue)
+// Into this project's queue, as one change on it, as typed entries are, so neither writes over
+// the other; read and written in one go, so a failure leaves the queue as it was.
+async function importHere($: Engine, shown: string, items: readonly Item[], ticked: string): Promise<string> {
+  const { added, waiting, parts } = await changeQueue($, async stored => {
     const now = await $.clock.now()
     const added: Entry[] = freshItems(items, stored).map(({ kind, text }) => ({ text, raw: `${typedMark(kind)} ${text}`, at: now, kind }))
-    if (added.length > 0) await saveEntries($, keys.queue, [...stored, ...added])
-    await refreshBand($)
-    return { added, waiting: stored.length + added.length, parts: leftOutParts(items, stored, added.length, 'in the queue') }
+
+    return {
+      ...(added.length > 0 ? { list: [...stored, ...added] } : {}),
+      value: { added, waiting: stored.length + added.length, parts: leftOutParts(items, stored, added.length, 'in the queue') },
+    }
   })
-  ctx.session.writes = done.catch(() => undefined)
-  const { added, waiting, parts } = await done
+  await refreshBand($)
 
   return added.length === 0
     ? `Nothing new in ${shown}: its items are in the queue already.${leftOut([...parts.slice(1), ticked])}`
