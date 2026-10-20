@@ -149,17 +149,16 @@ async function planAfterStep($: Engine, ctx: Context, asker: Asker): Promise<str
 // it saves after the plan's own even when a reload has lost what this session knew.
 async function handOver($: Engine, ctx: Context, isAdding: boolean): Promise<{ text: string; isHanded: boolean }> {
   const keys = await projectKeys($)
-  const stored = await loadEntries($, keys.queue)
   // Tags already handed over stay in their files until a step removes them; they are
-  // not handed over again.
+  // not handed over again. The take reads the queue itself, so nothing typed meanwhile is
+  // stored between that read and its write.
   const tags = await tagsInFiles($, true)
+  // The entries leave the queue as they are handed over; /aside undo brings them back.
+  const { stored, giveBack } = await takeForHandOver($, tags)
   const all = [...inOrder(stored, ctx.settings.order), ...tags]
   if (all.length === 0) {
     return { text: EMPTY_QUEUE, isHanded: false }
   }
-
-  // The entries leave the queue as they are handed over; /aside undo brings them back.
-  const { giveBack } = await takeForHandOver($, keys, stored, tags)
   await refreshBand($, 0)
   const me = await $.session.id()
   const plan = await changePlan($, ctx, plan => {
@@ -582,14 +581,14 @@ async function replacePlan($: Engine, ctx: Context, steps: readonly Step[]): Pro
 export async function runEntries($: Engine, ctx: Context): Promise<string> {
   const keys = await projectKeys($)
   const note = takeOverNote(await loadPlan($, keys.plan))
-  const stored = await loadEntries($, keys.queue)
   const tags = await tagsInFiles($, true)
+  // As a hand-over does, the take reads the queue itself.
+  const { stored, giveBack } = await takeForHandOver($, tags)
   const all = [...inOrder(stored, ctx.settings.order), ...tags]
   if (all.length === 0) {
     return 'Nothing to run: the queue is empty and the plan is done.'
   }
   const steps = all.map(entry => entryStep(entry, keys.root))
-  const { giveBack } = await takeForHandOver($, keys, stored, tags)
   if (!(await replacePlan($, ctx, steps))) {
     await giveBack()
     await refreshBand($, tags.length)

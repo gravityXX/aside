@@ -127,6 +127,27 @@ describe('while an entry is on its way to the store', () => {
     expect(await aside('undo')).toBe('Brought back 1 entry, 2 waiting.')
     expect(await shown()).toEqual(['2 ideas waiting', '1 idea first', '2 idea second'])
   })
+
+  test('an entry typed as a hand-over starts lands in the queue, and undo brings back the rest', async ($, on) => {
+    const { w, clock, type, enter, aside, shown } = world($, on)
+    await type('+ first')
+    // The hand-over's take is a moment on its way to the store, and the entry typed just before
+    // it is stored meanwhile.
+    w.beforeWrite = async key => {
+      if (!key.startsWith('taken:')) return
+      w.beforeWrite = undefined
+      await clock.sleep(2)
+    }
+    await enter('+ second')
+    const planning = aside('plan')
+    await clock.settle()
+    await clock.advance(5)
+
+    expect(await planning).toBe('Organizing 1 idea.')
+    expect(await shown()).toEqual(['1 idea waiting', '1 idea second'])
+    expect(await aside('undo')).toBe('Brought back 1 entry, 2 waiting.')
+    expect(await shown()).toEqual(['2 ideas waiting', '1 idea first', '2 idea second'])
+  })
 })
 
 describe('the prompt box', () => {
