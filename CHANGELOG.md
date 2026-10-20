@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.37.1 - 2026-10-20
 
 - An entry typed with "+" just as `/aside plan`, `/aside run`, `/aside clear` or `/aside undo` starts is no longer lost: it stays in the queue, and `/aside undo` brings back exactly what was taken. A hand-over that fails puts its entries back once each.
 - With `planModel` on a model of its own, `/aside plan` right after typing no longer gives up because the queue changed: the planner reads every entry as tidied. Removing, moving, editing or popping an entry, or moving one to or from another queue, while its tidied text comes back keeps both changes.
