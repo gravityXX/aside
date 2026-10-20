@@ -3609,3 +3609,48 @@ describe('the title of a step made of an entry', () => {
     expect(await aside()).not.toContain('Late title')
   })
 })
+
+describe('a step an earlier process left running', () => {
+  const LEFT = { step: 0, isChain: true, sessionId: 'session-1', turnId: 'before-resume', startedAt: 0 }
+
+  test('/aside stop ends it as it stands', async ($, on) => {
+    const { aside, shown, fromAnotherSession } = world($, on)
+    await fromAnotherSession('plan:/proj', { steps: STEPS, active: LEFT })
+
+    expect(await aside('stop')).toBe('Step 1 is done as it stands, and the plan stops there.')
+    expect((await shown()).slice(1, 3)).toEqual(['Plan: 2 of 3 steps to do (/aside run) · 1 s so far', '1 done One'])
+  })
+
+  test('/aside continue ends it and goes on with the next step', async ($, on) => {
+    const { sent, aside, idle, fromAnotherSession } = world($, on)
+    await fromAnotherSession('plan:/proj', { steps: STEPS, active: LEFT })
+
+    expect(await aside('continue')).toBe('Step 1 done; going on with the plan from step 2. /aside stop stops after the current one.')
+    await idle()
+    expect(sent.at(-1)).toContain('(Step 2 of 3 of the queue plan, "Two", sent by the aside plugin.')
+  })
+
+  test('/aside continue on the last step left running sums the run up in the next turn, which ends it', async ($, on) => {
+    const { sent, aside, shown, startTurn, endTurn, idle, fromAnotherSession } = world($, on)
+    const steps = [{ ...STEPS[0], isDone: true, ms: 60_000 }, STEPS[1]]
+    await fromAnotherSession('plan:/proj', { steps, active: { ...LEFT, step: 1 } })
+    await aside('continue')
+    await idle()
+    await startTurn(sent.at(-1)!, 'e1')
+    await endTurn('e1', 'answer', 'Result: summed up.')
+    await idle()
+
+    expect((await shown()).find(line => line.startsWith('Plan'))).toMatch(/^Plan done: 2 steps/)
+  })
+
+  test('a step whose turn runs in this process now is not left: /aside stop stops after it', async ($, on) => {
+    const { sent, aside, savePlan, startTurn, idle } = world($, on)
+    await savePlan(STEPS)
+    await aside('run all')
+    await idle()
+    await startTurn(sent[0]!, 's1')
+
+    expect(await aside('stop')).toBe('The plan stops after step 1.')
+    expect(await aside('continue')).not.toContain('Step 1 done')
+  })
+})
