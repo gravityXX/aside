@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- `/aside stop` and `/aside continue` end a step that an earlier process left running in this session, as after a resume of a session that closed in the middle of a step: stop ends it as it stands, continue ends it and goes on. A step whose turn runs in this process now still stops after it.
+
 ## 0.36.0 - 2026-10-20
 
 - The `/aside` frame and the saved plan take the whole width of the terminal, with the state of a step at its right edge. An entry run as a step keeps up to 120 characters of its text as its title, and while `tidy` is on, a small model names a step made of a long entry once the run has started.

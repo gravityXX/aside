@@ -327,6 +327,12 @@ function completeStep(plan: Plan, active: NonNullable<Plan['active']>, me: strin
   return after
 }
 
+// A step running in this session on a turn this process never saw start, or saw start and
+// never end: one an earlier process left when it closed in the middle of it. /aside continue
+// and /aside stop end it, as one that waits; a turn of this process still running is its own.
+const isLeftHere = (ctx: Context, active: NonNullable<Plan['active']>, me: string) =>
+  active.sessionId === me && active.turnId !== undefined && !ctx.session.openTurns.has(active.turnId)
+
 // /aside continue on a step that waits for the person, in this session or one before it: it
 // is done, and its run goes on here. The last step of a run of several takes one more turn
 // first, which sums the run up and then ends it, as it stands if that turn is cut short, with
@@ -336,8 +342,9 @@ async function goOnFromWaiting($: Engine, ctx: Context): Promise<string | undefi
   const now = await $.clock.now()
   const end = await changePlan($, ctx, plan => {
     const active = plan.active
-    if (!active || !(isWaiting(active) || isAway(active))) return undefined
+    if (!active || !(isWaiting(active) || isAway(active) || isLeftHere(ctx, active, me))) return undefined
     const note = active.sessionId === me ? '' : takeOverNote(plan)
+    delete active.turnId
     // What it was still to wait for in the background is let go, as continue ends it.
     delete active.background
     delete active.isAway
@@ -602,7 +609,7 @@ export async function stopPlan($: Engine, ctx: Context): Promise<string> {
       return undefined
     }
     const n = active.step + 1
-    if (isWaiting(active) || isAway(active) || (active.isEnding && active.turnId === undefined)) {
+    if (isWaiting(active) || isAway(active) || (active.isEnding && active.turnId === undefined) || isLeftHere(ctx, active, me)) {
       completeStep(plan, active, me, false, now)
       return `Step ${n} is done as it stands, and the plan stops there.`
     }
