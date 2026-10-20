@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.29.0 - 2026-10-20
 
 - A step's time is the time by the clock from its first turn to its end, the wait for your answer included, not only the seconds Claude's turns took; a turn of something else before it does not count. The plan says how long the step running has gone on, `running for 12 min` or `waiting for you, 12 min`, and `took 14 min` under each step done, in `/aside` and `/aside log`, and an open pane moves it on as time passes; a time under a second is left out. A step started by an earlier release keeps the time of its turns.
 - The plan marks each step's state with a sign of its own: `✓` done, `▶` running, `?` waiting for you and `○` to do, in place of three dots alike. In the pane, a long title no longer breaks the word running or waiting beside it.
