@@ -10,7 +10,7 @@ import { findFragment, findHeading, fragmentWords, MARKDOWN_PATH, MIN_FRAGMENT_W
 import { readTidyReply, TIDY_SYSTEM, tidyPrompt } from '../core/prompts'
 import { describeError, describeTool, formatCount, newQueueNote, relativePath, shortenText } from '../core/text'
 import { readClipboard, readGitBranch, resolveFile, searchMarkdown, tryReadFile } from '../io/host'
-import { changeQueue } from '../io/queue'
+import { changeQueue, changeQueueAfter } from '../io/queue'
 import {
   addIdeas,
   countQueues,
@@ -314,8 +314,10 @@ export async function addEntries(
   let onGlobal: GlobalIdea[] = []
   let isStored = false
   // One change on the queue for the whole message, so messages sent one after another are stored
-  // in that order, and an entry back from /aside edit is put back by one of them alone.
-  const { keys, added, all, notes, listed, queues } = await changeQueue($, async stored => {
+  // in that order, and an entry back from /aside edit is put back by one of them alone. The slow
+  // part (git, the clipboard, the files a comment points into) comes before the queue is read,
+  // so the list is read right before it is stored, as it was before the chain.
+  const prepare = async () => {
     const keys = await projectKeys($)
     const seen = await readTrackedFiles($)
     const now = await $.clock.now()
@@ -357,6 +359,9 @@ export async function addEntries(
       added.push({ text: one.text, raw: one.raw, at: now, kind: one.kind, ...spot, ...(task ? { task } : {}), ...(branch ? { branch } : {}) })
     }
 
+    return { keys, editing, isRework, added, notes, listed, queues }
+  }
+  const { keys, added, all, notes, listed, queues } = await changeQueueAfter($, prepare, async (stored, { keys, editing, isRework, added, notes, listed, queues }) => {
     const all = isRework ? putBack(stored, added, editing!.index, ctx.settings.order) : [...stored, ...added]
     // The ideas for queues of no project first, and taken back should the queue's write fail, so
     // a message is kept whole or not at all and sent again adds nothing twice.

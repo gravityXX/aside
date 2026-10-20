@@ -80,6 +80,8 @@ export type Machine = {
   meanwhile?: () => Promise<unknown>
   // Holds the engine's own end of a turn until it settles, as a slow hook beneath would.
   turnEndHeld?: Promise<unknown>
+  // Holds each git run until it settles, as a slow disk or a busy repository would.
+  gitHeld?: Promise<unknown>
   // What the small model answers when it names a step; no answer when left out.
   titleReply?: string
 }
@@ -228,7 +230,7 @@ export const world = ($: Engine, on: On, given: Partial<Machine> = {}) => {
     }
     return { value: [...names].map(([name, kind]) => ({ name, kind, size: 100, mtimeMs: 0, isLink: false })) } as never
   })
-  on('process.run', ($e, e) => {
+  on('process.run', async ($e, e) => {
     runs.push(e.argv[0]!)
     const isMac = w.system === 'mac'
     // The engine refuses a command that is not installed.
@@ -244,6 +246,7 @@ export const world = ($: Engine, on: On, given: Partial<Machine> = {}) => {
       case 'xsel':
         return reader === undefined ? missing : ran(reader === 0 ? w.clip : '', reader)
       case 'git':
+        await w.gitHeld
         return ran(`${w.branch}\n`)
       case 'grep':
         // BSD grep has no -P and fails with 2; Windows has none.
