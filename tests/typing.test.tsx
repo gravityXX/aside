@@ -395,6 +395,77 @@ describe('tidying what was typed', () => {
     expect(await shown()).toEqual(['1 idea waiting', '1 idea Dark mode.'])
   })
 
+  test('an entry taken to edit while a tidy reply is on its way to the store goes back to its place, and the tidied text is kept', async ($, on) => {
+    const { w, clock, filled, type, aside, shown, idle } = world($, on, { tidy: { 'dark mod': '<note>Dark mode.</note>' } })
+    await type('+ fix the login bug')
+    await idle()
+    // The tidied text is a moment on its way to the store while the first entry is taken out.
+    let editing: Promise<string> | undefined
+    w.meanwhile = async () => {
+      w.meanwhile = undefined
+      w.beforeWrite = async key => {
+        if (!key.startsWith('queue:')) return
+        w.beforeWrite = undefined
+        editing = aside('edit 1')
+        await clock.sleep(2)
+      }
+    }
+    await type('+ dark mod')
+    await idle()
+
+    expect(await editing).toBe('Entry 1 is in the prompt box: change it and press Enter; it goes back to place 1, still pointing where it did.')
+    expect(filled).toEqual(['+ fix the login bug'])
+    expect(await shown()).toEqual(['1 idea waiting', '1 idea Dark mode.'])
+    await type('+ fix the login bug today')
+    expect(await shown()).toEqual(['2 ideas waiting', '1 idea fix the login bug today', '2 idea Dark mode.'])
+  })
+
+  test('an entry popped while a tidy reply is on its way to the store stays out, and the tidied text is kept', async ($, on) => {
+    const { w, clock, filled, type, aside, shown, idle } = world($, on, { tidy: { 'dark mod': '<note>Dark mode.</note>' } })
+    await type('+ fix the login bug')
+    await idle()
+    // The tidied text is a moment on its way to the store while the first entry is popped.
+    let popping: Promise<string> | undefined
+    w.meanwhile = async () => {
+      w.meanwhile = undefined
+      w.beforeWrite = async key => {
+        if (!key.startsWith('queue:')) return
+        w.beforeWrite = undefined
+        popping = aside('pop')
+        await clock.sleep(2)
+      }
+    }
+    await type('+ dark mod')
+    await idle()
+
+    expect(await popping).toBe('In the prompt box, ready to send: fix the login bug')
+    expect(filled).toEqual(['fix the login bug'])
+    expect(await shown()).toEqual(['1 idea waiting', '1 idea Dark mode.'])
+  })
+
+  test('entries moved while a tidy reply is on its way to the store keep their new places, and the tidied text is kept', async ($, on) => {
+    const { w, clock, type, aside, shown, idle } = world($, on, { tidy: { 'dark mod': '<note>Dark mode.</note>' } })
+    await type('+ fix the login bug')
+    await type('+ write the docs')
+    await idle()
+    // The tidied text is a moment on its way to the store while the first two entries swap.
+    let moving: Promise<string> | undefined
+    w.meanwhile = async () => {
+      w.meanwhile = undefined
+      w.beforeWrite = async key => {
+        if (!key.startsWith('queue:')) return
+        w.beforeWrite = undefined
+        moving = aside('move 2 1')
+        await clock.sleep(2)
+      }
+    }
+    await type('+ dark mod')
+    await idle()
+
+    await moving
+    expect(await shown()).toEqual(['3 ideas waiting', '1 idea write the docs', '2 idea fix the login bug', '3 idea Dark mode.'])
+  })
+
   test('with tidy off, nothing is sent to the model', { options: { tidy: 'off' } }, async ($, on) => {
     const { asked, type, shown, idle } = world($, on, { tidy: { 'dark mode': '<note>Dark mode.</note>' } })
     await type('+ dark mode')
