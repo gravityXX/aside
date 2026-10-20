@@ -299,12 +299,14 @@ async function runningHere($: Engine, plan: Plan): Promise<string | undefined> {
     : `Step ${n} is running. /aside stop stops after it.`
 }
 
-// Marks the step `active` runs done at `now`, with the time its turns took and what the last
-// one said, and with isGoingOn, the next step of its run running in that same change, so nothing
+// Marks the step `active` runs done at `now`, with the time it took and what its last turn
+// said, and with isGoingOn, the next step of its run running in that same change, so nothing
 // in between finds the run with no step. Answers that step, or -1 with none.
 function completeStep(plan: Plan, active: NonNullable<Plan['active']>, me: string, isGoingOn: boolean, now: number): number {
   const step = plan.steps[active.step]!
-  plan.steps[active.step] = { ...step, isDone: true, ms: active.ms ?? 0, doneAt: now, ...(active.result ? { result: active.result } : {}) }
+  // The time by the clock, waits for the person included; never less than its turns took.
+  const ms = Math.max(active.ms ?? 0, active.startedAt === undefined ? 0 : now - active.startedAt)
+  plan.steps[active.step] = { ...step, isDone: true, ms, doneAt: now, ...(active.result ? { result: active.result } : {}) }
   delete plan.active
   const after = isGoingOn ? nextInRun(plan.steps, active.step, active.isChain, active.then) : -1
   if (after >= 0) {
@@ -362,7 +364,7 @@ async function goOnFromWaiting($: Engine, ctx: Context): Promise<string | undefi
 const doneText = (steps: readonly Step[]) => {
   const ms = steps.reduce((sum, one) => sum + (one.ms ?? 0), 0)
 
-  return `Plan done: ${formatCount(steps.length, 'step')}${ms > 0 ? ` in ${formatDuration(ms)}` : ''}`
+  return `Plan done: ${formatCount(steps.length, 'step')}${ms >= 1000 ? ` in ${formatDuration(ms)}` : ''}`
 }
 
 // Where a paused run goes on: the next of its own steps still to do, or -1 with none left.
@@ -697,7 +699,7 @@ export async function savePlanFromTool(ctx: Context, $: Engine, e: PlanToolCall[
   const plan = (await savePlanSteps($, ctx, steps, isAddingTurn(old, me, ctx.session.turnId) ? 'tool' : 'replan'))!
   if (planning) planning.isSaved = true
   await refreshBand($, left.some(one => one.entry.isTag) ? (await tagsInFiles($, true)).length : undefined)
-  const sections = [planSection(plan)!, ...(left.length > 0 ? [leftOutSection(left, keys.root)] : [])]
+  const sections = [planSection(plan, await $.clock.now())!, ...(left.length > 0 ? [leftOutSection(left, keys.root)] : [])]
 
   return { result: listingText(sections), context: [PLAN_SAVED_NOTE] }
 }
@@ -839,7 +841,7 @@ async function planOutside($: Engine, ctx: Context, model: Exclude<PlanModel, 's
       (error: unknown) => ` Its entries stay in the queue too (${describeError(error)}).`,
     )
     await refreshBand($, (await tagsInFiles($, true)).length)
-    const sections = [planSection(plan)!, ...(left.length > 0 ? [leftOutSection(left, keys.root)] : [])]
+    const sections = [planSection(plan, await $.clock.now())!, ...(left.length > 0 ? [leftOutSection(left, keys.root)] : [])]
     const text = listingText(sections)
     // While Claude works, the command's own text shows only after the turn: the pane, or else
     // the transcript, shows the plan now.
@@ -900,12 +902,17 @@ export async function pausePlanFromTool(ctx: Context, $: Engine, e: PlanToolCall
   return { result: `The step waits for the user's answer. Ask your question, then end your reply with the "Result: " line; their answer comes to this step, and /aside continue ends it.${summary}` }
 }
 
-// The turn of a plan step: remember which, so its end runs the next one.
+// The turn of a plan step: remember which, so its end runs the next one. The step's time
+// starts with its first turn, not when it was asked for, as its prompt may wait behind a turn
+// of something else.
 async function bindStepTurn($: Engine, ctx: Context, turnId: string) {
   const me = await $.session.id()
+  const now = await $.clock.now()
   await changePlan($, ctx, plan => {
     const active = plan.active
-    if (active && active.turnId === undefined && active.sessionId === me) active.turnId = turnId
+    if (!active || active.turnId !== undefined || active.sessionId !== me) return
+    active.turnId = turnId
+    active.startedAt ??= now
   })
 }
 
@@ -987,7 +994,7 @@ const PLANNING_PAUSE = 'to organize the queue'
 // whatever ended the turn, keeping its time and what it said so far; with /aside plan asked
 // meanwhile, the queue goes to Claude now, after an answer. A step that continue or stop ended
 // is done, as it stands when the turn was cut short. Any other step, after an answer, is done,
-// keeping what the answer said it did and how long its turns ran, and the next one starts when
+// keeping what the answer said it did and how long it took by the clock, and the next one starts when
 // the plan runs as a chain; otherwise the plan stops there. The plan is read again as it is
 // changed, since a planner may have added steps since the turn's end read it, and the next step
 // is marked running in that same change, so nothing in between finds the run with no step. When

@@ -98,13 +98,17 @@ export const leftOutSection = (left: readonly { entry: Entry; question: string }
   }),
 })
 
+// A time as the plan shows it; under a second it is left out, as no step takes so little.
+const timeOf = (ms: number | undefined) => (ms !== undefined && ms >= 1000 ? formatDuration(ms) : '')
+
 // Whether the step running is waiting for the person's answer, with no turn of it running:
 // Claude asked with the wait tool, and only /aside continue or /aside stop ends it now.
 export const isWaiting = (active: NonNullable<Plan['active']>) => active.pausedFor !== undefined && active.turnId === undefined
 
-// The plan, with what each step done said under it, and so far, the step that waits; null
-// with no plan. A plan run to its end stays in the listing until the next one takes its place.
-export const planSection = (plan: Plan): ListingSection | null => {
+// The plan, with what each step done took and said under it, and how long the step running
+// or waiting has gone on by `now`; null with no plan. A plan run to its end stays in the
+// listing until the next one takes its place.
+export const planSection = (plan: Plan, now: number): ListingSection | null => {
   if (plan.steps.length === 0) {
     return null
   }
@@ -114,25 +118,34 @@ export const planSection = (plan: Plan): ListingSection | null => {
 
   const paused = plan.paused && !plan.active ? plan.paused : undefined
   const toDo = `${left} of ${formatCount(plan.steps.length, 'step')} to do`
-  // How long each step done ran, when its turn said; the plan's time is theirs together, with
-  // the turns so far of a step that waited for the person.
-  const timeOf = (ms: number | undefined) => (ms !== undefined && ms > 0 ? formatDuration(ms) : '')
-  const ms = plan.steps.reduce((sum, step) => sum + (step.isDone && step.ms ? step.ms : 0), plan.active?.ms ?? 0)
-  const soFar = ms > 0 ? ` · ${formatDuration(ms)} so far` : ''
+  // How long each step done took; the plan's time is theirs together, with how long the step
+  // running has gone on: by the clock since it started, or for a step of an earlier release
+  // that started with no time kept, the turns it has run so far.
+  const active = plan.active
+  const sinceStart = active === undefined ? 0 : Math.max(active.ms ?? 0, active.startedAt === undefined ? 0 : now - active.startedAt)
+  const ms = plan.steps.reduce((sum, step) => sum + (step.isDone && step.ms ? step.ms : 0), sinceStart)
+  const soFar = timeOf(ms) && ` · ${timeOf(ms)} so far`
   // What the step waits for: Claude's question, until a turn took the person's answer to it.
   const waitsFor = waiting && (waiting.isAnswered ? 'answered' : waiting.pausedFor)
 
   return {
     title:
       left === 0
-        ? `Plan done: ${formatCount(plan.steps.length, 'step')}${ms > 0 ? ` in ${formatDuration(ms)}` : ''}`
+        ? `Plan done: ${formatCount(plan.steps.length, 'step')}${timeOf(ms) && ` in ${timeOf(ms)}`}`
         : waiting
           ? `Plan waits at step ${waiting.step + 1} (${waitsFor}), ${toDo} (/aside continue)${soFar}`
           : paused
             ? `Plan paused after step ${paused.step + 1} (${paused.reason}), ${toDo} (/aside continue)${soFar}`
             : `Plan: ${toDo} (/aside run)${soFar}`,
     rows: plan.steps.map((step, i) => {
-      const said = step.isDone ? [timeOf(step.ms), step.result ?? ''] : waiting?.step === i ? [timeOf(waiting.ms), waiting.result ?? ''] : []
+      const going = timeOf(sinceStart)
+      const said = step.isDone
+        ? [timeOf(step.ms) && `took ${timeOf(step.ms)}`, step.result ?? '']
+        : waiting?.step === i
+          ? [going && `waiting for you, ${going}`, waiting.result ?? '']
+          : active?.step === i
+            ? [going && `running for ${going}`]
+            : []
       const about = said.filter(Boolean).join(' · ')
 
       return { label: String(i + 1), word: stateOf(i), lines: [step.title], about: about ? [about] : [] }
@@ -146,9 +159,9 @@ export const runSection = (run: PastRun, n: number, now: number): ListingSection
   const ms = run.steps.reduce((sum, step) => sum + (step.ms ?? 0), 0)
 
   return {
-    title: `Run ${n}, ${formatAge(now - run.at)}: ${formatCount(run.steps.length, 'step')}${ms > 0 ? ` in ${formatDuration(ms)}` : ''}`,
+    title: `Run ${n}, ${formatAge(now - run.at)}: ${formatCount(run.steps.length, 'step')}${timeOf(ms) && ` in ${timeOf(ms)}`}`,
     rows: run.steps.map((step, i) => {
-      const about = [step.ms ? formatDuration(step.ms) : '', step.result ?? ''].filter(Boolean).join(' · ')
+      const about = [timeOf(step.ms) && `took ${timeOf(step.ms)}`, step.result ?? ''].filter(Boolean).join(' · ')
 
       return { label: String(i + 1), word: 'done', lines: [step.title], about: about ? [about] : [] }
     }),

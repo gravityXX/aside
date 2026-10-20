@@ -2,6 +2,20 @@ import { describe, expect, test } from 'claude-code/testing'
 
 import { REPORT, REPORT_PATH, STEPS, world } from './world'
 
+// The box that holds a Text of exactly `text` among its own children, in a drawn tree.
+type Drawn = { type: string; props?: Record<string, unknown>; children?: unknown[] }
+const boxOf = (node: unknown, text: string): Drawn | undefined => {
+  const one = node as Drawn
+  if (typeof node !== 'object' || node === null) return undefined
+  const kids = (one.children ?? []) as Drawn[]
+  if (one.type === 'Box' && kids.some(kid => kid?.type === 'Text' && (kid.children ?? []).join('') === text)) return one
+  for (const kid of kids) {
+    const found = boxOf(kid, text)
+    if (found) return found
+  }
+  return undefined
+}
+
 describe('the band above the prompt', () => {
   test('the band shows what waits, keeps the list button, and offers the next move for the plan', async ($, on) => {
     const { sent, type, aside, savePlan, startTurn, idle, band } = world($, on)
@@ -351,11 +365,28 @@ describe('the plan drawn as a line of steps', () => {
       expect((await ui.find({ type: 'Text', text: /^Plan paused after step 2/ }))?.text).toBe(
         'Plan paused after step 2 (to organize the queue), 2 of 4 steps to do (/aside continue) · 13 min so far',
       )
-      expect((await ui.find({ type: 'Text', text: '●' }))?.props.color).toBe('success')
+      expect((await ui.find({ type: 'Text', text: '✓' }))?.props.color).toBe('success')
       expect((await ui.find({ type: 'Text', text: '○' }))?.props.dimColor).toBe(true)
-      expect((await ui.find({ type: 'Text', text: '↳ 8 min · one is in place.' }))?.props.dimColor).toBe(true)
+      expect((await ui.find({ type: 'Text', text: '↳ took 8 min · one is in place.' }))?.props.dimColor).toBe(true)
       expect((await ui.find({ type: 'Text', text: '║' }))?.text).toBe('║')
       expect((await ui.find({ type: 'Text', text: 'paused here: /aside continue' }))?.text).toBe('paused here: /aside continue')
+      await ui.unmount()
+    })
+
+    test(`on ${surface}, the step running has a mark of its own, the word running beside its title, and how long it has run`, async ($, on) => {
+      const { clock, sent, aside, savePlan, startTurn, idle, mount } = world($, on)
+      await savePlan([{ title: 'A title long enough to wrap in a narrow pane, and then some more words', prompt: 'Do one.' }, STEPS[1]])
+      await aside('run')
+      await idle()
+      await startTurn(sent[0]!, 's1')
+      await clock.advance(4 * 60_000)
+
+      const ui = await mount('Pane', { title: 'aside', isFocused: true, bodyColumns: 40, placement: 'inline' }, surface)
+      expect((await ui.find({ type: 'Text', text: '▶' }))?.props.color).toBe('warning')
+      expect((await ui.find({ type: 'Text', text: 'running' }))?.props.color).toBe('warning')
+      expect((await ui.find({ type: 'Text', text: '↳ running for 4 min' }))?.props.dimColor).toBe(true)
+      // The word sits in a box of its own that never shrinks, so a title that wraps leaves it whole.
+      expect(boxOf(await ui.drawn(), 'running')?.props?.flexShrink).toBe(0)
       await ui.unmount()
     })
 
@@ -373,14 +404,30 @@ describe('the plan drawn as a line of steps', () => {
       expect((await ui.find({ type: 'Text', text: /^Plan waits at step 2/ }))?.text).toBe(
         'Plan waits at step 2 (needs your yes), 3 of 4 steps to do (/aside continue) · 13 min so far',
       )
-      expect((await ui.find({ type: 'Text', text: '◉' }))?.props.color).toBe('suggestion')
+      expect((await ui.find({ type: 'Text', text: '?' }))?.props.color).toBe('suggestion')
       expect((await ui.find({ type: 'Text', text: 'waiting' }))?.props.color).toBe('suggestion')
-      expect((await ui.find({ type: 'Text', text: '↳ 5 min · two asks first.' }))?.props.dimColor).toBe(true)
+      expect((await ui.find({ type: 'Text', text: '↳ waiting for you, 5 min · two asks first.' }))?.props.dimColor).toBe(true)
       expect((await ui.find({ type: 'Text', text: '║' }))?.text).toBe('║')
       expect((await ui.find({ type: 'Text', text: 'waits for you here: /aside continue ends it' }))?.text).toBe('waits for you here: /aside continue ends it')
       await ui.unmount()
     })
   }
+
+  test('an open pane moves the time of the step running on with the clock', async ($, on) => {
+    const { clock, sent, aside, savePlan, startTurn, idle, pane } = world($, on)
+    await savePlan([STEPS[0]])
+    await aside('run')
+    await idle()
+    await startTurn(sent[0]!, 's1')
+    await clock.advance(60_000)
+    const ui = await pane()
+    expect((await ui.find({ type: 'Text', text: /^↳ running for/ }))?.text).toBe('↳ running for 1 min')
+
+    await clock.advance(2 * 60_000)
+    await clock.settle()
+    expect((await ui.find({ type: 'Text', text: /^↳ running for/ }))?.text).toBe('↳ running for 3 min')
+    await ui.unmount()
+  })
 
   test('the band shows a long plan in ten marks at most', async ($, on) => {
     const { savePlan, band } = world($, on)

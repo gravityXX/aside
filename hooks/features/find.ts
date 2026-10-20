@@ -35,7 +35,7 @@ export async function findEntries($: Engine, ctx: Context, query: string): Promi
   const tags = (await tagsInFiles($)).filter(tag => isMatch(searchedText(tag, keys.root)))
   if (tags.length > 0) sections.push(foundSection('Tags in files', tags.map(entry => ({ entry, label: '·' })), keys.root))
   const stored = await loadPlan($, keys.plan)
-  const plan = planSection(stored)
+  const plan = planSection(stored, await $.clock.now())
   // A step by its title, what it asks, without the plugin's own words, and what it said.
   const stepText = (step: (typeof stored.steps)[number]) => foldText([step.title, step.prompt.replace(TAG_NOTE, ''), step.result ?? ''].join(' '))
   const found = new Set(numbered(stored.steps, stepText).map(one => one.label))
