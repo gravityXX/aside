@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- While Claude works, `/aside g`, `/aside q`, `/aside q NAME`, `/aside find` and `/aside log` show their list in the pane, as `/aside` does, instead of a line in the transcript that showed only once the turn ended. The pane keeps up with that list, a named queue there followed by name as it moves between this project and every project, and its <kbd>queue</kbd> button, `/aside` and the band's <kbd>list</kbd> button go back to the queue; a plan organized meanwhile shows there whatever it showed before. Where the terminal has no room for the pane, the list goes into the transcript as before.
+
 ## 0.29.0 - 2026-10-20
 
 - A step's time is the time by the clock from its first turn to its end, the wait for your answer included, not only the seconds Claude's turns took; a turn of something else before it does not count. The plan says how long the step running has gone on, `running for 12 min` or `waiting for you, 12 min`, and `took 14 min` under each step done, in `/aside` and `/aside log`, and an open pane moves it on as time passes; a time under a second is left out. A step started by an earlier release keeps the time of its turns.

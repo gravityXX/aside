@@ -25,6 +25,9 @@ export type Settings = {
 
 export type ToolOutput = { text: string; turnId: string | undefined; isError: boolean }
 
+// A view of the list pane, by what it lists, so it is listed anew each time it is drawn.
+export type PaneView = { kind: 'queue' } | { kind: 'named'; typed: string } | { kind: 'queues' } | { kind: 'find'; query: string } | { kind: 'log'; n?: number }
+
 export type Session = {
   // The plan tool's full name as the engine registered it: its prefix comes from where the
   // plugin was loaded from (a marketplace install, a --plugin-dir folder), so it is never assumed.
@@ -61,6 +64,9 @@ export type Session = {
   // Changes to the plan, one after another for the same reason: a step that ends and a
   // planner adding steps meanwhile each read the plan and save it back.
   planWrites: Promise<unknown>
+  // What the list pane shows: the queue, as /aside and the band's list button open it, or what
+  // /aside g, q, find or log asked for while Claude worked. None is the queue.
+  paneView?: PaneView
   // What draws the list pane again while a step runs or waits, so its time there moves on.
   paneTick?: Timer
   clipboard: ClipboardState

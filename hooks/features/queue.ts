@@ -1,10 +1,10 @@
 import type { EngineInterface as Engine } from 'claude-code'
 
 import type { Entry } from '../../types'
-import type { Context } from '../context'
+import type { Context, PaneView } from '../context'
 import { findTags, inOrder } from '../core/entries'
-import { describeCount, isExportText, isWaiting, listingMarkdown, listingText, planSection, queueSection, tagsSection } from '../core/listing'
-import type { ListingSection } from '../core/listing'
+import { describeCount, isExportText, isWaiting, listedText, listingMarkdown, listingText, planSection, queueSection, tagsSection } from '../core/listing'
+import type { Listed, ListingSection } from '../core/listing'
 import { popPrompt } from '../core/prompts'
 import { canonicalPath, formatCount, isAbsolutePath, isWindowsPath, relativePath, shortenText } from '../core/text'
 import { resolveFile, tryReadFile, writeExport } from '../io/host'
@@ -117,9 +117,12 @@ async function listPaneState($: Engine): Promise<'closed' | 'hidden' | 'shown'> 
   return pane === undefined ? 'closed' : pane.isShown && pane.isPlaced ? 'shown' : 'hidden'
 }
 
-// Shows the list pane: opens it, or brings it to the front when it is open out of sight. The
-// reason is the surface's when it cannot place the pane.
-export async function openListPane($: Engine): Promise<{ isPlaced: true } | { isPlaced: false; reason: string }> {
+// Shows the list pane on `view`: opens it, or brings it to the front when it is open out of
+// sight, and draws it again when it is in sight already. Each opener names what it shows, so a
+// view another command left never stands in for it. The reason is the surface's when it cannot
+// place the pane.
+export async function openListPane($: Engine, ctx: Context, view: PaneView): Promise<{ isPlaced: true } | { isPlaced: false; reason: string }> {
+  setPaneView($, ctx, view)
   if ((await listPaneState($)) === 'shown') {
     return { isPlaced: true }
   }
@@ -129,13 +132,13 @@ export async function openListPane($: Engine): Promise<{ isPlaced: true } | { is
 
 // The band's list button: closes the list pane when it is in sight, shows it otherwise. A pane
 // open out of sight is shown, not closed, or the press would seem to do nothing.
-export async function toggleListPane($: Engine) {
+export async function toggleListPane($: Engine, ctx: Context) {
   const state = await listPaneState($)
   if (state === 'shown') {
     await $.ui.close({ id: LIST_PANE })
     return
   }
-  const opened = await openListPane($)
+  const opened = await openListPane($, ctx, { kind: 'queue' })
   // The engine's reason runs long ("unasked below 144 columns (125 now): placed when ..."): its head says enough.
   if (!opened.isPlaced) $.ui.toast(`Could not show the list pane (${opened.reason.split(':')[0]}); /aside shows the list`)
 }
@@ -144,16 +147,34 @@ export async function toggleListPane($: Engine) {
 // the list opens in the pane, which shows at once and keeps up to date; where the terminal has
 // no room for it, the list goes into the transcript as a line, which shows at once too.
 export async function showListing($: Engine, ctx: Context): Promise<string> {
-  const text = listingText(await currentListing($, ctx))
-  if (!ctx.session.isRunning) {
+  return showWhileWorking($, ctx, { kind: 'queue' }, { sections: await currentListing($, ctx) }, 'the list')
+}
+
+// What the list pane shows from now on, drawn again at once if it is open.
+function setPaneView($: Engine, ctx: Context, view: PaneView) {
+  ctx.session.paneView = view
+  $.ui.invalidate('ui.render')
+}
+
+// What a command lists, as its text; while Claude works, in the list pane at once, drawn as
+// `view` and kept up to date there, or where the pane has no room, in the transcript. A pane
+// left open after the turn shows it too. A sentence with nothing to list is the command's text
+// either way, and leaves the pane as it is.
+export async function showWhileWorking($: Engine, ctx: Context, view: PaneView, listed: Listed, what: string): Promise<string> {
+  const text = listedText(listed)
+  if (typeof listed === 'string') {
     return text
   }
-  if ((await openListPane($)).isPlaced) {
-    return 'Opened the list in the pane while Claude was working.'
+  if (!ctx.session.isRunning) {
+    setPaneView($, ctx, view)
+    return text
+  }
+  if ((await openListPane($, ctx, view)).isPlaced) {
+    return `Opened ${what} in the pane while Claude was working.`
   }
   $.ui.log(text)
 
-  return 'Wrote the list above while Claude was working.'
+  return `Wrote ${what} above while Claude was working.`
 }
 
 // The queue as /aside shows it: every number a command takes is a place in this list.

@@ -2194,6 +2194,20 @@ describe('planning on a model of its own', () => {
   const SONNET = { options: { planModel: 'sonnet' } }
   const PLAN = '```json\n{"steps": [{"title": "Dark mode", "prompt": "Add a dark mode."}], "unclear": [{"item": 2, "question": "Which login bug?"}]}\n```'
 
+  test('a plan organized while Claude works shows in the pane, whatever list the pane showed before', SONNET, async ($, on) => {
+    const { w, type, aside, startTurn, pane } = world($, on)
+    await type('+ dark mode\n+g far one')
+    await startTurn('build the parser', 't1')
+    await aside('g')
+    const ui = await pane()
+    w.planReply = '{"steps": [{"title": "Dark mode", "prompt": "Add a dark mode."}]}'
+
+    await aside('plan')
+    expect((await ui.find({ type: 'Text', text: /^Plan: / }))?.text).toBe('Plan: 1 of 1 step to do (/aside run)')
+    expect(await ui.find({ type: 'Text', text: 'far one' })).toBeUndefined()
+    await ui.unmount()
+  })
+
   test('with planModel sonnet, one call to Sonnet organizes the queue outside the conversation, and /aside plan shows the plan', SONNET, async ($, on) => {
     const { w, sent, planned, type, aside, shown } = world($, on)
     await type('+ dark mode')
@@ -2915,8 +2929,8 @@ describe('the log of plans run to their end', () => {
     expect(await shown('log')).toEqual(['Run 1, just now: 1 step', '1 done One', '↳ one.'])
   })
 
-  test('while Claude works, /aside log goes into the transcript at once', async ($, on) => {
-    const { logged, aside, savePlan, answer, startTurn, idle } = world($, on)
+  test('while Claude works on a narrow terminal, /aside log goes into the transcript at once', async ($, on) => {
+    const { logged, aside, savePlan, answer, startTurn, idle } = world($, on, { isNarrow: true })
     await savePlan([STEPS[0]])
     await aside('run all')
     await idle()

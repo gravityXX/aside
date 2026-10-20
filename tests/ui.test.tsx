@@ -135,6 +135,117 @@ describe('the band above the prompt', () => {
     expect(toasts).toEqual([])
   })
 
+  test('while Claude works, /aside g, q, find and log show in the pane, which keeps up with the list and goes back to the queue', async ($, on) => {
+    const { logged, type, queue, aside, startTurn, pane } = world($, on)
+    await type('+ local one\n+g far one\n+@work a')
+    await startTurn('build the parser', 't1')
+    const ui = await pane()
+
+    expect(await aside('g')).toBe('Opened the global list in the pane while Claude was working.')
+    expect((await ui.find({ type: 'Text', text: 'far one' }))?.text).toBe('far one')
+    expect(await ui.find({ type: 'Text', text: 'local one' })).toBeUndefined()
+    expect(await ui.find({ key: 'plan' })).toBeUndefined()
+    await queue('+g far two', 't1')
+    expect((await ui.find({ type: 'Text', text: '2 ideas on the global list' }))?.text).toBe('2 ideas on the global list')
+
+    expect(await aside('q')).toBe('Opened the queues in the pane while Claude was working.')
+    expect((await ui.find({ type: 'Text', text: /queues? beside this project's queue/ }))?.text).toBe("2 queues beside this project's queue")
+    expect(await aside('q work')).toBe('Opened @work in the pane while Claude was working.')
+    expect((await ui.find({ type: 'Text', text: '1 idea in @work' }))?.text).toBe('1 idea in @work')
+    expect(await aside('find one')).toBe('Opened what was found in the pane while Claude was working.')
+    expect((await ui.find({ type: 'Text', text: 'In the queue (/aside)' }))?.text).toBe('In the queue (/aside)')
+    expect(await aside('log')).toBe('The log is empty: a plan run to its end comes here once another takes its place.')
+
+    await ui.press({ key: 'queue' })
+    expect((await ui.find({ type: 'Text', text: 'local one' }))?.text).toBe('local one')
+    expect(await ui.find({ key: 'queue' })).toBeUndefined()
+    // Only the lines that say what was queued go into the transcript, no list.
+    expect(logged.filter(line => line.includes('\n'))).toEqual([])
+    await ui.unmount()
+  })
+
+  test('after the turn, /aside and /aside g put an open pane on their list too', async ($, on) => {
+    const { type, aside, startTurn, endTurn, pane } = world($, on)
+    await type('+ local one\n+g far one')
+    await startTurn('build the parser', 't1')
+    await aside('g')
+    await endTurn('t1')
+    const ui = await pane()
+    expect((await ui.find({ type: 'Text', text: 'far one' }))?.text).toBe('far one')
+
+    await aside()
+    expect((await ui.find({ type: 'Text', text: 'local one' }))?.text).toBe('local one')
+    await aside('g')
+    expect((await ui.find({ type: 'Text', text: 'far one' }))?.text).toBe('far one')
+    await ui.unmount()
+  })
+
+  test('the pane on a named queue follows it to this project and back', async ($, on) => {
+    const { type, aside, startTurn, pane } = world($, on)
+    await type('+@work a')
+    await startTurn('build the parser', 't1')
+    await aside('q work')
+    const ui = await pane()
+
+    await aside('q work local')
+    expect((await ui.find({ type: 'Text', text: /idea in @work/ }))?.text).toBe("1 idea in @work, this project's")
+    await aside('q work global')
+    expect((await ui.find({ type: 'Text', text: /idea in @work/ }))?.text).toBe('1 idea in @work')
+    await ui.unmount()
+  })
+
+  test('a pane view left with nothing to list says so in its own words', async ($, on) => {
+    const { type, aside, startTurn, pane } = world($, on)
+    await type('+ dark mode\n+ other')
+    await startTurn('build the parser', 't1')
+    await aside('find dark')
+    const ui = await pane()
+
+    await aside('remove 1')
+    expect((await ui.find({ type: 'Text', text: /^Nothing holds/ }))?.text).toBe('Nothing holds "dark": not the queue, the tags, the plan, the global list or a named queue.')
+    await ui.unmount()
+  })
+
+  test('while Claude works, /aside log and /aside log N show the runs in the pane, with how many older ones it leaves out', async ($, on) => {
+    const { clock, aside, savePlan, answer, startTurn, idle, pane } = world($, on)
+    for (let k = 1; k <= 7; k += 1) {
+      await savePlan([{ title: `P${k}`, prompt: `Do ${k}.` }])
+      await aside('run all')
+      await idle()
+      await answer(`s${k}`)
+      await clock.advance(60_000)
+    }
+    await startTurn('build the parser', 't1')
+
+    expect(await aside('log')).toBe('Opened the log in the pane while Claude was working.')
+    const ui = await pane()
+    expect((await ui.find({ type: 'Text', text: /^Run 1,/ }))?.text).toBe('Run 1, 2 min ago: 1 step')
+    expect((await ui.find({ type: 'Text', text: /older in the log/ }))?.text).toBe('1 older in the log: /aside log 6 shows the next.')
+    expect(await aside('log 6')).toBe('Opened the log in the pane while Claude was working.')
+    expect((await ui.find({ type: 'Text', text: /^Run 6,/ }))?.text).toBe('Run 6, 7 min ago: 1 step')
+    expect(await ui.find({ type: 'Text', text: /^Run 1,/ })).toBeUndefined()
+    await ui.unmount()
+  })
+
+  test('the band\'s list button and /aside open the pane on the queue, whatever it showed before', async ($, on) => {
+    const { type, aside, startTurn, pane, pressBand } = world($, on)
+    await type('+ local one\n+g far one')
+    await startTurn('build the parser', 't1')
+    await aside('g')
+    const ui = await pane()
+    expect((await ui.find({ type: 'Text', text: 'far one' }))?.text).toBe('far one')
+
+    expect(await aside()).toBe('Opened the list in the pane while Claude was working.')
+    expect((await ui.find({ type: 'Text', text: 'local one' }))?.text).toBe('local one')
+    await aside('g')
+    await ui.unmount()
+    await pressBand()
+    await pressBand()
+    const again = await pane()
+    expect((await again.find({ type: 'Text', text: 'local one' }))?.text).toBe('local one')
+    await again.unmount()
+  })
+
   test('when the terminal cannot seat the pane, its list button says why', async ($, on) => {
     const { panes, toasts, type, pressBand } = world($, on, { isNarrow: true })
     await type('+ x')

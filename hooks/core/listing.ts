@@ -101,6 +101,13 @@ export const leftOutSection = (left: readonly { entry: Entry; question: string }
 // A time as the plan shows it; under a second it is left out, as no step takes so little.
 const timeOf = (ms: number | undefined) => (ms !== undefined && ms >= 1000 ? formatDuration(ms) : '')
 
+// What a command lists: its sections and a line under them, or a sentence when there is
+// nothing to list.
+export type Listed = { sections: ListingSection[]; note?: string } | string
+
+export const listedText = (listed: Listed): string =>
+  typeof listed === 'string' ? listed : `${listingText(listed.sections)}${listed.note ? `\n\n${listed.note}` : ''}`
+
 // Whether the step running is waiting for the person's answer, with no turn of it running:
 // Claude asked with the wait tool, and only /aside continue or /aside stop ends it now.
 export const isWaiting = (active: NonNullable<Plan['active']>) => active.pausedFor !== undefined && active.turnId === undefined

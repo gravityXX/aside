@@ -57,7 +57,7 @@ export async function drawBand(ctx: Context, $: Engine, e: BandRender[1], next: 
     <Box>
       <Text dimColor>aside: {parts.join(', ')} · </Text>
       {/* Returned, not voided: the press lasts until the pane opens, so the engine counts the open as asked. */}
-      <Button key="list" label="list" onPress={() => toggleListPane($)} />
+      <Button key="list" label="list" onPress={() => toggleListPane($, ctx)} />
       {/* Siblings, not a fragment: the engine draws <> as a column, which put the button a line lower. */}
       {action === undefined ? null : <Text> </Text>}
       {action === undefined ? null : <Button key="action" label={action} onPress={() => void pressAction($, ctx, action)} />}

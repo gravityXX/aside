@@ -579,8 +579,8 @@ describe('finding entries', () => {
     expect(await aside('find remove the tag')).toBe('Nothing holds "remove the tag": not the queue, the tags, the plan, the global list or a named queue.')
   })
 
-  test('while Claude works, what /aside find finds goes into the transcript at once', async ($, on) => {
-    const { logged, type, aside, startTurn } = world($, on)
+  test('while Claude works on a narrow terminal, what /aside find finds goes into the transcript at once', async ($, on) => {
+    const { logged, type, aside, startTurn } = world($, on, { isNarrow: true })
     await type('+ dark mode')
     await startTurn('build it', 't1')
 
