@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.31.0 - 2026-10-20
 
 - A step that waits for your answer ends with Claude's reply to it, and the run goes on to the next step by itself, unless Claude asks again with the wait tool; the last step of a run sums the run up in that reply. An answer typed while a turn still runs goes without the step's own words, so its turn leaves the step waiting, and `/aside continue` ends it, with the summary for a last step; answering again ends it too. `/aside continue` ends a waiting step without an answer, as before.
 
