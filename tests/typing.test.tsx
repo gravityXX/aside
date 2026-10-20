@@ -186,6 +186,80 @@ describe('while an entry is on its way to the store', () => {
     expect((await shown()).slice(-3)).toEqual(['2 ideas waiting', '1 idea second', '2 idea third'])
   })
 
+  test('an entry stored as a hand-over starts is handed over with the rest, and Claude is told of it', async ($, on) => {
+    const { w, clock, sent, type, enter, aside, shown, idle } = world($, on)
+    await type('+ first')
+    // The second entry is a moment on its way to the store as the hand-over starts.
+    w.beforeWrite = async key => {
+      if (!key.startsWith('queue:')) return
+      w.beforeWrite = undefined
+      await clock.sleep(2)
+    }
+    await enter('+ second')
+    await clock.advance(2)
+    const planning = aside('plan')
+    await clock.settle()
+    await clock.advance(5)
+
+    expect(await planning).toBe('Organizing 2 ideas.')
+    await idle()
+    expect(sent.at(-1)).toContain('1. first')
+    expect(sent.at(-1)).toContain('2. second')
+    expect(await shown()).toEqual(['The queue is empty.'])
+  })
+
+  test('an entry that waits long on git is still stored before the one sent after it', async ($, on) => {
+    const { w, clock, enter, shown } = world($, on)
+    // Only the first entry's branch is slow to come.
+    let release = () => {}
+    w.gitHeld = new Promise<void>(resolve => {
+      release = resolve
+    })
+    await enter('+ one')
+    await clock.advance(2)
+    w.gitHeld = undefined
+    await enter('+ two')
+    await clock.advance(2)
+    release()
+    await clock.settle()
+
+    expect(await shown()).toEqual(['2 ideas waiting', '1 idea one', '2 idea two'])
+  })
+
+  test('an entry sent back the moment /aside edit answers goes back to its place, though the store is slow to note it out', async ($, on) => {
+    const { w, clock, enter, type, aside, shown, idle } = world($, on)
+    await type('+ one\n+ two')
+    w.beforeWrite = async key => {
+      if (!key.startsWith('editing:')) return
+      w.beforeWrite = undefined
+      await clock.sleep(2)
+    }
+    const back = aside('edit 1').then(() => enter('+ one, reworked'))
+    await clock.settle()
+    await idle()
+    await back
+    await idle()
+
+    expect(await shown()).toEqual(['2 ideas waiting', '1 idea one, reworked', '2 idea two'])
+  })
+
+  test('a message sent right after an entry back from /aside edit is a new entry, though the store is slow to forget the edit', async ($, on) => {
+    const { w, clock, enter, type, aside, shown, idle } = world($, on)
+    await type('+ one\n+ two')
+    await aside('edit 1')
+    w.beforeDelete = async key => {
+      if (!key.startsWith('editing:')) return
+      w.beforeDelete = undefined
+      await clock.sleep(2)
+    }
+    await enter('+ one, reworked')
+    await enter('+ three')
+    await clock.settle()
+    await idle()
+
+    expect(await shown()).toEqual(['3 ideas waiting', '1 idea one, reworked', '2 idea two', '3 idea three'])
+  })
+
   test('an entry typed as undo starts lands in the queue after what undo brings back', async ($, on) => {
     const { w, clock, type, enter, aside, shown } = world($, on)
     await type('+ first')

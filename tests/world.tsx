@@ -62,6 +62,8 @@ export type Machine = {
   // Runs before the store takes a write, with its key: what else happens while a write is
   // on its way.
   beforeWrite?: (key: string) => Promise<unknown>
+  // Runs before the store takes a delete, with its key, as beforeWrite does for a write.
+  beforeDelete?: (key: string) => Promise<unknown>
   // The text selected in a transcript row.
   selection?: string
   // The terminal is too narrow to seat a pane.
@@ -129,7 +131,8 @@ export const world = ($: Engine, on: On, given: Partial<Machine> = {}) => {
     store.set(e.key, structuredClone(e.value))
     return { value: undefined }
   })
-  on('store.delete', ($e, e) => {
+  on('store.delete', async ($e, e) => {
+    await w.beforeDelete?.(e.key)
     if (w.refuseDelete !== undefined && --w.refuseDelete === 0) {
       w.refuseDelete = undefined
       return { deny: 'the store is busy' }
