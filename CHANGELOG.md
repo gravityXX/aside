@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.32.0 - 2026-10-20
 
 - A step that leaves work going in the background, a workflow, an agent or a command started in its turn, no longer ends, or waits for you, while that work runs: it shows as running in the background, `working in the background: review` under it, and the turn of the work's notification ends it and runs the next step; work Claude stops ends there too. Your own messages meanwhile are not the step's. `/aside continue` ends such a step and goes on, and `/aside stop` ends it as it stands. A last step leaving work in the background writes its summary once that work is done.
 
