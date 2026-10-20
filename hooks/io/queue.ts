@@ -1,6 +1,7 @@
 import type { EngineInterface as Engine } from 'claude-code'
 
 import type { Entry } from '../../types'
+import { isSameEntry, withoutEntries } from '../core/entries'
 import { loadEntries, loadHanded, loadTagIds, projectKeys, saveEntries, tagId } from './store'
 import type { Keys } from './store'
 
@@ -92,8 +93,7 @@ export async function takePlanned($: Engine, keys: Keys, items: readonly Entry[]
   if (tagIds.length > 0) {
     await $.store.set(keys.handed, [...new Set([...(await loadHanded($, keys.handed)), ...tagIds])].slice(-500))
   }
-  const isItem = (entry: Entry) => items.some(item => item.at === entry.at && item.text === entry.text)
-  await saveEntries($, keys.queue, (await loadEntries($, keys.queue)).filter(entry => !isItem(entry)))
+  await saveEntries($, keys.queue, withoutEntries(await loadEntries($, keys.queue), items))
   await forgetTake($, keys).catch(() => undefined)
 }
 
@@ -111,15 +111,14 @@ export async function bringBackTake($: Engine, keys: Keys): Promise<Take> {
 // Puts back some of what a hand-over took (`items`, entries and tags alike) and leaves them
 // out of the take, so /aside undo never brings them back a second time.
 export async function giveBackItems($: Engine, keys: Keys, items: readonly Entry[]) {
-  const isItem = (entry: Entry) => items.some(item => item.at === entry.at && item.text === entry.text)
   const tagIds = items.filter(item => item.isTag).map(tagId)
   const take = await loadTake($, keys)
   const queue = await loadEntries($, keys.queue)
   // A call made again after one that failed half-way finds some already back.
-  const back = take.entries.filter(entry => isItem(entry) && !queue.some(one => one.at === entry.at && one.text === entry.text))
+  const back = take.entries.filter(entry => items.some(item => isSameEntry(item, entry)) && !queue.some(one => isSameEntry(one, entry)))
   await saveEntries($, keys.queue, [...back, ...queue])
   await unhandTags($, keys, tagIds)
-  await saveTake($, keys, { ...take, entries: take.entries.filter(entry => !isItem(entry)), tagIds: take.tagIds.filter(id => !tagIds.includes(id)) })
+  await saveTake($, keys, { ...take, entries: withoutEntries(take.entries, items), tagIds: take.tagIds.filter(id => !tagIds.includes(id)) })
 }
 
 // Unmarks tags handed over, so the next hand-over takes them again.
@@ -136,14 +135,13 @@ export async function takeChosen($: Engine, keys: Keys, stored: readonly Entry[]
   // came since, and gives undo back what it had.
   const giveBack = async () => {
     const now = await loadEntries($, keys.queue)
-    const isThere = (entry: Entry) => now.some(one => JSON.stringify(one) === JSON.stringify(entry))
-    const kept = stored.filter(entry => chosen.includes(entry) || isThere(entry))
-    await saveEntries($, keys.queue, [...kept, ...now.filter(entry => !kept.some(one => JSON.stringify(one) === JSON.stringify(entry)))])
+    const kept = stored.filter(entry => [...chosen, ...now].some(one => isSameEntry(one, entry)))
+    await saveEntries($, keys.queue, [...kept, ...withoutEntries(now, kept)])
     await saveTake($, keys, previous)
   }
   try {
     await saveTake($, keys, { entries: [...chosen], tagIds: [], by: 'hand-over' })
-    await saveEntries($, keys.queue, stored.filter(entry => !chosen.includes(entry)))
+    await saveEntries($, keys.queue, withoutEntries(stored, chosen))
   } catch (error) {
     // The chosen entries are still in the queue: undo brings back what it did before, not them.
     await saveTake($, keys, previous).catch(() => undefined)

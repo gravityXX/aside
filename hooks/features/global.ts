@@ -2,7 +2,7 @@ import type { EngineInterface as Engine } from 'claude-code'
 
 import type { Entry } from '../../types'
 import type { Context } from '../context'
-import { inOrder } from '../core/entries'
+import { inOrder, isSameEntry, withoutEntries } from '../core/entries'
 import { QUEUE_PEEK, listingText, namedSection, queuesSections } from '../core/listing'
 import type { Listed } from '../core/listing'
 import { MARKDOWN_PATH } from '../core/markdown'
@@ -50,10 +50,6 @@ const isPlace = (n: number, length: number) => Number.isInteger(n) && n >= 1 && 
 
 const askPlaces = (name: string, length: number, count: number) =>
   `Give ${count === 1 ? 'a number' : 'numbers'} from 1 to ${length}, as ${commandOf(name)} shows them.`
-
-// The same idea in two places: an idea moved half-way, by a command that failed after its
-// first write, is not moved a second time when the command runs again.
-const isSame = (a: Entry, b: Entry) => a.at === b.at && a.text === b.text
 
 // A queue as /aside q NAME numbers it, in the order setting.
 async function shownIdeas($: Engine, ctx: Context, name: string): Promise<GlobalIdea[]> {
@@ -123,7 +119,9 @@ async function moveHere($: Engine, ctx: Context, name: string, numbers: readonly
   const stored = await loadEntries($, keys.queue)
   // Typed as "+g idea" or "+@work idea", it is "+ idea" in the queue, so /aside edit keeps it here.
   const moved = chosen.map(({ entry }) => ({ text: entry.text, at: entry.at, kind: entry.kind, ...(entry.raw ? { raw: entry.raw.replace(/^\+(?:g|@[A-Za-z0-9_-]{1,20})(?=\s)/, '+') } : {}) }))
-  const fresh = moved.filter(entry => !stored.some(one => isSame(one, entry)))
+  // An idea moved half-way, by a command that failed after its first write, is not moved a
+  // second time when the command runs again.
+  const fresh = moved.filter(entry => !stored.some(one => isSameEntry(one, entry)))
   await saveEntries($, keys.queue, [...stored, ...fresh])
   await forgetGlobalIdeas($, chosen.map(idea => idea.key))
   await refreshBand($)
@@ -149,9 +147,10 @@ async function moveToQueue($: Engine, ctx: Context, name: string, numbers: reado
   const chosen = [...new Set(numbers)].map(n => list[n - 1]!)
   const there = await loadIdeas($, name)
   const now = await $.clock.now()
-  const fresh = chosen.filter(entry => !there.some(idea => isSame(idea.entry, entry)))
+  // As in moveHere, an idea already there from a run that failed half-way is not added again.
+  const fresh = chosen.filter(entry => !there.some(idea => isSameEntry(idea.entry, entry)))
   await addIdeas($, name, fresh.map(({ text, at }, i) => ({ text, at, kind: 'idea' as const, order: now + i / 1000 })))
-  await saveEntries($, keys.queue, inOrder(list.filter(entry => !chosen.includes(entry)), ctx.settings.order))
+  await saveEntries($, keys.queue, inOrder(withoutEntries(list, chosen), ctx.settings.order))
   await refreshBand($)
 
   const said = sayIdeas(`Moved to ${nameOf(name)}`, chosen)
@@ -313,7 +312,7 @@ async function renameQueue($: Engine, name: string, to: string): Promise<string>
       : `@${queueName(seen)} is for every project, and ${nameOf(name)} is this project's: /aside q ${queueName(name)} global shares it first, or pick another name.`
   }
   const there = await loadIdeas($, target)
-  const fresh = ideas.filter(idea => !there.some(one => isSame(one.entry, idea.entry)))
+  const fresh = ideas.filter(idea => !there.some(one => isSameEntry(one.entry, idea.entry)))
   await addIdeas($, target, fresh.map(idea => idea.entry))
   await moveSessionRecords($, name, target)
   await forgetGlobalIdeas($, ideas.map(idea => idea.key))
@@ -346,7 +345,7 @@ async function setScope($: Engine, name: string, isLocal: boolean): Promise<stri
     }
     return `@${typed} holds no ideas yet: "+@${typed}" starts it, for every project or, with the newQueues setting on local, for this one.`
   }
-  const fresh = ideas.filter(idea => !there.some(one => isSame(one.entry, idea.entry)))
+  const fresh = ideas.filter(idea => !there.some(one => isSameEntry(one.entry, idea.entry)))
   await addIdeas($, target, fresh.map(idea => idea.entry))
   // What undo and an edit hold of the queue go with it, so neither brings back the one it left.
   await moveSessionRecords($, source, target)
