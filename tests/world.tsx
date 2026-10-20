@@ -267,9 +267,13 @@ export const world = ($: Engine, on: On, given: Partial<Machine> = {}) => {
     await clock.settle()
   }
 
+  // Enter at the prompt and nothing more: the clock stands still, so what was queued is not
+  // stored yet, and what the test does next happens while it is on its way.
+  const enter = (text: string, turnId?: string) => $.prompt.submit({ text, origin: COMPOSER, wait: false, ...(turnId ? { turnId } : {}) })
+
   // Enter at the prompt, then the moment it takes to store what was queued.
   const type = async (text: string, turnId?: string) => {
-    const result = await $.prompt.submit({ text, origin: COMPOSER, wait: false, ...(turnId ? { turnId } : {}) })
+    const result = await enter(text, turnId)
     await clock.advance(2)
     await clock.settle()
     return result
@@ -362,6 +366,7 @@ export const world = ($: Engine, on: On, given: Partial<Machine> = {}) => {
     runs,
     clock,
     idle,
+    enter,
     type,
     queue,
     fromPhone,
