@@ -37,7 +37,7 @@ A fresh copy comes first. In fullscreen mode, with the clipboard unchanged since
 ![/aside shows the list in a frame, 1 idea and 1 comment with its file, line and quote; /aside pop 2 puts entry 2 in the prompt box.](../assets/step-3-light.svg#gh-light-mode-only)
 ![/aside shows the list in a frame, 1 idea and 1 comment with its file, line and quote; /aside pop 2 puts entry 2 in the prompt box.](../assets/step-3-dark.svg#gh-dark-mode-only)
 
-- **`/aside pop [N]`** puts the newest entry, or entry N, in the prompt box, ready to send, and takes it off the queue.
+- **`/aside pop [N]`** puts the first entry, or entry N, in the prompt box, ready to send, and takes it off the queue.
 - **`/aside edit N`** takes entry N off the queue into the prompt box, as typed. If the next entry you queue has the same mark, it goes back to place N, still pointing where it did; anything else goes at the end.
 - **`/aside move N M`**, **`/aside remove N ...`** and **`/aside clear`** reorder and empty the queue.
 - **`/aside undo`** brings back what the last clear took, or what the last plan or run took until Claude has answered it.
@@ -52,20 +52,19 @@ A fresh copy comes first. In fullscreen mode, with the clipboard unchanged since
 ![/aside plan hands the queue to Claude: + dark mode, +? why so slow and + fix the login bug. Claude organizes them into steps and saves the plan, step 1 dark mode and step 2 why so slow, shown in a frame; the unclear login bug goes back to the queue as it was, and Claude's question about it shows under the plan.](../assets/use-plan-light.svg#gh-light-mode-only)
 ![/aside plan hands the queue to Claude: + dark mode, +? why so slow and + fix the login bug. Claude organizes them into steps and saves the plan, step 1 dark mode and step 2 why so slow, shown in a frame; the unclear login bug goes back to the queue as it was, and Claude's question about it shows under the plan.](../assets/use-plan-dark.svg#gh-dark-mode-only)
 
-A plan with steps still to do is merged with the new entries. While a step runs, Claude organizes the queue once that step ends, into steps after the plan's own, and a run with steps left waits for <kbd>continue</kbd>. After the last step of a run, the new steps wait for `/aside run`; with every step done, they make a new plan.
+A plan with steps still to do is merged with the new entries. While a step runs, Claude organizes the queue once that step ends, into steps after the plan's own, and a run with steps left waits for <kbd>continue</kbd>. After the last step of a run, the new steps wait for `/aside run all`; with every step done, they make a new plan.
 
 With the `planModel` setting on `sonnet`, `haiku` or `opus`, one call to that model organizes the queue outside the conversation instead. It adds nothing to the conversation and works while Claude does, but sees only the queue. The plan is saved only if the queue and the plan are still as that model was given them, and it leaves nothing for `/aside undo`.
 
 ## Run the plan
 
-`/aside run` sends the steps to Claude one at a time. Each step's prompt says where it stands in the plan, and Claude ends its reply with a `Result:` line, which the plan keeps. The last step of a run gets what every step said, and its reply ends with a summary of the run.
+`/aside run all` sends the steps to Claude one at a time. Each step's prompt says where it stands in the plan, and Claude ends its reply with a `Result:` line, which the plan keeps. The last step of a run gets what every step said, and its reply ends with a summary of the run.
 
-![/aside run sends the steps to Claude one after another: step 1, step 2 and step 3, each reply ending with a Result line, such as config cached, which the plan keeps. The last step's reply ends with a summary of the run: what was done, what is open and what comes next.](../assets/use-run-light.svg#gh-light-mode-only)
-![/aside run sends the steps to Claude one after another: step 1, step 2 and step 3, each reply ending with a Result line, such as config cached, which the plan keeps. The last step's reply ends with a summary of the run: what was done, what is open and what comes next.](../assets/use-run-dark.svg#gh-dark-mode-only)
+![/aside run all sends the steps to Claude one after another: step 1, step 2 and step 3, each reply ending with a Result line, such as config cached, which the plan keeps. The last step's reply ends with a summary of the run: what was done, what is open and what comes next.](../assets/use-run-light.svg#gh-light-mode-only)
+![/aside run all sends the steps to Claude one after another: step 1, step 2 and step 3, each reply ending with a Result line, such as config cached, which the plan keeps. The last step's reply ends with a summary of the run: what was done, what is open and what comes next.](../assets/use-run-dark.svg#gh-dark-mode-only)
 
-- **`/aside run 3 1`** runs only those steps, in that order.
-- **With no step left to do**, `/aside run` runs the queue instead, each entry and each new tag a step of its own, and `/aside run 3 1` runs those entries.
-- **`/aside run all`** sends the whole queue as one prompt, with no plan.
+- **`/aside run`** runs only the next step, and `/aside run 3 1` only those steps, in that order.
+- **With no step left to do**, `/aside run all` runs the queue instead, each entry and each new tag a step of its own, `/aside run` the first entry alone and `/aside run 3 1` those entries.
 - **`/aside stop`** lets the step running now finish, as the last one; a step not started yet does not start.
 - **`/aside log`** lists the plans run to their end once another took their place, the last 5 with what each step did, and `/aside log N` any of the 20 it keeps.
 
@@ -83,7 +82,7 @@ A step that needs your answer or decision, such as a yes before a push, makes Cl
 
 ## Let aside act when Claude answers
 
-By default the queue just waits. The `afterClaudeAnswers` setting makes <kbd>aside</kbd> hand it over by itself once Claude finishes a reply: `plan` organizes it into steps, as `/aside plan` does, and `run all` sends it as one prompt. It never does so after its own prompts, while a step runs or waits, or while the plan has steps to do.
+By default the queue just waits. The `afterClaudeAnswers` setting makes <kbd>aside</kbd> hand it over by itself once Claude finishes a reply: `plan` organizes it into steps, as `/aside plan` does, and `run all` runs it entry by entry, as `/aside run all` does. It never does so after its own prompts, while a step runs or waits, or while the plan has steps to do.
 
 ## Keep ideas for no project
 
@@ -105,5 +104,5 @@ Every session on the machine shares one store. Each project, the folder a sessio
 ![Three sessions: A and B in project X, C in project Y. They share Claude Code's store on this machine, which holds each project's queue and plan, and the global list and named queues, one key per idea, which every project shares.](../assets/use-sessions-dark.svg#gh-dark-mode-only)
 
 - **Ideas added at once** to the global list and the named queues never overwrite each other, as each idea there is stored on its own. A project's queue is one list, so two of its sessions adding at the very same moment can lose one of the ideas.
-- **A step runs in the session that started it.** In another session, `/aside run` takes the plan over and sends that step again there, and `/aside stop` lets it go, to do again; what its turn does in the first session is then not kept.
+- **A step runs in the session that started it.** In another session, `/aside run all` takes the plan over and sends that step again there, and `/aside stop` lets it go, to do again; what its turn does in the first session is then not kept.
 - **A step that waits** can be ended with `/aside continue` from any session, after `/clear` too, and the run goes on in that session; only the session it asked in takes your answer as the step's.

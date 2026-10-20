@@ -26,7 +26,7 @@
     "afterClaudeAnswers": {
       "type": "string",
       "title": "After Claude answers",
-      "description": "What aside does by itself when Claude finishes answering and something is queued. wait: nothing, you run /aside. plan: what /aside plan does. run all: what /aside run all does.",
+      "description": "What aside does by itself when Claude finishes answering and something is queued. wait: nothing, you run /aside. plan: what /aside plan does. run all: what /aside run all does, each entry a step of its own.",
       "default": "wait",
       "options": [
         "wait",

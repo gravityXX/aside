@@ -174,13 +174,13 @@ async function removeIdeas($: Engine, ctx: Context, name: string, numbers: reado
 }
 
 // /aside q NAME pop [N]: the idea in the prompt box, ready to send, and off its queue once it
-// is there; the newest one unless named.
+// is there; the first one unless named.
 async function popIdea($: Engine, ctx: Context, name: string, n?: number): Promise<string> {
   const ideas = await shownIdeas($, ctx, name)
   if (ideas.length === 0) {
     return emptyOf(name)
   }
-  const at = n ?? (ctx.settings.order === 'newest' ? 1 : ideas.length)
+  const at = n ?? 1
   if (!isPlace(at, ideas.length)) {
     return askPlaces(name, ideas.length, 1)
   }

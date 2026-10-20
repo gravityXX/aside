@@ -24,7 +24,7 @@ describe('the band above the prompt', () => {
     await aside('plan')
     await savePlan(STEPS)
     expect(await read()).toEqual(['aside: plan ▱▱▱ 0/3 · ', 'list', 'run plan'])
-    await aside('run')
+    await aside('run all')
     await idle()
     await startTurn(sent.at(-1)!, 's1')
     expect(await read()).toEqual(['aside: plan ▱▱▱ 0/3 · step 1 running · ', 'list', 'stop'])
@@ -43,7 +43,7 @@ describe('the band above the prompt', () => {
     }
     await savePlan(STEPS)
     expect(await row()).toEqual({ direction: 'row', children: ['Text', 'list', 'Text', 'action'] })
-    await aside('run')
+    await aside('run all')
     await idle()
     await startTurn(sent.at(-1)!, 's1')
     expect(await row()).toEqual({ direction: 'row', children: ['Text', 'list', 'Text', 'action'] })
@@ -52,7 +52,7 @@ describe('the band above the prompt', () => {
   test('a step that waits for the person shows on the band, and its continue button ends it and goes on with the run', async ($, on) => {
     const { sent, toasts, aside, savePlan, startTurn, endTurn, idle, band, pressBand } = world($, on)
     await savePlan(STEPS)
-    await aside('run')
+    await aside('run all')
     await idle()
     await startTurn(sent[0]!, 's1')
     await $.tool.call({ tool: 'mcp__aside__wait', reason: 'x' } as never)
@@ -74,7 +74,7 @@ describe('the band above the prompt', () => {
   test('a run paused after a step shows on the band, and its continue button goes on with it', async ($, on) => {
     const { sent, toasts, type, aside, savePlan, startTurn, endTurn, idle, band, pressBand } = world($, on)
     await savePlan(STEPS)
-    await aside('run')
+    await aside('run all')
     await idle()
     await startTurn(sent[0]!, 's1')
     await type('+ dark mode', 's1')
@@ -177,7 +177,7 @@ describe('the list pane', () => {
   test('while a step runs, the pane lists the queue and still offers its plan button', async ($, on) => {
     const { sent, type, aside, savePlan, startTurn, pressBand, pane, idle } = world($, on)
     await savePlan(STEPS)
-    await aside('run')
+    await aside('run all')
     await idle()
     await startTurn(sent.at(-1)!, 's1')
     await type('+ x', 's1')
@@ -285,7 +285,7 @@ describe('the plan tool in the transcript', () => {
       row('steps must be a non-empty list', { isErrored: true }),
       row(result, { isInterrupted: true }),
       row(result, { tool: 'Bash' }),
-      row('Saved 3 steps. Tell the user: /aside run runs them all in order.'),
+      row('Saved 3 steps. Tell the user: /aside run all runs them all in order.'),
     ]) {
       const ui = await mount('ToolUse', props)
       expect(await ui.drawn()).toMatchObject({ type: 'Text', children: ['as drawn'] })
@@ -338,7 +338,7 @@ describe('the plan drawn as a line of steps', () => {
     test(`on ${surface}, each step has its mark in its state's colour, what it took under it, and a double line where it paused`, async ($, on) => {
       const { sent, type, aside, savePlan, startTurn, endTurn, answer, idle, mount } = world($, on)
       await savePlan([...STEPS, { title: 'Four', prompt: 'Do four.' }])
-      await aside('run')
+      await aside('run all')
       await idle()
       await answer('s1', 'Result: one is in place.', 8 * 60_000)
       await startTurn(sent.at(-1)!, 's2')
@@ -362,7 +362,7 @@ describe('the plan drawn as a line of steps', () => {
     test(`on ${surface}, the step that waits for the person has a mark of its own, what it said so far under it, and a double line`, async ($, on) => {
       const { sent, aside, savePlan, startTurn, endTurn, answer, wait, idle, mount } = world($, on)
       await savePlan([...STEPS, { title: 'Four', prompt: 'Do four.' }])
-      await aside('run')
+      await aside('run all')
       await idle()
       await answer('s1', 'Result: one is in place.', 8 * 60_000)
       await startTurn(sent.at(-1)!, 's2')

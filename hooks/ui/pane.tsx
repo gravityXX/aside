@@ -22,7 +22,7 @@ export async function drawPane(ctx: Context, $: Engine, e: PaneRender[1], next: 
   // failure included, is told as a toast.
   const planFromPane = async () => {
     await $.ui.close({ id: LIST_PANE }).catch(() => undefined)
-    $.ui.toast(await handOverQueue($, ctx, 'plan', 'pane').catch(error => `Could not organize the queue (${describeError(error)}).`))
+    $.ui.toast(await handOverQueue($, ctx, 'pane').catch(error => `Could not organize the queue (${describeError(error)}).`))
   }
 
   const ui = $.ui.resolve(e)

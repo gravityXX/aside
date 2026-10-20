@@ -10,11 +10,11 @@ import { addEntries } from './capture'
 import { findEntries } from './find'
 import { showLog } from './history'
 import { importFile } from './importing'
-import { handOverQueue, registerPlanTool, registerWaitTool, runChosen, runEntries, runPlan, stopPlan } from './plan'
+import { handOverQueue, registerPlanTool, registerWaitTool, runChosen, runEntries, runNext, runPlan, stopPlan } from './plan'
 import { runGlobal, runNamed } from './global'
 import { clearQueue, editEntry, exportListing, moveEntry, popEntry, removeEntries, restoreTaken, scanFile, showListing } from './queue'
 
-type Name = 'list' | 'plan' | 'run' | 'stop' | 'log' | 'pop' | 'edit' | 'move' | 'remove' | 'clear' | 'undo' | 'find' | 'import' | 'scan' | 'export' | 'g' | 'q' | 'help'
+type Name = 'list' | 'plan' | 'run' | 'continue' | 'stop' | 'log' | 'pop' | 'edit' | 'move' | 'remove' | 'clear' | 'undo' | 'find' | 'import' | 'scan' | 'export' | 'g' | 'q' | 'help'
 
 // A command's row: what it accepts and how help and Tab show it. runCommand does the work.
 type Command = {
@@ -53,17 +53,21 @@ const COMMANDS: readonly Command[] = [
   },
   {
     name: 'run',
-    aliases: ['continue'],
     takes: args => none(args) || (args.length === 1 && args[0] === 'all') || args.every(isNumber),
     usage: 'run [N ... | all]',
     help: [
-      '/aside run - run the plan step by step; with no plan, each entry as its own step',
-      '/aside continue - end the step that waits for your answer and go on, or go on with a paused run, as /aside run does',
+      '/aside run - run the next step of the plan; with no step left, the first entry of the queue; a step that waits for you ends and its run goes on, as with /aside continue',
+      '/aside run all - run the rest of the plan step by step; with no step left, each entry as its own step',
       '/aside run N [M ...] - run those steps of the plan, or those entries once no step is left to do',
-      '/aside run all - send everything at once, no plan',
     ],
-    about: 'run the plan, or the queue entry by entry',
+    about: 'run the next step or entry, or all of them one by one',
     completes: 'run',
+  },
+  {
+    name: 'continue',
+    takes: none,
+    help: ['/aside continue - end the step that waits for your answer and go on, or go on with a paused run, as /aside run all does'],
+    about: 'go on with the plan',
   },
   {
     name: 'stop',
@@ -83,7 +87,7 @@ const COMMANDS: readonly Command[] = [
     name: 'pop',
     takes: args => none(args) || oneNumber(args),
     usage: 'pop [N]',
-    help: ['/aside pop [N] - put the newest entry (or entry N) in the prompt box, ready to send'],
+    help: ['/aside pop [N] - put the first entry (or entry N) in the prompt box, ready to send'],
     about: 'put an entry in the box, ready to send',
     completes: 'entries',
   },
@@ -216,13 +220,13 @@ const commandNamed = (word: string) => COMMANDS.find(command => command.name ===
 
 async function runQueue($: Engine, ctx: Context, args: readonly string[]) {
   if (args[0] === 'all') {
-    return handOverQueue($, ctx, 'send')
+    return (await runPlan($, ctx)) ?? runEntries($, ctx)
   }
   if (args.length > 0) {
     return runChosen($, ctx, args.map(Number))
   }
 
-  return (await runPlan($, ctx)) ?? runEntries($, ctx)
+  return runNext($, ctx)
 }
 
 async function runCommand($: Engine, ctx: Context, name: Name, args: readonly string[]): Promise<string> {
@@ -231,9 +235,11 @@ async function runCommand($: Engine, ctx: Context, name: Name, args: readonly st
     case 'list':
       return showListing($, ctx)
     case 'plan':
-      return handOverQueue($, ctx, 'plan')
+      return handOverQueue($, ctx)
     case 'run':
       return runQueue($, ctx, args)
+    case 'continue':
+      return runQueue($, ctx, ['all'])
     case 'stop':
       return stopPlan($, ctx)
     case 'log':

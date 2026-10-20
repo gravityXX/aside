@@ -31,7 +31,7 @@ describe('/aside', () => {
     await type('+ a\nsecond line')
     await type('+? where from')
     await savePlan(STEPS)
-    await aside('run')
+    await aside('run all')
     await idle()
 
     expect(await aside()).toBe(
@@ -126,15 +126,15 @@ describe('/aside', () => {
 })
 
 describe('taking entries out', () => {
-  test('/aside pop puts the newest entry in the box, ready to send; pop N takes entry N', async ($, on) => {
+  test('/aside pop puts the first entry in the box, ready to send; pop N takes entry N', async ($, on) => {
     const { filled, type, aside, shown } = world($, on)
     await type('+ a\n+? b\n+ c')
 
     expect(await aside('pop 2')).toBe('In the prompt box, ready to send: b')
-    expect(await aside('pop')).toBe('In the prompt box, ready to send: c')
-    expect(filled).toEqual(['Question:\nb', 'c'])
+    expect(await aside('pop')).toBe('In the prompt box, ready to send: a')
+    expect(filled).toEqual(['Question:\nb', 'a'])
     expect(await aside('pop 9')).toBe('Give a number from 1 to 1, as /aside shows them.')
-    expect(await shown()).toEqual(['1 idea waiting', '1 idea a'])
+    expect(await shown()).toEqual(['1 idea waiting', '1 idea c'])
   })
 
   test('/aside remove N takes one entry out, and clear the rest', async ($, on) => {
@@ -239,17 +239,25 @@ describe('the order setting', () => {
     expect(await shown()).toEqual(['3 ideas waiting', '1 idea alpha', '2 idea charlie', '3 idea bravo again'])
   })
 
-  test('newest first: run goes from the newest, and undo brings the list back as it was', NEWEST, async ($, on) => {
-    const { sent, type, aside, shown, idle } = world($, on)
+  test('newest first: plan and run go from the newest, and undo brings the list back as it was', NEWEST, async ($, on) => {
+    const { sent, type, aside, shown, answer, idle } = world($, on)
     await type('+ alpha\n+ bravo')
 
-    expect(await aside('run all')).toBe('Sending 2 ideas.')
+    expect(await aside('plan')).toBe('Organizing 2 ideas.')
     await idle()
     expect(sent.at(-1)).toContain('Ideas:\n1. bravo (branch main)\n2. alpha (branch main)')
     expect(await aside('undo')).toBe('Brought back 2 entries, 2 waiting.')
     expect(await shown()).toEqual(['2 ideas waiting', '1 idea bravo', '2 idea alpha'])
+    expect(await aside('pop')).toBe('In the prompt box, ready to send: bravo')
+    await type('+ bravo')
 
-    expect(await aside('run')).toBe('Running 2 entries one by one. /aside stop stops after the current one.')
+    expect(await aside('run')).toBe('Running entry 1: bravo')
+    await idle()
+    expect(sent.at(-1)).toContain('(Step 1 of 1 of the queue plan, "bravo", sent by the aside plugin.)')
+    await answer('n1')
+    await type('+ bravo')
+
+    expect(await aside('run all')).toBe('Running 2 entries one by one. /aside stop stops after the current one.')
     await idle()
     expect(sent.at(-1)).toContain('(Step 1 of 2 of the queue plan, "bravo", sent by the aside plugin.\nPlan: 1 bravo (this one) · 2 alpha (to do).')
   })
@@ -406,7 +414,7 @@ describe('exporting the list', () => {
   test('a heading keeps the words Claude gave it, as typed', async ($, on) => {
     const { w, sent, aside, savePlan, startTurn, endTurn, wait, idle } = world($, on)
     await savePlan(STEPS)
-    await aside('run')
+    await aside('run all')
     await idle()
     await startTurn(sent[0]!, 's1')
     await wait('needs <your> yes & a name')
@@ -560,14 +568,14 @@ describe('finding entries', () => {
   test('/aside find finds a step by what it said, leaves out the plugin\'s own words, and gives a plan done no number to run', async ($, on) => {
     const { write, type, aside, shown, savePlan, answer, idle } = world($, on, { files: { [REPORT_PATH]: REPORT } })
     await savePlan([{ title: 'Theme', prompt: 'Add a dark mode.' }])
-    await aside('run')
+    await aside('run all')
     await idle()
     await answer('s1', 'Result: the colours are cached.')
     await type('+ fix the login bug')
 
     expect(await shown('find colours cached')).toEqual(['In the plan, done (/aside)', '1 done Theme', '↳ the colours are cached.'])
     await write(REPORT_PATH)
-    await aside('run')
+    await aside('run all')
     expect(await aside('find remove the tag')).toBe('Nothing holds "remove the tag": not the queue, the tags, the plan, the global list or a named queue.')
   })
 

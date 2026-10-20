@@ -65,7 +65,12 @@ GLOSS = 380  # where the grey explanations start
 
 
 def esc(text: str) -> str:
-    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+    return (
+        text.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+    )
 
 
 def window(c: Theme, height: int, title: str, body: str, label: str) -> str:
@@ -95,7 +100,10 @@ def window(c: Theme, height: int, title: str, body: str, label: str) -> str:
 
 def line(y: float, spans: list[tuple[str, str]], gloss: str = "") -> str:
     """One terminal line: spans of (text, class) in a row, and a grey note in its own column."""
-    parts = "".join(f'<tspan class="{cls}">{esc(text)}</tspan>' if cls else esc(text) for text, cls in spans)
+    parts = "".join(
+        f'<tspan class="{cls}">{esc(text)}</tspan>' if cls else esc(text)
+        for text, cls in spans
+    )
     note = f'<text x="{GLOSS}" y="{y}" class="m d">{esc(gloss)}</text>' if gloss else ""
     return f'  <text x="{PAD}" y="{y}" class="m">{parts}</text>{note}\n'
 
@@ -143,7 +151,11 @@ def how_it_works(c: Theme) -> str:
     steps = "".join(
         f'  <rect x="{x}" y="56" width="{w}" height="28" rx="14" {go}/>'
         f'<text x="{x + w // 2}" y="75" class="t" text-anchor="middle">{name}</text>\n'
-        for x, w, name in ((624, 72, "step 1"), (704, 72, "step 2"), (784, 96, "summary"))
+        for x, w, name in (
+            (624, 72, "step 1"),
+            (704, 72, "step 2"),
+            (784, 96, "summary"),
+        )
     )
     label = (
         "While Claude works on your task, you copy text with Ctrl+C and add ideas and comments; they go to a queue instead "
@@ -199,7 +211,13 @@ def how_it_works(c: Theme) -> str:
 def step1(c: Theme) -> str:
     pw, ph = 400, 150
     rx = W - pw
-    marks = [("+", "idea"), ("+?", "question"), ("+!", "change"), ("+-", "drop"), ("++", "dig deeper")]
+    marks = [
+        ("+", "idea"),
+        ("+?", "question"),
+        ("+!", "change"),
+        ("+-", "drop"),
+        ("++", "dig deeper"),
+    ]
     tile, space = 160, 20
     legend_y = ph + 36
     legend = "".join(
@@ -252,7 +270,11 @@ def step2(c: Theme) -> str:
     body = (
         line(y0, [("● ", "a"), ("Done. Shall I update the docs too?", "")])
         + band(c, band_y, "aside: 1 idea, 4 comments", ["list"])
-        + line(band_y + 30 + ROW, [("❯ ", "f"), ("yes, go ahead", "")], "your reply goes to Claude as usual")
+        + line(
+            band_y + 30 + ROW,
+            [("❯ ", "f"), ("yes, go ahead", "")],
+            "your reply goes to Claude as usual",
+        )
     )
     label = (
         "Claude finishes and asks whether to update the docs. Above the prompt, a line shows the queue, aside: 1 idea, 4 comments, "
@@ -269,7 +291,13 @@ def step3(c: Theme) -> str:
     number, kind, text = out + 16, out + 36, out + 120
     rows = [
         ("1", "idea", "cache the parsed config", "", "kidea"),
-        ("2", "question", "where is this from", '↳ docs/report.md:42 · "Revenue grew by 12% in Q3."', "kquestion"),
+        (
+            "2",
+            "question",
+            "where is this from",
+            '↳ docs/report.md:42 · "Revenue grew by 12% in Q3."',
+            "kquestion",
+        ),
     ]
     y: float = TOP
     body = line(y, [("❯ ", "f"), ("/aside", "a")], "see the list")
@@ -307,14 +335,22 @@ def step4(c: Theme) -> str:
     out = box_x + 16
     number, state, text = out + 16, out + 36, out + 120
     rows = [
-        ("1", "done", "cache the parsed config", "↳ cached once at start-up; the tests pass", "k"),
+        (
+            "1",
+            "done",
+            "cache the parsed config",
+            "↳ cached once at start-up; the tests pass",
+            "k",
+        ),
         ("2", "running", "where is this from", "", "kquestion"),
         ("3", "to do", "a shorter results section", "", ""),
     ]
     y: float = TOP
-    body = line(y, [("❯ ", "f"), ("/aside plan", "a")], "Claude saves the queue as steps")
+    body = line(
+        y, [("❯ ", "f"), ("/aside plan", "a")], "Claude saves the queue as steps"
+    )
     y += ROW
-    body += line(y, [("❯ ", "f"), ("/aside run", "a")], "they go one after another")
+    body += line(y, [("❯ ", "f"), ("/aside run all", "a")], "they go one after another")
     band_y = y + 14
     body += band(c, band_y, "aside: step 2/3 running, 1 idea", ["list", "stop"])
     top = band_y + 30 + 14
@@ -337,9 +373,13 @@ def step4(c: Theme) -> str:
     bottom = y + 14
     body += f'  <rect x="{box_x}" y="{top}" width="{box_w}" height="{bottom - top}" rx="8" fill="none" stroke="{c["line"]}" stroke-width="1.5"/>\n'
     y = bottom + ROW * 1.25
-    body += line(y, [("● ", "a"), ("Summary of the run", "b")], "after the last step: done, open, next")
+    body += line(
+        y,
+        [("● ", "a"), ("Summary of the run", "b")],
+        "after the last step: done, open, next",
+    )
     label = (
-        "In Claude Code: /aside plan has Claude save the queue as steps, and /aside run sends them one after another. "
+        "In Claude Code: /aside plan has Claude save the queue as steps, and /aside run all sends them one after another. "
         "Above the prompt, aside: step 2/3 running, 1 idea, with list and stop buttons. The list shows the plan: step 1 done "
         "with its result under it, cached once at start-up; the tests pass, step 2 running, step 3 to do. After the last "
         "step, Claude ends with a summary of the run: what was done, what is open and what comes next."
@@ -378,13 +418,28 @@ def canvas(c: Theme, height: int, label: str, body: str) -> str:
 
 
 def pill(
-    c: Theme, x: float, y: float, w: float, text: str, look: Look = "queue", mark: str = "", is_left: bool = False
+    c: Theme,
+    x: float,
+    y: float,
+    w: float,
+    text: str,
+    look: Look = "queue",
+    mark: str = "",
+    is_left: bool = False,
 ) -> str:
     """A rounded label, 28 high, its text centred or, in a list of them, at the left; a mark before
     the text in the accent colour."""
-    fill, stroke = {"queue": ("pill", "bandb"), "go": ("go", "gob"), "idle": ("panel", "line")}[look]
+    fill, stroke = {
+        "queue": ("pill", "bandb"),
+        "go": ("go", "gob"),
+        "idle": ("panel", "line"),
+    }[look]
     lead = f'<tspan class="a">{esc(mark)}</tspan>' if mark else ""
-    at = f'x="{x + 16}" text-anchor="start"' if is_left else f'x="{x + w / 2}" text-anchor="middle"'
+    at = (
+        f'x="{x + 16}" text-anchor="start"'
+        if is_left
+        else f'x="{x + w / 2}" text-anchor="middle"'
+    )
     return (
         f'  <rect x="{x}" y="{y}" width="{w}" height="28" rx="14" fill="{c[fill]}" stroke="{c[stroke]}"/>'
         f'<text {at} y="{y + 19}" class="m">{lead}{esc(text)}</text>\n'
@@ -414,9 +469,15 @@ def uc_capture(c: Theme) -> str:
     y += ROW * 1.5
     body += prompt(y, "+", " dark mode", "Enter: it never reaches Claude")
     y += ROW
-    body += line(y, [('queued "dark mode" (1 waiting)', "k")], "a line in the transcript")
+    body += line(
+        y, [('queued "dark mode" (1 waiting)', "k")], "a line in the transcript"
+    )
     y += ROW * 1.5
-    body += line(y, [("❯ ", "f"), ("make the errors friendlier ", ""), ("+", "a")], "a draft ending with + too")
+    body += line(
+        y,
+        [("❯ ", "f"), ("make the errors friendlier ", ""), ("+", "a")],
+        "a draft ending with + too",
+    )
     y += ROW
     body += line(y, [('queued "make the errors friendlier" (2 waiting)', "k")])
     band_y = y + 16
@@ -434,7 +495,12 @@ def uc_comment(c: Theme) -> str:
         ("", "+?", " @docs/report.md:42 why", "line 42 of that file"),
         ("", "+!", " @report.md#results shorter", "the Results heading of that file"),
         ("Ctrl+C", "+?", " where is this from", "the file and line you copied it from"),
-        ("", "+?", " why did this fail", "nothing copied: the last tool output, an error first"),
+        (
+            "",
+            "+?",
+            " why did this fail",
+            "nothing copied: the last tool output, an error first",
+        ),
         ("", "<!-- ?", " same for Poland -->", "a tag in a markdown file Claude wrote"),
     ]
     body = '  <text x="0" y="24" class="lab">You type</text><text x="472" y="24" class="lab">It points to</text>\n'
@@ -498,12 +564,12 @@ def uc_run(c: Theme) -> str:
         body += bar(c, x, 56, w, name)
         body += f'  <text x="{x + w / 2}" y="106" class="ms" text-anchor="middle">{esc(result)}</text>\n'
     body += arrow("M392 70 H400", c["faint"]) + arrow("M556 70 H564", c["faint"])
-    body += pill(c, 100, 146, 112, "/aside run", "go") + arrow("M156 144 V70 H236", c["gob"])
-    body += (
-        '  <text x="240" y="165" class="s">one step at a time; each reply ends with a result the plan keeps</text>\n'
+    body += pill(c, 88, 146, 136, "/aside run all", "go") + arrow(
+        "M156 144 V70 H236", c["gob"]
     )
+    body += '  <text x="240" y="165" class="s">one step at a time; each reply ends with a result the plan keeps</text>\n'
     label = (
-        "/aside run sends the steps to Claude one after another: step 1, step 2 and step 3, each reply ending with a Result "
+        "/aside run all sends the steps to Claude one after another: step 1, step 2 and step 3, each reply ending with a Result "
         "line, such as config cached, which the plan keeps. The last step's reply ends with a summary of the run: what was "
         "done, what is open and what comes next."
     )
@@ -516,7 +582,9 @@ def uc_waiting(c: Theme) -> str:
     body += bar(c, start, 56, 168, "step 2 asks for a yes")
     body += bar(c, 420, 56, 200, "step 2 builds it")
     body += bar(c, 720, 56, 160, "step 3")
-    body += pill(c, 304, 126, 112, "yes, build it", "idle") + arrow("M360 124 V90", c["faint"])
+    body += pill(c, 304, 126, 112, "yes, build it", "idle") + arrow(
+        "M360 124 V90", c["faint"]
+    )
     body += pill(c, 626, 126, 88, "continue", "go") + arrow("M670 124 V90", c["gob"])
     body += f'  <rect x="{start + 0.5}" y="196" width="{W - start - 1}" height="28" rx="6" fill="{c["band"]}" stroke="{c["bandb"]}"/>\n'
     for x in (300, 420, 620, 720):
@@ -546,9 +614,7 @@ def uc_queues(c: Theme) -> str:
     body = ""
     for x, title, ideas in panels:
         body += f'  <text x="{x}" y="40" class="lab">{esc(title)}</text>\n'
-        body += (
-            f'  <rect x="{x + 0.5}" y="52" width="193" height="118" rx="8" fill="{c["panel"]}" stroke="{c["line"]}"/>\n'
-        )
+        body += f'  <rect x="{x + 0.5}" y="52" width="193" height="118" rx="8" fill="{c["panel"]}" stroke="{c["line"]}"/>\n'
         for n, idea in enumerate(ideas):
             body += pill(c, x + 14, 68 + n * 44, 166, idea, "queue")
     body += arrow("M200 92 H337", c["faint"]) + arrow("M337 132 H200", c["faint"])
@@ -572,7 +638,7 @@ def uc_queues(c: Theme) -> str:
 def uc_sessions(c: Theme) -> str:
     sessions = [
         (0, "Session A · project X", "+", " dark mode"),
-        (304, "Session B · project X", "", "/aside run"),
+        (304, "Session B · project X", "", "/aside run all"),
         (608, "Session C · project Y", "+g", " read the RFC"),
     ]
     body = ""
@@ -610,11 +676,17 @@ USE_CASES = {
 def main() -> None:
     out = Path(__file__).parent
     for name, colours in THEMES.items():
-        (out / f"how-it-works-{name}.svg").write_text(how_it_works(colours), encoding="utf-8")
+        (out / f"how-it-works-{name}.svg").write_text(
+            how_it_works(colours), encoding="utf-8"
+        )
         for number, draw in ((1, step1), (2, step2), (3, step3), (4, step4)):
-            (out / f"step-{number}-{name}.svg").write_text(draw(colours), encoding="utf-8")
+            (out / f"step-{number}-{name}.svg").write_text(
+                draw(colours), encoding="utf-8"
+            )
         for case, picture in USE_CASES.items():
-            (out / f"use-{case}-{name}.svg").write_text(picture(colours), encoding="utf-8")
+            (out / f"use-{case}-{name}.svg").write_text(
+                picture(colours), encoding="utf-8"
+            )
 
 
 if __name__ == "__main__":

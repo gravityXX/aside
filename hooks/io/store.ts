@@ -258,6 +258,15 @@ export async function unhandTags($: Engine, keys: Keys, tagIds: readonly string[
 // brings the chosen back until Claude has answered them.
 export async function takeChosen($: Engine, keys: Keys, stored: readonly Entry[], chosen: readonly Entry[]) {
   const previous = await loadTake($, keys)
+  // Puts the chosen entries back where they stood among those still in the queue, before what
+  // came since, and gives undo back what it had.
+  const giveBack = async () => {
+    const now = await loadEntries($, keys.queue)
+    const isThere = (entry: Entry) => now.some(one => JSON.stringify(one) === JSON.stringify(entry))
+    const kept = stored.filter(entry => chosen.includes(entry) || isThere(entry))
+    await saveEntries($, keys.queue, [...kept, ...now.filter(entry => !kept.some(one => JSON.stringify(one) === JSON.stringify(entry)))])
+    await saveTake($, keys, previous)
+  }
   try {
     await saveTake($, keys, { entries: [...chosen], tagIds: [], by: 'hand-over' })
     await saveEntries($, keys.queue, stored.filter(entry => !chosen.includes(entry)))
@@ -266,6 +275,8 @@ export async function takeChosen($: Engine, keys: Keys, stored: readonly Entry[]
     await saveTake($, keys, previous).catch(() => undefined)
     throw error
   }
+
+  return { giveBack }
 }
 
 // Takes the queue (`stored`, oldest first) and the new tags out to hand them over: both go
