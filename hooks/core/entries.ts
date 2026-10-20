@@ -147,6 +147,18 @@ export const findTags = (source: string): FileTag[] => {
 // waited on a long call finds nothing under the text it was given (3.16).
 export const isSameEntry = (one: Entry, other: Entry): boolean => one.at === other.at && one.kind === other.kind && one.text === other.text
 
+// `list` without `gone`, one same entry for each of `gone`: two entries typed alike in one
+// message are the same by isSameEntry, and taking one of them leaves the other.
+export const withoutEntries = (list: readonly Entry[], gone: readonly Entry[]): Entry[] => {
+  const left = [...gone]
+
+  return list.filter(entry => {
+    const i = left.findIndex(one => isSameEntry(one, entry))
+    if (i >= 0) left.splice(i, 1)
+    return i === -1
+  })
+}
+
 // Which entry comes first, from the order setting. The store keeps the oldest first either
 // way, so the setting can change at any time; only what /aside shows, numbers and runs follows it.
 export type Order = 'oldest' | 'newest'
