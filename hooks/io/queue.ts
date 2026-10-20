@@ -19,9 +19,23 @@ let changes: Promise<unknown> = Promise.resolve()
 // and leaves the changes after it to run. A change never waits for another one, which would
 // wait for it.
 export function changeQueue<T>($: Engine, change: (stored: readonly Entry[]) => QueueChange<T> | Promise<QueueChange<T>>): Promise<T> {
+  return changeQueueAfter($, async () => undefined, stored => change(stored))
+}
+
+// Changes the queue as changeQueue does, after `prepare`, which takes this change's place in
+// the chain but runs before the queue is read: slow work, such as a process or the clipboard,
+// that must keep the order the changes were asked in. Read before it, the stored list would be
+// held across its waits, and a command that writes the queue outside the chain meanwhile (rm,
+// a hand-over) would be stored over. What it makes is handed to the change.
+export function changeQueueAfter<P, T>(
+  $: Engine,
+  prepare: () => Promise<P>,
+  change: (stored: readonly Entry[], prepared: P) => QueueChange<T> | Promise<QueueChange<T>>,
+): Promise<T> {
   const done = changes.then(async () => {
     const { queue } = await projectKeys($)
-    const { list, value, afterSave } = await change(await loadEntries($, queue))
+    const prepared = await prepare()
+    const { list, value, afterSave } = await change(await loadEntries($, queue), prepared)
     if (list !== undefined) await saveEntries($, queue, list)
     await afterSave?.()
 

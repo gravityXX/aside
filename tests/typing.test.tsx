@@ -92,6 +92,43 @@ describe('what is queued', () => {
   })
 })
 
+describe('while an entry is on its way to the store', () => {
+  test('an entry removed while the next one waits on git stays removed', async ($, on) => {
+    const { w, clock, type, enter, aside, shown } = world($, on)
+    await type('+ first')
+    // The second entry waits for its branch while the first one is removed.
+    let release = () => {}
+    w.gitHeld = new Promise<void>(resolve => {
+      release = resolve
+    })
+    await enter('+ second')
+    await clock.advance(2)
+
+    await aside('rm 1')
+    release()
+    await clock.settle()
+    expect(await shown()).toEqual(['1 idea waiting', '1 idea second'])
+  })
+
+  test('entries handed over while the next one waits on git are not left in the queue too', async ($, on) => {
+    const { w, clock, type, enter, aside, shown } = world($, on)
+    await type('+ first')
+    let release = () => {}
+    w.gitHeld = new Promise<void>(resolve => {
+      release = resolve
+    })
+    await enter('+ second')
+    await clock.advance(2)
+
+    expect(await aside('plan')).toBe('Organizing 1 idea.')
+    release()
+    await clock.settle()
+    expect(await shown()).toEqual(['1 idea waiting', '1 idea second'])
+    expect(await aside('undo')).toBe('Brought back 1 entry, 2 waiting.')
+    expect(await shown()).toEqual(['2 ideas waiting', '1 idea first', '2 idea second'])
+  })
+})
+
 describe('the prompt box', () => {
   test('a queued entry never reaches Claude and leaves a line in the transcript, not a toast', async ($, on) => {
     const { sent, toasts, logged, queue } = world($, on)
