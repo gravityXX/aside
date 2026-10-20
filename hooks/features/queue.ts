@@ -8,7 +8,7 @@ import type { Listed, ListingSection } from '../core/listing'
 import { popPrompt } from '../core/prompts'
 import { canonicalPath, formatCount, isAbsolutePath, isWindowsPath, relativePath, shortenText } from '../core/text'
 import { resolveFile, tryReadFile, writeExport } from '../io/host'
-import { bringBackTake, saveTake } from '../io/queue'
+import { bringBackTake, takeCleared } from '../io/queue'
 import { loadEntries, loadHanded, loadPlan, projectKeys, readTrackedFiles, refreshBand, saveEditing, saveEntries, tagId, trackFile } from '../io/store'
 import type { Keys } from '../io/store'
 
@@ -259,13 +259,10 @@ export async function removeEntries($: Engine, ctx: Context, numbers: readonly n
 }
 
 export async function clearQueue($: Engine): Promise<string> {
-  const keys = await projectKeys($)
-  const stored = await loadEntries($, keys.queue)
+  const stored = await takeCleared($)
   if (stored.length === 0) {
     return 'The queue is already empty.'
   }
-  await saveTake($, keys, { entries: stored, tagIds: [], by: 'clear' })
-  await saveEntries($, keys.queue, [])
   await refreshBand($)
 
   return `Cleared ${stored.length} entries. /aside undo brings them back.`
@@ -280,7 +277,7 @@ export async function restoreTaken($: Engine): Promise<string> {
     const state = isWaiting(running) ? (running.isAnswered ? 'waits for your answer again or /aside continue' : 'waits for your answer') : 'is running'
     return `Step ${running.step + 1} of the plan ${state}; /aside stop first, so nothing is done twice.`
   }
-  const { entries, tagIds } = await bringBackTake($, keys)
+  const { entries, tagIds } = await bringBackTake($)
   if (entries.length === 0 && tagIds.length === 0) {
     return 'Nothing to bring back.'
   }

@@ -492,18 +492,22 @@ async function runChosenSteps($: Engine, ctx: Context, plan: Plan, chosen: reado
 }
 
 async function runChosenEntries($: Engine, ctx: Context, keys: Keys, plan: Plan, chosen: readonly number[]): Promise<string> {
-  const stored = await loadEntries($, keys.queue)
-  const list = inOrder(stored, ctx.settings.order)
-  if (list.length === 0) {
-    return 'The queue is empty.'
-  }
-  if (!chosen.every(n => n >= 1 && n <= list.length)) {
-    return `Give ${chosen.length === 1 ? 'an entry' : 'entries'} from 1 to ${list.length}, as /aside shows them.`
+  // The numbers are read against the queue as the take finds it, so an entry typed or tidied
+  // meanwhile is neither written over nor taken in place of the one shown.
+  const taken = await takeChosen($, stored => {
+    const list = inOrder(stored, ctx.settings.order)
+    if (list.length === 0) return 'The queue is empty.'
+    if (!chosen.every(n => n >= 1 && n <= list.length)) {
+      return `Give ${chosen.length === 1 ? 'an entry' : 'entries'} from 1 to ${list.length}, as /aside shows them.`
+    }
+    return chosen.map(n => list[n - 1]!)
+  })
+  if (typeof taken === 'string') {
+    return taken
   }
   const note = takeOverNote(plan)
-  const entries = chosen.map(n => list[n - 1]!)
+  const { chosen: entries, giveBack } = taken
   const steps = entries.map(entry => entryStep(entry, keys.root))
-  const { giveBack } = await takeChosen($, keys, stored, entries)
   if (!(await replacePlan($, ctx, steps))) {
     await giveBack()
     return PLAN_STARTED
@@ -756,7 +760,7 @@ export async function savePlanFromTool(ctx: Context, $: Engine, e: PlanToolCall[
   // The items left out go back before the plan is saved, so a plan is never saved with items
   // still missing; a call made again after a failure gives back none twice.
   const left = unclear.map(({ item, question }) => ({ entry: items[item - 1]!, question }))
-  await giveBackItems($, keys, left.map(one => one.entry))
+  await giveBackItems($, left.map(one => one.entry))
   // Given no plan to check against, the steps are always saved.
   const plan = (await savePlanSteps($, ctx, steps, isAddingTurn(old, me, ctx.session.turnId) ? 'tool' : 'replan'))!
   if (planning) planning.isSaved = true
@@ -898,7 +902,7 @@ async function planOutside($: Engine, ctx: Context, model: Exclude<PlanModel, 's
     if (!plan) {
       return changed
     }
-    const kept = await takePlanned($, keys, items.filter(item => !left.some(one => one.entry === item))).then(
+    const kept = await takePlanned($, items.filter(item => !left.some(one => one.entry === item))).then(
       () => '',
       (error: unknown) => ` Its entries stay in the queue too (${describeError(error)}).`,
     )
@@ -1324,8 +1328,8 @@ async function finishStep($: Engine, ctx: Context, e: TurnComplete[1]) {
 
 // The turn that was to organize the queue ended with no plan saved, answered or cut short:
 // what it was handed goes back to the queue, so nothing is lost.
-async function giveBackUnplanned($: Engine, keys: Keys) {
-  const { entries, tagIds } = await bringBackTake($, keys)
+async function giveBackUnplanned($: Engine) {
+  const { entries, tagIds } = await bringBackTake($)
   if (entries.length === 0 && tagIds.length === 0) {
     return
   }
@@ -1370,7 +1374,7 @@ export async function onTurnEnd(ctx: Context, $: Engine, e: TurnComplete[1], nex
   const { planning } = ctx.session
   if (planning?.turnId === e.turnId) {
     delete ctx.session.planning
-    if (!planning.isSaved) await giveBackUnplanned($, keys)
+    if (!planning.isSaved) await giveBackUnplanned($)
   }
   // The plan tool may save again within the turn that adds, each time in place of its last
   // steps; once that turn is over, the steps it added are the plan's own. Read from the plan,
@@ -1382,7 +1386,7 @@ export async function onTurnEnd(ctx: Context, $: Engine, e: TurnComplete[1], nex
   // Claude has answered what the plugin handed over, so undo has nothing to bring back; but
   // a step that ran ahead of a planning prompt still out leaves that prompt's take.
   if (ctx.session.isOwnTurn && e.reason === 'answer' && !ctx.session.planning) {
-    await forgetAnsweredTake($, keys)
+    await forgetAnsweredTake($)
   }
   const plan = await loadPlan($, keys.plan)
   const isThisStep = plan.active?.turnId === e.turnId && plan.active.sessionId === (await $.session.id())
