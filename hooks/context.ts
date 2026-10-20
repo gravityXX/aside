@@ -1,4 +1,4 @@
-import type { Register } from 'claude-code'
+import type { Register, Timer } from 'claude-code'
 
 import type { Entry } from '../types'
 import type { Order } from './core/entries'
@@ -61,6 +61,8 @@ export type Session = {
   // Changes to the plan, one after another for the same reason: a step that ends and a
   // planner adding steps meanwhile each read the plan and save it back.
   planWrites: Promise<unknown>
+  // What draws the list pane again while a step runs or waits, so its time there moves on.
+  paneTick?: Timer
   clipboard: ClipboardState
 }
 

@@ -483,11 +483,11 @@ describe('running the plan', () => {
       'The queue is empty.',
       'Plan done: 3 steps in 24 min',
       '1 done One',
-      '↳ 40 s · one is in place.',
+      '↳ took 40 s · one is in place.',
       '2 done Two',
-      '↳ 20 min · two works, one question is open.',
+      '↳ took 20 min · two works, one question is open.',
       '3 done Three',
-      '↳ 3 min · three is done.',
+      '↳ took 3 min · three is done.',
     ])
   })
 
@@ -554,6 +554,76 @@ describe('running the plan', () => {
     ])
   })
 
+  test('a step takes the time by the clock from its start to its end, the time it waits for the person included', async ($, on) => {
+    const { clock, sent, aside, shown, savePlan, wait, startTurn, endTurn, idle, pane } = world($, on)
+    await savePlan(STEPS)
+    await aside('run')
+    await idle()
+    await startTurn(sent[0]!, 's1')
+    await clock.advance(2 * 60_000)
+    const ui = await pane()
+    expect((await ui.find({ type: 'Text', text: /^Plan: / }))?.text).toBe('Plan: 3 of 3 steps to do (/aside run) · 2 min so far')
+    expect((await ui.find({ type: 'Text', text: '↳ running for 2 min' }))?.text).toBe('↳ running for 2 min')
+    await ui.unmount()
+
+    await wait('needs your yes')
+    await endTurn('s1', 'answer', 'Result: asked.', 30_000)
+    await clock.advance(20 * 60_000)
+    expect((await shown()).slice(2, 4)).toEqual(['1 waiting One', '↳ waiting for you, 22 min · asked.'])
+
+    await aside('continue')
+    await idle()
+    expect((await shown()).slice(1, 4)).toEqual(['Plan: 2 of 3 steps to do (/aside run) · 22 min so far', '1 done One', '↳ took 22 min · asked.'])
+  })
+
+  test('the turn that sums a run up keeps the time of its last step from that step\'s start', async ($, on) => {
+    const { clock, sent, aside, shown, savePlan, wait, startTurn, endTurn, answer, idle } = world($, on)
+    await savePlan([STEPS[0], STEPS[1]])
+    await aside('run all')
+    await idle()
+    await answer('s1', 'Result: one.', 60_000)
+    await startTurn(sent.at(-1)!, 's2')
+    await wait('which name')
+    await endTurn('s2', 'answer', 'Result: asks.', 60_000)
+    await clock.advance(30 * 60_000)
+
+    expect(await aside('continue')).toBe('Step 2 ends here; Claude sums the run up.')
+    await idle()
+    await startTurn(sent.at(-1)!, 'c1')
+    await clock.advance(60_000)
+    await endTurn('c1', 'answer', 'Result: asks.\n\n## Summary of the run\n\nTwo asked.', 60_000)
+    await idle()
+    expect((await shown()).slice(1)).toEqual(['Plan done: 2 steps in 32 min', '1 done One', '↳ took 1 min · one.', '2 done Two', '↳ took 31 min · asks.'])
+  })
+
+  test('a step asked for while another turn runs starts its time with its own turn', async ($, on) => {
+    const { clock, sent, aside, shown, savePlan, startTurn, endTurn, answer, idle, pane } = world($, on)
+    await savePlan(STEPS)
+    await startTurn('fix the other bug', 't0')
+    await aside('run')
+    await clock.advance(10 * 60_000)
+    const ui = await pane()
+    expect((await ui.find({ type: 'Text', text: /^Plan: / }))?.text).toBe('Plan: 3 of 3 steps to do (/aside run)')
+    expect(await ui.find({ type: 'Text', text: /^↳ running for/ })).toBeUndefined()
+    await ui.unmount()
+
+    await endTurn('t0')
+    await idle()
+    await answer('s1', 'Result: one.', 60_000)
+    expect((await shown()).slice(2, 4)).toEqual(['1 done One', '↳ took 1 min · one.'])
+    expect(sent).toHaveLength(1)
+  })
+
+  test('a step of an earlier release, started with no time kept, shows the time its turns took', async ($, on) => {
+    const stored = { 'plan:/proj': { steps: STEPS, active: { step: 0, isChain: true, sessionId: 'session-2', pausedFor: 'x', ms: 3 * 60_000, result: 'asked.' } } }
+    const { clock, aside, shown } = world($, on, { stored })
+    await clock.advance(60 * 60_000)
+
+    expect((await shown()).slice(2, 4)).toEqual(['1 waiting One', '↳ waiting for you, 3 min · asked.'])
+    await aside('continue')
+    expect((await shown()).slice(2, 4)).toEqual(['1 done One', '↳ took 3 min · asked.'])
+  })
+
   test('a step that needs an answer waits for it with the wait tool: the answer is the step\'s own, and /aside continue ends it and goes on', async ($, on) => {
     const { sent, contexts, toasts, type, aside, shown, savePlan, wait, startTurn, endTurn, idle, band } = world($, on)
     await savePlan(STEPS)
@@ -570,7 +640,7 @@ describe('running the plan', () => {
       'The queue is empty.',
       'Plan waits at step 1 (needs your yes on the design), 3 of 3 steps to do (/aside continue) · 1 min so far',
       '1 waiting One',
-      '↳ 1 min · the design is drawn up; it waits for a yes.',
+      '↳ waiting for you, 1 min · the design is drawn up; it waits for a yes.',
       '2 to do Two',
       '3 to do Three',
     ])
@@ -591,14 +661,14 @@ describe('running the plan', () => {
     expect((await shown()).slice(1, 4)).toEqual([
       'Plan waits at step 1 (answered), 3 of 3 steps to do (/aside continue) · 3 min so far',
       '1 waiting One',
-      '↳ 3 min · built it; the tests pass.',
+      '↳ waiting for you, 3 min · built it; the tests pass.',
     ])
 
     expect(await aside('continue')).toBe('Step 1 done; going on with the plan from step 2. /aside stop stops after the current one.')
     await idle()
     expect(sent.at(-1)).toBe(`Do two.\n\n(Step 2 of 3 of the queue plan, "Two", sent by the aside plugin.\nPlan: 1 One (done) · 2 Two (this one) · 3 Three (to do).\n${NEXT})`)
     expect(contexts.at(-1)).toEqual([])
-    expect((await shown()).slice(1, 4)).toEqual(['Plan: 2 of 3 steps to do (/aside run) · 3 min so far', '1 done One', '↳ 3 min · built it; the tests pass.'])
+    expect((await shown()).slice(1, 4)).toEqual(['Plan: 2 of 3 steps to do (/aside run) · 3 min so far', '1 done One', '↳ took 3 min · built it; the tests pass.'])
   })
 
   test('a step asked again after an answer waits for that answer, and every turn meanwhile is its own, a cut-short one too', async ($, on) => {
@@ -630,7 +700,7 @@ describe('running the plan', () => {
     expect((await shown()).slice(1, 4)).toEqual([
       'Plan waits at step 1 (answered), 3 of 3 steps to do (/aside continue) · 3 min so far',
       '1 waiting One',
-      '↳ 3 min · built; may I push?',
+      '↳ waiting for you, 3 min · built; may I push?',
     ])
     await startTurn('', 'n1')
     await endTurn('n1', 'answer', 'Result: pushed.', 60_000)
@@ -639,7 +709,7 @@ describe('running the plan', () => {
     expect((await shown()).slice(1, 4)).toEqual([
       'Plan waits at step 1 (answered), 3 of 3 steps to do (/aside continue) · 4 min so far',
       '1 waiting One',
-      '↳ 4 min · pushed.',
+      '↳ waiting for you, 4 min · pushed.',
     ])
   })
 
@@ -699,11 +769,11 @@ describe('running the plan', () => {
     expect((await shown()).slice(1)).toEqual([
       'Plan done: 3 steps in 5 min',
       '1 done One',
-      '↳ 1 min · one.',
+      '↳ took 1 min · one.',
       '2 done Two',
-      '↳ 1 min · two.',
+      '↳ took 1 min · two.',
       '3 done Three',
-      '↳ 3 min · three is named x.',
+      '↳ took 3 min · three is named x.',
     ])
   })
 
@@ -803,7 +873,7 @@ describe('running the plan', () => {
     await idle()
     expect(sent).toHaveLength(2)
     expect(toasts.at(-1)).toBe('Step 1 done')
-    expect((await shown()).slice(1, 4)).toEqual(['Plan: 2 of 3 steps to do (/aside run) · 2 min so far', '1 done One', '↳ 2 min · done with x.'])
+    expect((await shown()).slice(1, 4)).toEqual(['Plan: 2 of 3 steps to do (/aside run) · 2 min so far', '1 done One', '↳ took 2 min · done with x.'])
   })
 
   test('/aside stop holds while Claude works on the answer: a turn cut short, or a new question, still ends the step as it stands', async ($, on) => {
@@ -821,7 +891,7 @@ describe('running the plan', () => {
     await endTurn('a1', 'aborted', '', 60_000)
     await idle()
     expect(toasts.at(-1)).toBe('Step 1 done')
-    expect((await shown()).slice(1, 4)).toEqual(['Plan: 2 of 3 steps to do (/aside run) · 2 min so far', '1 done One', '↳ 2 min · drew the design.'])
+    expect((await shown()).slice(1, 4)).toEqual(['Plan: 2 of 3 steps to do (/aside run) · 2 min so far', '1 done One', '↳ took 2 min · drew the design.'])
 
     await aside('run all')
     await idle()
@@ -865,7 +935,7 @@ describe('running the plan', () => {
     await endTurn('c1', 'aborted', '', 60_000)
     await idle()
     expect(toasts.at(-1)).toBe('Plan done: 3 steps in 3 min')
-    expect((await shown()).slice(-2)).toEqual(['3 done Three', '↳ 3 min · named x.'])
+    expect((await shown()).slice(-2)).toEqual(['3 done Three', '↳ took 3 min · named x.'])
 
     await answeredAtLast('u')
     await aside('continue')
@@ -873,14 +943,14 @@ describe('running the plan', () => {
     const before = sent.length
     await idle()
     expect(sent).toHaveLength(before)
-    expect((await shown()).slice(-2)).toEqual(['3 done Three', '↳ 2 min · named x.'])
+    expect((await shown()).slice(-2)).toEqual(['3 done Three', '↳ took 2 min · named x.'])
 
     await answeredAtLast('v')
     w.isDropping = true
     await aside('continue')
     await idle()
     expect(toasts.at(-1)).toBe('Could not ask Claude to sum the run up (blocked by a hook); step 3 is done as it stands.')
-    expect((await shown()).slice(-2)).toEqual(['3 done Three', '↳ 2 min · named x.'])
+    expect((await shown()).slice(-2)).toEqual(['3 done Three', '↳ took 2 min · named x.'])
   })
 
   test('an answer typed before the asking turn has ended is taken up all the same by the turn it starts', async ($, on) => {
@@ -2727,7 +2797,7 @@ describe('the log of plans run to their end', () => {
 
     await clock.advance(3 * 3_600_000)
     await savePlan([{ title: 'Four', prompt: 'Do four.' }])
-    expect(await shown('log')).toEqual(['Run 1, 3 h ago: 3 steps in 3 min', '1 done One', '↳ 1 min · one.', '2 done Two', '↳ 1 min · two.', '3 done Three', '↳ 1 min · three.'])
+    expect(await shown('log')).toEqual(['Run 1, 3 h ago: 3 steps in 3 min', '1 done One', '↳ took 1 min · one.', '2 done Two', '↳ took 1 min · two.', '3 done Three', '↳ took 1 min · three.'])
     expect((await shown()).slice(1)).toEqual(['Plan: 1 of 1 step to do (/aside run)', '1 to do Four'])
     expect(await aside('log 2')).toBe('Give a number from 1 to 1, as /aside log shows them.')
   })
@@ -2809,7 +2879,7 @@ describe('the log of plans run to their end', () => {
     expect((await savePlan([{ title: 'New', prompt: 'Do new.' }])).deny).toBe('aside could not save the plan (the store is full); the plan was not saved, so call the tool again')
     await clock.advance(5 * 60_000)
     await savePlan([{ title: 'New', prompt: 'Do new.' }])
-    expect(await shown('log')).toEqual(['Run 1, just now: 1 step in 1 min', '1 done Old', '↳ 1 min · old.'])
+    expect(await shown('log')).toEqual(['Run 1, just now: 1 step in 1 min', '1 done Old', '↳ took 1 min · old.'])
     expect(await aside('log 2')).toBe('Give a number from 1 to 1, as /aside log shows them.')
   })
 

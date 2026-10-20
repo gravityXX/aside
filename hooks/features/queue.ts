@@ -48,7 +48,7 @@ async function loadListing($: Engine, ctx: Context) {
   const tags = await tagsInFiles($)
   const handedOver = new Set(await loadHanded($, handed))
   const plan = await loadPlan($, planKey)
-  const steps = planSection(plan)
+  const steps = planSection(plan, await $.clock.now())
   const sections = [
     queueSection(list, root),
     ...(tags.length > 0 ? [tagsSection(tags, root, tag => handedOver.has(tagId(tag)))] : []),

@@ -27,8 +27,9 @@ export type Step = {
   title: string
   prompt: string
   isDone?: true
-  // What the step's answer said it did and left open (its "Result:" line), how long it ran
-  // and when, by the clock, it was done, kept once it is done for the summary at the end of
+  // What the step's answer said it did and left open (its "Result:" line), how long it took
+  // by the clock from its start to its end (in earlier releases, how long its turns ran), and
+  // when, by the clock, it was done, kept once it is done for the summary at the end of
   // the run and the log.
   result?: string
   ms?: number
@@ -51,7 +52,8 @@ export type Plan = {
   // since Claude last asked. isEnding: continue or stop ended the step, which is done once the
   // turn it has left ends, whatever ends it. isPlanningAfter: /aside plan asked, while a turn of
   // the step ran, for the queue to be organized once it ends, as Claude cannot be asked in the
-  // middle of one.
+  // middle of one. startedAt: when, by the clock, the step's first turn started (none
+  // before it, nor in earlier releases).
   active?: {
     step: number
     isChain: boolean
@@ -64,6 +66,7 @@ export type Plan = {
     result?: string
     isAnswered?: true
     isEnding?: true
+    startedAt?: number
   }
   // A run that paused after a step, as /aside plan asked (or, in earlier releases, the wait
   // tool): the step it paused after, why, and how the run was to go on (as a chain, or with the

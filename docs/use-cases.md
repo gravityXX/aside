@@ -70,7 +70,7 @@ With the `planModel` setting on `sonnet`, `haiku` or `opus`, one call to that mo
 
 ## Answer a step that asks you
 
-A step that needs your answer or decision, such as a yes before a push, makes Claude call the wait tool. The step then waits for you: answer as usual, and Claude goes on with that same step, for as many turns as it takes. <kbd>continue</kbd> ends the step, with the time of all its turns and what the last one said, and runs the next step of the run, if there is one.
+A step that needs your answer or decision, such as a yes before a push, makes Claude call the wait tool. The step then waits for you: answer as usual, and Claude goes on with that same step, for as many turns as it takes. <kbd>continue</kbd> ends the step, with the time it took by the clock, the wait for you included, and what its last turn said, and runs the next step of the run, if there is one.
 
 ![A step that asks you waits. Step 2 asks for a yes, and the line above the prompt says waits for you. Your answer, yes, build it, goes to that same step, which builds it while the line says step 2 running. continue then ends step 2 and runs step 3.](../assets/use-waiting-light.svg#gh-light-mode-only)
 ![A step that asks you waits. Step 2 asks for a yes, and the line above the prompt says waits for you. Your answer, yes, build it, goes to that same step, which builds it while the line says step 2 running. continue then ends step 2 and runs step 3.](../assets/use-waiting-dark.svg#gh-dark-mode-only)

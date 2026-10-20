@@ -23,9 +23,9 @@ const WORD_COLOURS: Record<string, string> = {
 // A step's mark on the plan's line, in its state's colour: done, running, waiting for the
 // person, still to do.
 const STEP_MARKS: Record<string, { mark: string; colour?: string }> = {
-  done: { mark: '●', colour: 'success' },
-  running: { mark: '◉', colour: 'warning' },
-  waiting: { mark: '◉', colour: 'suggestion' },
+  done: { mark: '✓', colour: 'success' },
+  running: { mark: '▶', colour: 'warning' },
+  waiting: { mark: '?', colour: 'suggestion' },
   'to do': { mark: '○' },
 }
 
@@ -58,9 +58,13 @@ const planRows = ({ Box, Text }: Drawing, section: ListingSection) => {
           </Box>
           <Box flexShrink={1}>
             <Text dimColor={row.word === 'done'}>{row.lines[0]?.trim() ?? ''}</Text>
-            {row.word === 'running' || isWaiting ? <Text> </Text> : null}
-            {row.word === 'running' || isWaiting ? <Text color={colour}>{row.word}</Text> : null}
           </Box>
+          {/* The state in a box of its own, so a long title wraps and the word stays whole. */}
+          {row.word === 'running' || isWaiting ? (
+            <Box flexShrink={0} marginLeft={1}>
+              <Text color={colour}>{row.word}</Text>
+            </Box>
+          ) : null}
         </Box>
         {under.map(line => (
           <Box>

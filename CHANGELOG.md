@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- A step's time is the time by the clock from its first turn to its end, the wait for your answer included, not only the seconds Claude's turns took; a turn of something else before it does not count. The plan says how long the step running has gone on, `running for 12 min` or `waiting for you, 12 min`, and `took 14 min` under each step done, in `/aside` and `/aside log`, and an open pane moves it on as time passes; a time under a second is left out. A step started by an earlier release keeps the time of its turns.
+- The plan marks each step's state with a sign of its own: `✓` done, `▶` running, `?` waiting for you and `○` to do, in place of three dots alike. In the pane, a long title no longer breaks the word running or waiting beside it.
+
 ## 0.28.0 - 2026-10-20
 
 - `/aside run` runs one thing: the next step of the plan, or with no step left, the first entry of the queue. `/aside run all` runs the rest of the plan step by step, or the queue entry by entry, as `/aside run` did. `/aside run all` no longer sends the whole queue as one prompt, nor does `afterClaudeAnswers` on `run all`, which now runs the queue entry by entry too; `/aside plan` is there to put entries together. `/aside run` in a paused run runs the next step of it and leaves the rest paused, and `/aside continue` goes on with the whole run, as before. A plan another session starts while `/aside run`, `run all` or `afterClaudeAnswers` takes the queue is kept, and the entries stay in the queue. `/aside pop`, `g pop` and `q NAME pop` take the first entry of the list, not the newest.
