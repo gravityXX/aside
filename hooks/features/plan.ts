@@ -440,14 +440,11 @@ const entryStep = (entry: Entry, root: string): Step => ({
   prompt: entryPrompt(entry, root),
 })
 
-// A title for each step made of an entry whose text is long, from the small model, once the
-// run has started: it reads the text typed alone, never what was copied, as tidying does. A
-// step keeps the one it has when no reply comes in time, or when the plan no longer holds it,
-// under that title, by then.
-async function nameSteps($: Engine, ctx: Context, steps: readonly Step[], entries: readonly Entry[]): Promise<void> {
-  for (const [i, step] of steps.entries()) {
-    const text = entries[i]?.text ?? ''
-    if (step.title.length <= 60 || text.trim() === '') continue
+// A title for each of `named`, from the small model reading the text typed alone, never what
+// was copied, as tidying does. A step keeps the one it has when no reply comes in time, or when
+// the plan no longer holds it, under that title, by then.
+async function nameSteps($: Engine, ctx: Context, named: readonly { step: Step; text: string }[]): Promise<void> {
+  for (const { step, text } of named) {
     const reply = await $.model
       .complete({ model: 'haiku', system: TITLE_SYSTEM, prompt: tidyPrompt(text), maxTokens: 100, timeoutMs: 10_000 })
       .catch(() => undefined)
@@ -461,12 +458,38 @@ async function nameSteps($: Engine, ctx: Context, steps: readonly Step[], entrie
   }
 }
 
-// Names the steps in the background, where /aside idle waits for tidying too.
-function nameStepsLater($: Engine, ctx: Context, steps: readonly Step[], entries: readonly Entry[]) {
-  if (!ctx.settings.tidy) return
-  const work = nameSteps($, ctx, steps, entries).catch(() => undefined)
+// Names them in the background, where /aside idle waits for tidying too.
+function nameLater($: Engine, ctx: Context, named: readonly { step: Step; text: string }[]) {
+  if (!ctx.settings.tidy || named.length === 0) return
+  const work = nameSteps($, ctx, named).catch(() => undefined)
   ctx.session.tidies.add(work)
   void work.then(() => ctx.session.tidies.delete(work))
+}
+
+// The steps made of an entry whose text is long, once the run has started.
+function nameStepsLater($: Engine, ctx: Context, steps: readonly Step[], entries: readonly Entry[]) {
+  nameLater(
+    $,
+    ctx,
+    steps.flatMap((step, i) => (step.title.length > 60 && entries[i]?.text.trim() ? [{ step, text: entries[i].text }] : [])),
+  )
+}
+
+// A step made of an idea whose title is its text cut short, as an earlier release cut it at 50
+// characters, or one no reply named when it ran: its prompt starts with the idea's text, and only
+// that first paragraph, without where it was typed, goes to the model. Each is asked about once
+// in this process, whatever the model answers.
+const OLD_CUT = / \((?:while you worked on .*|branch [^)]*)\)$/
+
+export async function nameOldSteps($: Engine, ctx: Context): Promise<void> {
+  const plan = await loadPlan($, (await projectKeys($)).plan)
+  const named = plan.steps.flatMap(step => {
+    const start = step.title.slice(0, -1).trimEnd()
+    const isCut = step.title.endsWith('…') && step.prompt.startsWith(start) && !ctx.session.namedOld.has(step.prompt)
+    return isCut ? [{ step, text: step.prompt.split('\n\n')[0]!.replace(OLD_CUT, '') }] : []
+  })
+  if (ctx.settings.tidy) for (const { step } of named) ctx.session.namedOld.add(step.prompt)
+  nameLater($, ctx, named)
 }
 
 async function runChosenSteps($: Engine, ctx: Context, plan: Plan, chosen: readonly number[]): Promise<string> {
@@ -610,6 +633,8 @@ export async function stopPlan($: Engine, ctx: Context): Promise<string> {
     }
     const n = active.step + 1
     if (isWaiting(active) || isAway(active) || (active.isEnding && active.turnId === undefined) || isLeftHere(ctx, active, me)) {
+      // With nothing it said it did, the step shows that stop ended it.
+      active.result ??= 'stopped'
       completeStep(plan, active, me, false, now)
       return `Step ${n} is done as it stands, and the plan stops there.`
     }

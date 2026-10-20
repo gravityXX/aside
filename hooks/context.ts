@@ -43,6 +43,8 @@ export type Session = {
   lastTask?: string
   // The last tool output of the turn: an error stays over a later success.
   lastOutput?: ToolOutput
+  // The last tool the main loop called, in the turn turnId names: what a step does now.
+  lastTool?: { turnId: string | undefined; text: string }
   // The last message queued, until the box it went back into has been emptied.
   justQueued?: string
   // The person's message to a step that waits for them, until the turn it starts is bound to
@@ -65,6 +67,8 @@ export type Session = {
   // The entries being tidied now: a planner waits for them, or it would plan an entry under
   // the text it had before.
   tidies: Set<Promise<void>>
+  // The prompts of steps with a title an earlier release cut, sent to be named in this process.
+  namedOld: Set<string>
   // Writes of typed entries, one after another, so two quick ones never overwrite each other.
   writes: Promise<unknown>
   // Changes to the plan, one after another for the same reason: a step that ends and a
@@ -103,6 +107,7 @@ export const createContext = (options: Parameters<Register>[1]): Context => ({
     openTurns: new Set(),
     ownWork: new Set(),
     tidies: new Set(),
+    namedOld: new Set(),
     clipboard: {},
   },
 })

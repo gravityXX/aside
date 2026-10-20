@@ -10,7 +10,7 @@ import { addEntries } from './capture'
 import { findEntries } from './find'
 import { showLog } from './history'
 import { importFile } from './importing'
-import { handOverQueue, registerPlanTool, registerWaitTool, runChosen, runEntries, runNext, runPlan, stopPlan } from './plan'
+import { handOverQueue, nameOldSteps, registerPlanTool, registerWaitTool, runChosen, runEntries, runNext, runPlan, stopPlan } from './plan'
 import { runGlobal, runNamed } from './global'
 import { clearQueue, editEntry, exportListing, moveEntry, popEntry, removeEntries, restoreTaken, scanFile, showListing } from './queue'
 
@@ -233,6 +233,7 @@ async function runCommand($: Engine, ctx: Context, name: Name, args: readonly st
   const [first, second] = args
   switch (name) {
     case 'list':
+      await nameOldSteps($, ctx)
       return showListing($, ctx)
     case 'plan':
       return handOverQueue($, ctx)
@@ -283,6 +284,8 @@ type AsideEvent = Parameters<MatchedHook<'command.run', { readonly command: 'asi
 export async function runAside(ctx: Context, $: Engine, e: AsideEvent) {
   const [word = '', ...args] = e.args.trim().split(/\s+/)
   if (word === '') {
+    // A step an earlier release titled with its text cut short gets a name, shown next time.
+    await nameOldSteps($, ctx)
     return { text: await showListing($, ctx) }
   }
   const command = commandNamed(word.toLowerCase())

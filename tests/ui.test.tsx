@@ -498,7 +498,7 @@ describe('the plan drawn as a line of steps', () => {
       )
       expect((await ui.find({ type: 'Text', text: '✓' }))?.props.color).toBe('success')
       expect((await ui.find({ type: 'Text', text: '○' }))?.props.dimColor).toBe(true)
-      expect((await ui.find({ type: 'Text', text: '↳ took 8 min · one is in place.' }))?.props.dimColor).toBe(true)
+      expect((await ui.find({ type: 'Text', text: '↳ 8 min · one is in place.' }))?.props.dimColor).toBe(true)
       expect((await ui.find({ type: 'Text', text: '║' }))?.text).toBe('║')
       expect((await ui.find({ type: 'Text', text: 'paused here: /aside continue' }))?.text).toBe('paused here: /aside continue')
       await ui.unmount()
@@ -515,7 +515,7 @@ describe('the plan drawn as a line of steps', () => {
       const ui = await mount('Pane', { title: 'aside', isFocused: true, bodyColumns: 40, placement: 'inline' }, surface)
       expect((await ui.find({ type: 'Text', text: '▶' }))?.props.color).toBe('warning')
       expect((await ui.find({ type: 'Text', text: 'running' }))?.props.color).toBe('warning')
-      expect((await ui.find({ type: 'Text', text: '↳ running for 4 min' }))?.props.dimColor).toBe(true)
+      expect((await ui.find({ type: 'Text', text: '↳ 4 min' }))?.props.dimColor).toBe(true)
       // The word sits in a box of its own that never shrinks, so a title that wraps leaves it whole.
       expect(boxOf(await ui.drawn(), 'running')?.props?.flexShrink).toBe(0)
       // The title takes the room left, so the word sits at the right edge.
@@ -539,7 +539,7 @@ describe('the plan drawn as a line of steps', () => {
       )
       expect((await ui.find({ type: 'Text', text: '?' }))?.props.color).toBe('suggestion')
       expect((await ui.find({ type: 'Text', text: 'waiting' }))?.props.color).toBe('suggestion')
-      expect((await ui.find({ type: 'Text', text: '↳ waiting for you, 5 min · two asks first.' }))?.props.dimColor).toBe(true)
+      expect((await ui.find({ type: 'Text', text: '↳ 5 min · two asks first.' }))?.props.dimColor).toBe(true)
       expect((await ui.find({ type: 'Text', text: '║' }))?.text).toBe('║')
       expect((await ui.find({ type: 'Text', text: 'waits for you here: your answer, or /aside continue, ends it' }))?.text).toBe('waits for you here: your answer, or /aside continue, ends it')
       await ui.unmount()
@@ -554,11 +554,11 @@ describe('the plan drawn as a line of steps', () => {
     await startTurn(sent[0]!, 's1')
     await clock.advance(60_000)
     const ui = await pane()
-    expect((await ui.find({ type: 'Text', text: /^↳ running for/ }))?.text).toBe('↳ running for 1 min')
+    expect((await ui.find({ type: 'Text', text: /^↳ / }))?.text).toBe('↳ 1 min')
 
     await clock.advance(2 * 60_000)
     await clock.settle()
-    expect((await ui.find({ type: 'Text', text: /^↳ running for/ }))?.text).toBe('↳ running for 3 min')
+    expect((await ui.find({ type: 'Text', text: /^↳ / }))?.text).toBe('↳ 3 min')
     await ui.unmount()
   })
 

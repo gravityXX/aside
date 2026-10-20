@@ -50,7 +50,10 @@ async function loadListing($: Engine, ctx: Context) {
   const tags = await tagsInFiles($)
   const handedOver = new Set(await loadHanded($, handed))
   const plan = await loadPlan($, planKey)
-  const steps = planSection(plan, await $.clock.now())
+  const { lastTool } = ctx.session
+  // A turn's id names one turn of one process: the step running in it is this session's.
+  const isDoing = lastTool !== undefined && plan.active?.turnId !== undefined && plan.active.turnId === lastTool.turnId
+  const steps = planSection(plan, await $.clock.now(), isDoing ? lastTool.text : undefined)
   const queued = [queueSection(list, root), ...(tags.length > 0 ? [tagsSection(tags, root, tag => handedOver.has(tagId(tag)))] : [])]
   const isRunGoing = plan.active !== undefined || plan.paused !== undefined
   const sections = steps === null ? queued : isRunGoing ? [steps, ...queued] : [...queued, steps]

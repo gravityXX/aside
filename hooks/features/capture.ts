@@ -8,7 +8,7 @@ import type { Order, TypedEntry } from '../core/entries'
 import { formatPlace, isExportText } from '../core/listing'
 import { findFragment, findHeading, fragmentWords, MARKDOWN_PATH, MIN_FRAGMENT_WORDS } from '../core/markdown'
 import { readTidyReply, TIDY_SYSTEM, tidyPrompt } from '../core/prompts'
-import { describeError, formatCount, newQueueNote, relativePath, shortenText } from '../core/text'
+import { describeError, describeTool, formatCount, newQueueNote, relativePath, shortenText } from '../core/text'
 import { readClipboard, readGitBranch, resolveFile, searchMarkdown, tryReadFile } from '../io/host'
 import {
   addIdeas,
@@ -475,6 +475,8 @@ export async function emptyBoxAfterQueue(ctx: Context, $: Engine, e: Change[1], 
 type ToolCall = Parameters<Hook<'tool.call'>>
 
 export async function rememberToolOutput(ctx: Context, e: ToolCall[1], next: ToolCall[2]) {
+  // What the main loop does now, as the step running shows it, kept as the call starts.
+  if (e.agentId === undefined) ctx.session.lastTool = { turnId: ctx.session.turnId, text: describeTool(e.tool, e as unknown as Record<string, unknown>) }
   const ran = await next(e)
   const isError = ran.isError === true
   if (e.agentId === undefined && ran.deny === undefined && OUTPUT_TOOLS.has(e.tool)) {

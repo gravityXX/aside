@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Each step of the plan is its title and one line: its time, then what it did, waits for or does now. The step running shows the last tool of its turn, `now: Bash, run the tests`, a step in the background `in the background: review`, and a step `/aside stop` ended with nothing it said `stopped`. A step whose title is its text cut short, as earlier releases cut it at 50 characters, is named by the small model when `/aside` shows it, once, from the idea's text alone.
+
 ## 0.36.1 - 2026-10-20
 
 - `/aside stop` and `/aside continue` end a step that an earlier process left running in this session, as after a resume of a session that closed in the middle of a step: stop ends it as it stands, continue ends it and goes on. A step whose turn runs in this process now still stops after it.

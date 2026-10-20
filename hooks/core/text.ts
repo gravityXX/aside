@@ -122,3 +122,15 @@ export const formatProgress = (done: number, total: number): string => {
 
   return `${'▰'.repeat(filled)}${'▱'.repeat(marks - filled)} ${done}/${total}`
 }
+
+// A tool call in a few words, as the step running shows it: the tool, and what this call of it
+// is about, its own description first: "Bash, run the tests", "Edit, plan.ts".
+export const describeTool = (tool: string, input: Readonly<Record<string, unknown>>): string => {
+  const text = (key: string) => (typeof input[key] === 'string' ? (input[key] as string) : '')
+  const file = text('file_path') || text('notebook_path') || text('path')
+  const workflow = /name:\s*['"]([^'"]+)['"]/.exec(text('script'))?.[1] ?? text('name')
+  const detail = text('description') || workflow || file.split(/[\\/]/).at(-1) || text('pattern') || text('command') || text('url') || text('query')
+  const name = tool.replace(/^mcp__(.+?)__/, '$1 ')
+
+  return shortenText(detail ? `${name}, ${detail}` : name, 60)
+}
