@@ -69,10 +69,8 @@ export type Session = {
   tidies: Set<Promise<void>>
   // The prompts of steps with a title an earlier release cut, sent to be named in this process.
   namedOld: Set<string>
-  // Writes of typed entries, one after another, so two quick ones never overwrite each other.
-  writes: Promise<unknown>
-  // Changes to the plan, one after another for the same reason: a step that ends and a
-  // planner adding steps meanwhile each read the plan and save it back.
+  // Changes to the plan, one after another, so two never save over each other: a step that
+  // ends and a planner adding steps meanwhile each read the plan and save it back.
   planWrites: Promise<unknown>
   // The turns of the main loop this process saw start and has not yet seen end, and the work
   // in the background calls here started: what a step's turn or work can be known dead by.
@@ -102,7 +100,6 @@ export const createContext = (options: Parameters<Register>[1]): Context => ({
     waitTool: 'mcp__aside__wait',
     isOwnTurn: false,
     isRunning: false,
-    writes: Promise.resolve(),
     planWrites: Promise.resolve(),
     openTurns: new Set(),
     ownWork: new Set(),
@@ -119,9 +116,4 @@ export const currentOutput = (ctx: Context) => {
   const { lastOutput, turnId } = ctx.session
 
   return lastOutput && lastOutput.turnId === turnId ? lastOutput.text : undefined
-}
-
-// Runs `write` once every write chained before it is done.
-export const chainWrite = (ctx: Context, write: () => Promise<unknown>, onError: (error: unknown) => unknown) => {
-  ctx.session.writes = ctx.session.writes.then(write).catch(onError)
 }
