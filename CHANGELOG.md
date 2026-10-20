@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.36.1 - 2026-10-20
 
 - `/aside stop` and `/aside continue` end a step that an earlier process left running in this session, as after a resume of a session that closed in the middle of a step: stop ends it as it stands, continue ends it and goes on. A step whose turn runs in this process now still stops after it.
 
