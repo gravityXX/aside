@@ -100,7 +100,7 @@ read it later +g       the whole draft, onto the global list
 
 +@work TEXT            put an idea in the queue named work, made by its first idea
 read it later +@work   the whole draft, into the queue work
-/aside q               show the global list and every named queue, with its count and newest idea
+/aside q               show the global list and every named queue, with its first three ideas
 /aside q work          show the queue work; the commands of /aside g work on it, as in /aside q work here 1
 /aside q work clear    empty it, or with rename X move it all to the queue X, merged with any ideas there
 /aside q work local    keep it for this project alone; /aside q work global shares it again

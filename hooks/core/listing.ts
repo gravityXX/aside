@@ -62,19 +62,19 @@ export const namedSection = (name: string, entries: readonly Entry[], isLocal = 
   rows: entries.map((entry, i) => entryRow(entry, '', String(i + 1))),
 })
 
-// Every queue of no project that holds an idea, as /aside q shows them: its name, how many
-// ideas and the newest one, and whom it is for when that is worth a word. The names are padded to
-// the longest, as the row numbers they stand in for would line up.
-export const queuesSection = (queues: readonly { name: string; count: number; newest: string; note?: string }[]): ListingSection => {
-  const labels = queues.map(one => (one.name === 'global' ? 'global' : `@${one.name}`))
-  // Three at least, the width of a row number, which a shorter label would be pushed right to.
-  const width = Math.max(3, ...labels.map(label => label.length))
+// How many ideas of each queue /aside q shows; /aside q NAME lists them all.
+export const QUEUE_PEEK = 3
 
-  return {
-    title: `${formatCount(queues.length, 'queue')} beside this project's queue`,
-    rows: queues.map((one, i) => ({ label: labels[i]!.padEnd(width), word: formatCount(one.count, 'idea'), lines: [shortenText(one.newest, 60)], about: one.note ? [one.note] : [] })),
-  }
-}
+// Every queue of no project that holds an idea, as /aside q shows them: a line saying how many,
+// then each queue as a section of its own, its name, how many ideas and whom it is for when that
+// is worth a word over its first ideas, numbered as /aside q NAME numbers them.
+export const queuesSections = (queues: readonly { name: string; ideas: readonly Entry[]; note?: string }[]): ListingSection[] => [
+  { title: `${formatCount(queues.length, 'queue')} beside this project's queue`, rows: [] },
+  ...queues.map(one => ({
+    title: [`${one.name === 'global' ? 'global' : `@${one.name}`} · ${formatCount(one.ideas.length, 'idea')}`, one.note].filter(Boolean).join(', '),
+    rows: one.ideas.slice(0, QUEUE_PEEK).map((entry, i) => entryRow(entry, '', String(i + 1))),
+  })),
+]
 
 // What /aside find found in one list: each entry under the number its list shows it at.
 export const foundSection = (title: string, found: readonly { entry: Entry; label: string }[], root: string): ListingSection => ({

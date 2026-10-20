@@ -3,7 +3,7 @@ import type { EngineInterface as Engine } from 'claude-code'
 import type { Entry } from '../../types'
 import type { Context } from '../context'
 import { inOrder } from '../core/entries'
-import { listingText, namedSection, queuesSection } from '../core/listing'
+import { QUEUE_PEEK, listingText, namedSection, queuesSections } from '../core/listing'
 import type { Listed } from '../core/listing'
 import { MARKDOWN_PATH } from '../core/markdown'
 import { formatCount, newQueueNote, shortenText } from '../core/text'
@@ -98,14 +98,14 @@ export async function queuesListed($: Engine): Promise<Listed> {
   const rows = []
   for (const one of queues) {
     const ideas = await loadIdeas($, one.name)
-    const newest = ideas.reduce<GlobalIdea | undefined>((last, idea) => (last === undefined || idea.entry.at >= last.entry.at ? idea : last), undefined)
     // One every project sees but this project's own of its name hides here.
     const isHidden = await isHiddenHere($, one.name)
     const note = isLocalQueue(one.name) ? "this project's" : isHidden ? `for every project; hidden here by this project's @${one.name}` : ''
-    rows.push({ name: queueName(one.name), count: ideas.length, newest: newest?.entry.text ?? '', note })
+    rows.push({ name: queueName(one.name), ideas: ideas.map(idea => idea.entry), note })
   }
+  const isCut = rows.some(one => one.ideas.length > QUEUE_PEEK)
 
-  return { sections: [queuesSection(rows)] }
+  return { sections: queuesSections(rows), ...(isCut ? { note: '/aside q NAME lists all the ideas of a queue.' } : {}) }
 }
 
 // /aside q NAME here N ...: ideas from a queue to the end of this project's queue, into the
