@@ -18,7 +18,6 @@ import {
   planningRequest,
   readPlanReply,
   readStepResult,
-  sendPrompt,
   STEP_MARKER,
   stepPrompt,
 } from '../core/prompts'
@@ -91,36 +90,32 @@ async function changePlan<T>($: Engine, ctx: Context, change: (plan: Plan) => T 
   return done
 }
 
-// Hands the queue and the new file tags over: as one planning prompt ('plan'), or as it
-// is, to be done now ('send'). A prompt dropped beneath gives everything back. Nothing goes
-// while a turn of a step runs here, since the prompt would land in the middle of it: a plan
-// is organized once that turn ends (planAfterStep). A step that waits for the person has no
-// turn running, so the queue is added to the plan at once, the step waiting still; sending the
-// queue as it is is refused until the step ends. With planModel on a model, 'plan' goes to that
-// model instead, at once (planOutside).
-export async function handOverQueue($: Engine, ctx: Context, mode: 'plan' | 'send', asker: Asker = 'command'): Promise<string> {
-  if (mode === 'plan' && ctx.settings.planModel !== 'session') {
+// Hands the queue and the new file tags over as one planning prompt. A prompt dropped beneath
+// gives everything back. Nothing goes while a turn of a step runs here, since the prompt would
+// land in the middle of it: the plan is organized once that turn ends (planAfterStep). A step
+// that waits for the person has no turn running, so the queue is added to the plan at once,
+// the step waiting still. With planModel on a model, it goes to that model instead, at once
+// (planOutside).
+export async function handOverQueue($: Engine, ctx: Context, asker: Asker = 'command'): Promise<string> {
+  if (ctx.settings.planModel !== 'session') {
     return planOutside($, ctx, ctx.settings.planModel, asker)
   }
   // A second planning prompt, sent before the turn that adds to the plan has ended, would be
   // organized against the plan as it was, and save over the steps the first one adds.
-  if (mode === 'plan' && ctx.session.planning?.isAdding) {
+  if (ctx.session.planning?.isAdding) {
     return 'Claude has yet to organize what the last /aside plan handed over; /aside plan works again once it has.'
   }
   const keys = await projectKeys($)
   const plan = await loadPlan($, keys.plan)
   const running = await runningHere($, plan)
-  if (running && mode === 'plan' && isWaiting(plan.active!)) {
-    return (await handOver($, ctx, 'plan', true)).text
-  }
-  if (running && mode === 'plan') {
-    return planAfterStep($, ctx, asker)
+  if (running && isWaiting(plan.active!)) {
+    return (await handOver($, ctx, true)).text
   }
   if (running) {
-    return running
+    return planAfterStep($, ctx, asker)
   }
 
-  return (await handOver($, ctx, mode, false)).text
+  return (await handOver($, ctx, false)).text
 }
 
 // Whether there is anything to hand over: an entry, or a tag not handed over yet.
@@ -146,7 +141,7 @@ async function planAfterStep($: Engine, ctx: Context, asker: Asker): Promise<str
     return { n: plan.active.step + 1, isAnswer: isAnswerTurn(plan.active) }
   })
   if (step === undefined) {
-    return handOverQueue($, ctx, 'plan', asker)
+    return handOverQueue($, ctx, asker)
   }
   const text = step.isAnswer
     ? `Step ${step.n} is running on your answer; once Claude has answered, it organizes the queue into steps after the plan's own.`
@@ -161,7 +156,7 @@ async function planAfterStep($: Engine, ctx: Context, asker: Asker): Promise<str
 // that adds the queue to the plan as it stands, every step kept. The plan keeps that mark
 // (adding), bound to the prompt's turn by its text as it starts, so the plan tool adds the steps
 // it saves after the plan's own even when a reload has lost what this session knew.
-async function handOver($: Engine, ctx: Context, mode: 'plan' | 'send', isAdding: boolean): Promise<{ text: string; isHanded: boolean }> {
+async function handOver($: Engine, ctx: Context, isAdding: boolean): Promise<{ text: string; isHanded: boolean }> {
   const keys = await projectKeys($)
   const stored = await loadEntries($, keys.queue)
   // Tags already handed over stay in their files until a step removes them; they are
@@ -177,20 +172,20 @@ async function handOver($: Engine, ctx: Context, mode: 'plan' | 'send', isAdding
   await refreshBand($, 0)
   const me = await $.session.id()
   const plan = await changePlan($, ctx, plan => {
-    if (mode === 'plan' && isAdding) plan.adding = { after: plan.steps.length, sessionId: me }
+    if (isAdding) plan.adding = { after: plan.steps.length, sessionId: me }
     return structuredClone(plan)
   })
-  const text = mode === 'plan' ? planningPrompt(all, keys.root, plan, isAdding, ctx.session.planTool) : sendPrompt(all, keys.root)
-  const planning = mode === 'plan' ? { items: all, isSaved: false, isAdding } : undefined
-  if (planning) ctx.session.planning = planning
+  const text = planningPrompt(all, keys.root, plan, isAdding, ctx.session.planTool)
+  const planning = { items: all, isSaved: false, isAdding }
+  ctx.session.planning = planning
   submitLater($, async () => text, async why => {
-    if (planning && ctx.session.planning === planning) delete ctx.session.planning
+    if (ctx.session.planning === planning) delete ctx.session.planning
     await giveBack()
     await refreshBand($, tags.length)
     $.ui.toast(`Could not hand the queue over (${why}); the entries are back in it`)
   })
 
-  return { text: `${mode === 'plan' ? 'Organizing' : 'Sending'} ${describeCount(all)}.`, isHanded: true }
+  return { text: `Organizing ${describeCount(all)}.`, isHanded: true }
 }
 
 // Lets go of the step `index` that never started (its prompt was dropped or refused),
@@ -239,12 +234,14 @@ function stepMode(steps: readonly Step[], index: number, isChain: boolean, then:
 
 // Runs step `index` of the plan; with `isChain`, the next one not done follows when it ends,
 // with `then`, those steps in that order. A stop that lands before its prompt goes out keeps
-// it from going out at all.
-async function startStep($: Engine, ctx: Context, index: number, isChain: boolean, then?: readonly number[]) {
+// it from going out at all. With `paused`, the step runs alone out of a paused run, which
+// stays paused after it for /aside continue.
+async function startStep($: Engine, ctx: Context, index: number, isChain: boolean, then?: readonly number[], paused?: Plan['paused']) {
   const sessionId = await $.session.id()
   const steps = await changePlan($, ctx, plan => {
-    // A step that starts, the run going on or a new one, ends any pause.
-    delete plan.paused
+    // A step that starts, the run going on or a new one, ends any pause but its own.
+    if (paused) plan.paused = paused
+    else delete plan.paused
     plan.active = { step: index, isChain, sessionId, ...(then ? { then: [...then] } : {}) }
     return structuredClone(plan.steps)
   })
@@ -379,7 +376,7 @@ function pausedNext(plan: Plan): { index: number; then: number[] | undefined } {
   return { index: paused.isChain ? plan.steps.findIndex((step, i) => i > paused.step && !step.isDone) : -1, then: undefined }
 }
 
-// /aside run on the saved plan: a step that waits for the person, in any session, ends and its
+// /aside run all and continue on the saved plan: a step that waits for the person, in any session, ends and its
 // run goes on, a paused run goes on as it was to, any other run starts from the first step not
 // done.
 // Undefined when every step is done, so the queue runs entry by entry instead.
@@ -446,11 +443,11 @@ async function runChosenEntries($: Engine, ctx: Context, keys: Keys, plan: Plan,
   const note = takeOverNote(plan)
   const entries = chosen.map(n => list[n - 1]!)
   const steps = entries.map(entry => entryStep(entry, keys.root))
-  await takeChosen($, keys, stored, entries)
-  await changePlan($, ctx, async plan => {
-    await archivePlan($, plan)
-    replaceSteps(plan, steps)
-  })
+  const { giveBack } = await takeChosen($, keys, stored, entries)
+  if (!(await replacePlan($, ctx, steps))) {
+    await giveBack()
+    return PLAN_STARTED
+  }
   await refreshBand($)
   await startStep($, ctx, 0, true)
 
@@ -474,7 +471,52 @@ export async function runChosen($: Engine, ctx: Context, numbers: readonly numbe
   return plan.steps.some(step => !step.isDone) ? runChosenSteps($, ctx, plan, chosen) : runChosenEntries($, ctx, keys, plan, chosen)
 }
 
-// /aside run with no plan to run: every entry, and every new tag, becomes a step of its own.
+// /aside run: the next step of the plan alone, the one after a pause when the run is paused,
+// else the first entry of the queue, as /aside run 1 would. A step that waits for the person
+// ends and its run goes on, as /aside continue does.
+export async function runNext($: Engine, ctx: Context): Promise<string> {
+  const going = await goOnFromWaiting($, ctx)
+  if (going !== undefined) {
+    return going
+  }
+  const keys = await projectKeys($)
+  const plan = await loadPlan($, keys.plan)
+  const running = await runningHere($, plan)
+  if (running) {
+    return running
+  }
+  const { index: after, then } = plan.paused ? pausedNext(plan) : { index: -1, then: undefined }
+  if (after >= 0) {
+    await startStep($, ctx, after, false, undefined, { ...plan.paused!, step: after, ...(then ? { then } : {}) })
+
+    return `Running step ${after + 1}: ${plan.steps[after]!.title}; /aside continue then goes on with the paused run.${takeOverNote(plan)}`
+  }
+  const next = plan.steps.findIndex(step => !step.isDone)
+  if (next >= 0) {
+    return runChosenSteps($, ctx, plan, [next + 1])
+  }
+  if ((await loadEntries($, keys.queue)).length === 0) {
+    const tags = (await tagsInFiles($, true)).length
+    return tags > 0 ? `The queue is empty; /aside run all runs the ${formatCount(tags, 'tag')} in files.` : 'Nothing to run: the queue is empty and the plan is done.'
+  }
+
+  return runChosenEntries($, ctx, keys, plan, [1])
+}
+
+const PLAN_STARTED = 'Another session started a plan meanwhile; the entries stay in the queue, and /aside shows the plan.'
+
+// The plan done made of `steps` alone, the one it was going to the log; false, and nothing
+// changed, when a plan with steps to do took its place since it was read (3.16).
+async function replacePlan($: Engine, ctx: Context, steps: readonly Step[]): Promise<boolean> {
+  return changePlan($, ctx, async plan => {
+    if (plan.steps.some(step => !step.isDone)) return false
+    await archivePlan($, plan)
+    replaceSteps(plan, steps)
+    return true
+  })
+}
+
+// /aside run all with no plan to run: every entry, and every new tag, becomes a step of its own.
 export async function runEntries($: Engine, ctx: Context): Promise<string> {
   const keys = await projectKeys($)
   const note = takeOverNote(await loadPlan($, keys.plan))
@@ -485,11 +527,12 @@ export async function runEntries($: Engine, ctx: Context): Promise<string> {
     return 'Nothing to run: the queue is empty and the plan is done.'
   }
   const steps = all.map(entry => entryStep(entry, keys.root))
-  await takeForHandOver($, keys, stored, tags)
-  await changePlan($, ctx, async plan => {
-    await archivePlan($, plan)
-    replaceSteps(plan, steps)
-  })
+  const { giveBack } = await takeForHandOver($, keys, stored, tags)
+  if (!(await replacePlan($, ctx, steps))) {
+    await giveBack()
+    await refreshBand($, tags.length)
+    return PLAN_STARTED
+  }
   await refreshBand($, 0)
   await startStep($, ctx, 0, true)
 
@@ -507,7 +550,7 @@ export async function stopPlan($: Engine, ctx: Context): Promise<string> {
     const active = plan.active
     if (!active && plan.paused) {
       delete plan.paused
-      return 'Dropped the paused run. /aside run starts the plan again from its first step to do.'
+      return 'Dropped the paused run. /aside run all starts the plan again from its first step to do.'
     }
     if (!active) {
       return undefined
@@ -1011,7 +1054,7 @@ async function finishStep($: Engine, ctx: Context, e: TurnComplete[1]) {
   if (isPlanning) {
     // A plan with no step left to add after is organized afresh, as /aside plan would.
     const isAdding = steps.some(one => !one.isDone)
-    const said = await handOver($, ctx, 'plan', isAdding).catch((error: unknown) => ({ text: `Could not organize the queue (${describeError(error)}).`, isHanded: false }))
+    const said = await handOver($, ctx, isAdding).catch((error: unknown) => ({ text: `Could not organize the queue (${describeError(error)}).`, isHanded: false }))
     // Only a hand-over that did not go out has more to say than the toast above.
     if (!said.isHanded) $.ui.toast(said.text)
   }
@@ -1042,11 +1085,11 @@ async function handOverAfterAnswer($: Engine, ctx: Context, plan: Plan, reason: 
       // A planner's call may take a while, and the turn's end does not wait for it: the plan's
       // title, or why there is none, comes as a toast once it is saved.
       $.clock.after(0, async () => {
-        $.ui.toast(await handOverQueue($, ctx, 'plan', 'answer').catch((error: unknown) => `Could not organize the queue: ${describeError(error)}`))
+        $.ui.toast(await handOverQueue($, ctx, 'answer').catch((error: unknown) => `Could not organize the queue: ${describeError(error)}`))
       })
       return
     }
-    $.ui.toast(await handOverQueue($, ctx, afterAnswer))
+    $.ui.toast(afterAnswer === 'plan' ? await handOverQueue($, ctx) : await runEntries($, ctx))
   }
 }
 

@@ -68,7 +68,7 @@ describe('handing the queue over', () => {
         '- for each step, write a prompt I could send you as it is; it must stand on its own, file paths included;',
         '- leave items that look done, contradictory or unclear out of the steps: pass each to the tool as unclear, with its number and your question, and they go back to my queue;',
         '- when a step handles a comment that is a <!-- --> tag in a file, the step removes that tag.',
-        'Then save the steps with the mcp__aside__plan tool and stop: I see the saved plan in a frame and run it with /aside run (all, in order) or /aside run N.',
+        'Then save the steps with the mcp__aside__plan tool and stop: I see the saved plan in a frame and run it with /aside run all (in order), /aside run (the next step) or /aside run N.',
         '',
         MARKER,
       ].join('\n'),
@@ -125,32 +125,30 @@ describe('handing the queue over', () => {
     expect(await aside('plan')).toBe('Organizing 1 comment.')
   })
 
-  test('/aside run all sends the queue as it is, to be worked through now', async ($, on) => {
-    const { sent, type, aside, idle } = world($, on)
+  test('with no plan, /aside run runs the first entry alone, and the rest waits in the queue', async ($, on) => {
+    const { sent, type, aside, shown, answer, idle } = world($, on)
     await type('+ a\n+? b')
 
-    expect(await aside('run all')).toBe('Sending 1 idea and 1 comment.')
+    expect(await aside('run')).toBe('Running entry 1: a')
     await idle()
-    expect(sent).toEqual([
-      [
-        'My queue, collected while you were working, oldest first.',
-        '',
-        'Ideas:',
-        '1. a (branch main)',
-        '',
-        'Comments on what you wrote (question, change, drop, dig deeper):',
-        'Not tied to a file:',
-        '  2. [question]: b',
-        '',
-        'Work through all of it now, in this order, in this one reply:',
-        '- answer the questions first;',
-        '- then the changes, drops and things to dig into, then the ideas;',
-        '- when you handle a comment that is a <!-- --> tag in a file, remove that tag;',
-        '- if an item is unclear or contradicts another, ask instead of guessing.',
-        '',
-        MARKER,
-      ].join('\n'),
-    ])
+    expect(sent).toEqual(['a (branch main)\n\n(Step 1 of 1 of the queue plan, "a", sent by the aside plugin.)'])
+    await answer('e1')
+    expect(await shown()).toEqual(['1 comment waiting', '1 question b', 'Plan done: 1 step', '1 done a'])
+
+    expect(await aside('run')).toBe('Running entry 1: b')
+    await idle()
+    expect(sent.at(-1)).toContain('Question:\nb')
+    await answer('e2')
+    expect(await aside('run')).toBe('Nothing to run: the queue is empty and the plan is done.')
+  })
+
+  test('with only tags in files, /aside run says that run all runs them', async ($, on) => {
+    const { sent, write, aside, idle } = world($, on, { files: { [REPORT_PATH]: REPORT } })
+    await write(REPORT_PATH)
+
+    expect(await aside('run')).toBe('The queue is empty; /aside run all runs the 1 tag in files.')
+    await idle()
+    expect(sent).toEqual([])
   })
 
   test('the entries leave the queue as they are handed over, and undo brings them back', async ($, on) => {
@@ -361,7 +359,7 @@ describe('handing the queue over', () => {
   test('while a step runs, /aside run all is refused and sends nothing', async ($, on) => {
     const { sent, type, aside, shown, savePlan, startTurn, endTurn, idle } = world($, on)
     await savePlan(STEPS)
-    await aside('run')
+    await aside('run all')
     await idle()
     await startTurn(sent[0]!, 's1')
     await type('+ z', 's1')
@@ -376,7 +374,7 @@ describe('handing the queue over', () => {
   test('once the entries a run sent as steps are done, undo has nothing to bring back', async ($, on) => {
     const { type, aside, answer, idle } = world($, on)
     await type('+ a\n+ b')
-    await aside('run')
+    await aside('run all')
     await idle()
     await answer('e1')
     await answer('e2')
@@ -389,7 +387,7 @@ describe('handing the queue over', () => {
     await savePlan(STEPS)
     await type('+ a')
     await aside('clear')
-    await aside('run')
+    await aside('run all')
     await idle()
     await answer('s1')
     await answer('s2')
@@ -409,12 +407,12 @@ describe('handing the queue over', () => {
     expect(await shown()).toEqual(['1 idea waiting', '1 idea a'])
   })
 
-  test('with no plan, /aside run sends each entry as a step of its own, one after another', async ($, on) => {
+  test('with no plan, /aside run all runs each entry as a step of its own, one after another', async ($, on) => {
     const { sent, write, type, aside, shown, answer, idle } = world($, on, { files: { [REPORT_PATH]: REPORT } })
     await write(REPORT_PATH)
     await type('+ dark mode\n+! @docs/report.md:5 as a table')
 
-    expect(await aside('run')).toBe('Running 3 entries one by one. /aside stop stops after the current one.')
+    expect(await aside('run all')).toBe('Running 3 entries one by one. /aside stop stops after the current one.')
     expect(await shown()).toEqual([
       'The queue is empty.',
       'Tags in files',
@@ -466,11 +464,11 @@ describe('running the plan', () => {
     expect(saved.result).toBe('Plan: 3 of 3 steps to do (/aside run)\n\n  1  to do  One\n  2  to do  Two\n  3  to do  Three')
     expect(saved.context).toEqual([
       'The user sees this plan drawn in a frame, so do not list its steps again. Say in a line or two why they come in this order, ' +
-        'and ask your question about each item left out, if any. /aside run runs the steps in order; /aside run N runs one.',
+        'and ask your question about each item left out, if any. /aside run all runs the steps in order; /aside run runs the next one, /aside run N that one.',
     ])
     expect(await shown()).toEqual(['The queue is empty.', 'Plan: 3 of 3 steps to do (/aside run)', '1 to do One', '2 to do Two', '3 to do Three'])
 
-    expect(await aside('run')).toBe('Running the plan: 3 steps, from step 1. /aside stop stops after the current one.')
+    expect(await aside('run all')).toBe('Running the plan: 3 steps, from step 1. /aside stop stops after the current one.')
     await idle()
     await answer('s1', 'Did one.\n\nResult: one is in place.', 40_000)
     await answer('s2', 'Did two.\n\n**Result:** two works, one question is open.', 20 * 60_000)
@@ -496,7 +494,7 @@ describe('running the plan', () => {
   test('with every step done, /aside run N runs entry N alone, and the rest stay', async ($, on) => {
     const { sent, type, aside, shown, savePlan, answer, idle } = world($, on)
     await savePlan([{ title: 'One', prompt: 'Do one.' }])
-    await aside('run')
+    await aside('run all')
     await idle()
     await answer('s1')
     await type('+ a\n+ b\n+ c')
@@ -559,7 +557,7 @@ describe('running the plan', () => {
   test('a step that needs an answer waits for it with the wait tool: the answer is the step\'s own, and /aside continue ends it and goes on', async ($, on) => {
     const { sent, contexts, toasts, type, aside, shown, savePlan, wait, startTurn, endTurn, idle, band } = world($, on)
     await savePlan(STEPS)
-    await aside('run')
+    await aside('run all')
     await idle()
     await startTurn(sent[0]!, 's1')
 
@@ -606,7 +604,7 @@ describe('running the plan', () => {
   test('a step asked again after an answer waits for that answer, and every turn meanwhile is its own, a cut-short one too', async ($, on) => {
     const { sent, contexts, toasts, type, shown, savePlan, aside, wait, startTurn, endTurn, idle } = world($, on)
     await savePlan(STEPS)
-    await aside('run')
+    await aside('run all')
     await idle()
     await startTurn(sent[0]!, 's1')
     await wait('which design')
@@ -648,7 +646,7 @@ describe('running the plan', () => {
   test('a step that waits ends at /aside continue whatever it waited for, and a message typed over a running turn reads nothing beside it', async ($, on) => {
     const { sent, contexts, type, aside, shown, savePlan, wait, startTurn, endTurn, answer, idle } = world($, on)
     await savePlan(STEPS)
-    await aside('run')
+    await aside('run all')
     await idle()
     await startTurn(sent[0]!, 's1')
     await wait('x')
@@ -667,7 +665,7 @@ describe('running the plan', () => {
   test('the last step of a run that waits writes no summary until /aside continue, which has Claude sum the run up in one more turn', async ($, on) => {
     const { sent, contexts, toasts, type, aside, shown, savePlan, wait, startTurn, endTurn, answer, idle } = world($, on)
     await savePlan(STEPS)
-    await aside('run')
+    await aside('run all')
     await idle()
     await answer('s1', 'Result: one.', 60_000)
     await answer('s2', 'Result: two.', 60_000)
@@ -712,7 +710,7 @@ describe('running the plan', () => {
   test('a plan of one step that waits ends at /aside continue, with no turn to sum it up', async ($, on) => {
     const { sent, aside, savePlan, wait, startTurn, endTurn, idle } = world($, on)
     await savePlan([STEPS[0]])
-    await aside('run')
+    await aside('run all')
     await idle()
     await startTurn(sent[0]!, 's1')
 
@@ -786,13 +784,13 @@ describe('running the plan', () => {
     expect(sent).toHaveLength(1)
     expect((await shown()).slice(1)).toEqual(['Plan: 2 of 3 steps to do (/aside run)', '1 to do One', '2 to do Two', '3 done Three', '↳ asks x.'])
     expect(await aside('stop')).toBe('Nothing is running.')
-    expect(await aside('run')).toBe('Running the plan: 2 steps, from step 1. /aside stop stops after the current one.')
+    expect(await aside('run all')).toBe('Running the plan: 2 steps, from step 1. /aside stop stops after the current one.')
   })
 
   test('/aside stop while Claude works on the answer ends the step with that turn, and nothing follows it', async ($, on) => {
     const { sent, toasts, type, aside, shown, savePlan, wait, startTurn, endTurn, idle } = world($, on)
     await savePlan(STEPS)
-    await aside('run')
+    await aside('run all')
     await idle()
     await startTurn(sent[0]!, 's1')
     await wait('x')
@@ -811,7 +809,7 @@ describe('running the plan', () => {
   test('/aside stop holds while Claude works on the answer: a turn cut short, or a new question, still ends the step as it stands', async ($, on) => {
     const { sent, toasts, type, aside, shown, savePlan, wait, startTurn, endTurn, idle } = world($, on)
     await savePlan(STEPS)
-    await aside('run')
+    await aside('run all')
     await idle()
     await startTurn(sent[0]!, 's1')
     await wait('x')
@@ -825,7 +823,7 @@ describe('running the plan', () => {
     expect(toasts.at(-1)).toBe('Step 1 done')
     expect((await shown()).slice(1, 4)).toEqual(['Plan: 2 of 3 steps to do (/aside run) · 2 min so far', '1 done One', '↳ 2 min · drew the design.'])
 
-    await aside('run')
+    await aside('run all')
     await idle()
     await startTurn(sent.at(-1)!, 's2')
     await wait('y')
@@ -847,7 +845,7 @@ describe('running the plan', () => {
     // A run of three whose last step asked, and took the answer.
     const answeredAtLast = async (id: string) => {
       await savePlan(STEPS)
-      await aside('run')
+      await aside('run all')
       await idle()
       await answer(`${id}1`)
       await answer(`${id}2`)
@@ -888,7 +886,7 @@ describe('running the plan', () => {
   test('an answer typed before the asking turn has ended is taken up all the same by the turn it starts', async ($, on) => {
     const { sent, toasts, type, aside, shown, savePlan, wait, startTurn, endTurn, idle } = world($, on)
     await savePlan(STEPS)
-    await aside('run')
+    await aside('run all')
     await idle()
     await startTurn(sent[0]!, 's1')
     await wait('which design')
@@ -908,7 +906,7 @@ describe('running the plan', () => {
   test('a slash command typed while a step waits reads nothing beside it, and an answer through Remote Control is the step\'s own', async ($, on) => {
     const { sent, contexts, aside, savePlan, wait, startTurn, endTurn, fromPhone, idle } = world($, on)
     await savePlan(STEPS)
-    await aside('run')
+    await aside('run all')
     await idle()
     await startTurn(sent[0]!, 's1')
     await wait('x')
@@ -922,10 +920,10 @@ describe('running the plan', () => {
     expect(contexts.at(-1)).toEqual([answering(1, 'One')])
   })
 
-  test('while a step waits, /aside run N, undo and the queue sent as it is wait for it, and say how to end it', async ($, on) => {
+  test('while a step waits, /aside run N and undo wait for it, and say how to end it', async ($, on) => {
     const { sent, type, aside, savePlan, wait, startTurn, endTurn, idle } = world($, on)
     await savePlan(STEPS)
-    await aside('run')
+    await aside('run all')
     await idle()
     await startTurn(sent[0]!, 's1')
     await wait('x')
@@ -934,7 +932,6 @@ describe('running the plan', () => {
 
     const why = 'Step 1 waits for your answer; /aside continue ends it and goes on, /aside stop ends it there.'
     expect(await aside('run 3')).toBe(why)
-    expect(await aside('run all')).toBe(why)
     expect(await aside('undo')).toBe('Step 1 of the plan waits for your answer; /aside stop first, so nothing is done twice.')
     await idle()
     expect(sent).toHaveLength(1)
@@ -949,7 +946,7 @@ describe('running the plan', () => {
   test('in the turn that called the wait tool, /aside continue and /aside plan take the step as running, not as running on an answer', async ($, on) => {
     const { sent, type, aside, savePlan, wait, startTurn, idle } = world($, on)
     await savePlan(STEPS)
-    await aside('run')
+    await aside('run all')
     await idle()
     await startTurn(sent[0]!, 's1')
     await wait('x')
@@ -1010,7 +1007,7 @@ describe('running the plan', () => {
   test('/aside continue and a turn that starts as it ends the step never both win: the step ends, and the turn is no answer to it', async ($, on) => {
     const { w, sent, aside, shown, savePlan, wait, startTurn, endTurn, idle } = world($, on)
     await savePlan(STEPS)
-    await aside('run')
+    await aside('run all')
     await idle()
     await startTurn(sent[0]!, 's1')
     await wait('x')
@@ -1044,15 +1041,15 @@ describe('running the plan', () => {
     const stored = { 'plan:/proj': { steps: [{ ...STEPS[0], isDone: true, ms: 0 }, STEPS[1], STEPS[2]], paused: { step: 0, reason: 'needs your yes', isChain: true } } }
     const { aside, shown } = world($, on, { stored })
 
-    expect(await aside('stop')).toBe('Dropped the paused run. /aside run starts the plan again from its first step to do.')
+    expect(await aside('stop')).toBe('Dropped the paused run. /aside run all starts the plan again from its first step to do.')
     expect((await shown())[1]).toBe('Plan: 2 of 3 steps to do (/aside run)')
-    expect(await aside('run')).toBe('Running the plan: 2 steps, from step 2. /aside stop stops after the current one.')
+    expect(await aside('run all')).toBe('Running the plan: 2 steps, from step 2. /aside stop stops after the current one.')
   })
 
   test('when the store refuses the pause, the wait tool tells Claude to call it again', async ($, on) => {
     const { w, sent, aside, savePlan, startTurn, wait, idle } = world($, on)
     await savePlan(STEPS)
-    await aside('run')
+    await aside('run all')
     await idle()
     await startTurn(sent[0]!, 's1')
     w.isStoreFull = true
@@ -1063,7 +1060,7 @@ describe('running the plan', () => {
   test('when the store fails at the start or the end of a step, aside says so in a toast', async ($, on) => {
     const { w, sent, toasts, aside, savePlan, startTurn, endTurn, idle } = world($, on)
     await savePlan(STEPS)
-    await aside('run')
+    await aside('run all')
     await idle()
     w.isStoreFull = true
 
@@ -1100,7 +1097,7 @@ describe('running the plan', () => {
   test('/aside stop while a step runs makes it the last', async ($, on) => {
     const { sent, toasts, aside, shown, savePlan, startTurn, endTurn, answer, idle } = world($, on)
     await savePlan(STEPS)
-    await aside('run')
+    await aside('run all')
     await idle()
     await answer('s1')
 
@@ -1116,7 +1113,7 @@ describe('running the plan', () => {
   test('/aside stop between two steps keeps the next one from going out', async ($, on) => {
     const { sent, aside, shown, savePlan, startTurn, endTurn, idle } = world($, on)
     await savePlan(STEPS)
-    await aside('run')
+    await aside('run all')
     await idle()
     await startTurn(sent[0]!, 's1')
 
@@ -1132,7 +1129,7 @@ describe('running the plan', () => {
 
     expect((await savePlan([])).deny).toBe('steps must be a non-empty list of { title, prompt }, each prompt non-empty')
     await savePlan(STEPS)
-    await aside('run')
+    await aside('run all')
     await idle()
     await startTurn(sent[0]!, 's1')
     expect((await savePlan(STEPS)).deny).toBe('step 1 of the current plan is running; the user stops it with /aside stop first')
@@ -1145,7 +1142,7 @@ describe('running the plan', () => {
     expect(await aside('run 3')).toBe('Running step 3: Three')
     await idle()
     await startTurn(sent[0]!, 's3')
-    expect(await aside('run')).toBe('Step 3 is running. /aside stop stops after it.')
+    expect(await aside('run all')).toBe('Step 3 is running. /aside stop stops after it.')
     await endTurn('s3', 'aborted')
     expect(toasts).toEqual(['Plan stopped: step 3 was interrupted'])
     expect(await shown()).toEqual(['The queue is empty.', 'Plan: 3 of 3 steps to do (/aside run)', '1 to do One', '2 to do Two', '3 to do Three'])
@@ -1156,25 +1153,136 @@ describe('running the plan', () => {
     await savePlan(STEPS)
     w.isDropping = true
 
-    await aside('run')
+    await aside('run all')
     await idle()
     expect(toasts).toEqual(['Could not send step 1 of the plan: blocked by a hook'])
     expect(await aside('stop')).toBe('Nothing is running.')
   })
 
-  test('/aside run runs the saved plan first, then the queue entry by entry', async ($, on) => {
+  test('/aside run all runs the saved plan first, then the queue entry by entry', async ($, on) => {
     const { sent, type, aside, savePlan, startTurn, endTurn, idle } = world($, on)
     await savePlan([{ title: 'One', prompt: 'Do one.' }])
     await type('+ extra')
 
-    expect(await aside('run')).toBe('Running the plan: 1 step, from step 1. /aside stop stops after the current one.')
+    expect(await aside('run all')).toBe('Running the plan: 1 step, from step 1. /aside stop stops after the current one.')
     await idle()
     await startTurn(sent[0]!, 'x1')
     await endTurn('x1')
 
-    expect(await aside('run')).toBe('Running 1 entry one by one. /aside stop stops after the current one.')
+    expect(await aside('run all')).toBe('Running 1 entry one by one. /aside stop stops after the current one.')
     await idle()
     expect(sent.at(-1)).toBe('extra (branch main)\n\n(Step 1 of 1 of the queue plan, "extra", sent by the aside plugin.)')
+  })
+
+  test('with a plan, /aside run runs its next step alone, and the queue waits until the plan is done', async ($, on) => {
+    const { sent, type, aside, savePlan, answer, shown, idle } = world($, on)
+    await savePlan(STEPS)
+    await type('+ extra')
+
+    expect(await aside('run')).toBe('Running step 1: One')
+    await idle()
+    expect(sent[0]).toContain(ALONE)
+    await answer('s1')
+    expect(sent).toHaveLength(1)
+    expect(await aside('run')).toBe('Running step 2: Two')
+    await idle()
+    await answer('s2')
+    expect(await aside('run')).toBe('Running step 3: Three')
+    await idle()
+    await answer('s3')
+    expect(sent).toHaveLength(3)
+    expect((await shown())[0]).toBe('1 idea waiting')
+
+    expect(await aside('run')).toBe('Running entry 1: extra')
+  })
+
+  test('in a paused run, /aside run runs the step after the pause alone, and /aside continue goes on with the rest', async ($, on) => {
+    const steps = [{ ...STEPS[0], isDone: true, ms: 0 }, STEPS[1], STEPS[2]]
+    const stored = { 'plan:/proj': { steps, paused: { step: 0, reason: 'needs your yes', isChain: true } } }
+    const { sent, aside, answer, idle } = world($, on, { stored })
+
+    expect(await aside('run')).toBe('Running step 2: Two; /aside continue then goes on with the paused run.')
+    await idle()
+    await answer('s2')
+    expect(sent).toHaveLength(1)
+
+    expect(await aside('continue')).toBe('Going on with the plan from step 3. /aside stop stops after the current one.')
+    await idle()
+    expect(sent).toHaveLength(2)
+  })
+
+  test('in a paused run, /aside continue goes on with the rest of it', async ($, on) => {
+    const steps = [{ ...STEPS[0], isDone: true, ms: 0 }, STEPS[1], STEPS[2]]
+    const stored = { 'plan:/proj': { steps, paused: { step: 0, reason: 'needs your yes', isChain: true } } }
+    const { sent, aside, answer, idle } = world($, on, { stored })
+
+    expect(await aside('continue')).toBe('Going on with the plan from step 2. /aside stop stops after the current one.')
+    await idle()
+    await answer('s2')
+    expect(sent).toHaveLength(2)
+  })
+
+  test('in a paused run of chosen steps, /aside run runs the next of them, and the rest stays paused for /aside continue', async ($, on) => {
+    const steps = [{ ...STEPS[0], isDone: true, ms: 0 }, STEPS[1], STEPS[2], { title: 'Four', prompt: 'Do four.' }]
+    const stored = { 'plan:/proj': { steps, paused: { step: 0, reason: 'needs your yes', isChain: false, then: [3, 2] } } }
+    const { sent, aside, answer, shown, idle } = world($, on, { stored })
+
+    expect(await aside('run')).toBe('Running step 4: Four; /aside continue then goes on with the paused run.')
+    await idle()
+    expect(sent[0]).toContain(ALONE)
+    await answer('s4')
+    expect((await shown())[1]).toBe('Plan paused after step 4 (needs your yes), 2 of 4 steps to do (/aside continue)')
+
+    expect(await aside('run')).toBe('Running step 3: Three; /aside continue then goes on with the paused run.')
+    await idle()
+    await answer('s3')
+    expect(await aside('continue')).toBe('Running the plan: 1 step, from step 2. /aside stop stops after the current one.')
+  })
+
+  test('while a step waits, /aside run ends it and goes on with its run, as /aside continue does', async ($, on) => {
+    const { sent, aside, savePlan, wait, startTurn, endTurn, idle } = world($, on)
+    await savePlan(STEPS)
+    await aside('run all')
+    await idle()
+    await startTurn(sent[0]!, 's1')
+    await wait('x')
+    await endTurn('s1')
+
+    expect(await aside('run')).toBe('Step 1 done; going on with the plan from step 2. /aside stop stops after the current one.')
+    await idle()
+    expect(sent).toHaveLength(2)
+  })
+
+  test('while a step runs here, /aside run starts nothing', async ($, on) => {
+    const { sent, type, aside, savePlan, startTurn, idle } = world($, on)
+    await savePlan(STEPS)
+    await type('+ extra')
+    await aside('run')
+    await idle()
+    await startTurn(sent[0]!, 's1')
+
+    expect(await aside('run')).toBe('Step 1 is running. /aside stop stops after it.')
+    await idle()
+    expect(sent).toHaveLength(1)
+  })
+
+  test('a plan another session starts while /aside run takes an entry stays, the entry goes back to the queue, and undo keeps what it had', async ($, on) => {
+    const { w, sent, type, aside, shown, idle, fromAnotherSession } = world($, on)
+    await type('+ old')
+    await aside('clear')
+    await type('+ a\n+ b')
+    w.beforeWrite = async key => {
+      if (!key.startsWith('queue:')) return
+      w.beforeWrite = undefined
+      await fromAnotherSession('plan:/proj', { steps: STEPS, active: { step: 0, isChain: true, sessionId: 'session-2', turnId: 'other' } })
+    }
+
+    expect(await aside('run')).toBe('Another session started a plan meanwhile; the entries stay in the queue, and /aside shows the plan.')
+    await idle()
+    expect(sent).toEqual([])
+    expect((await shown()).slice(0, 4)).toEqual(['2 ideas waiting', '1 idea a', '2 idea b', 'Plan: 3 of 3 steps to do (/aside run)'])
+    expect(await aside('undo')).toBe('Brought back 1 entry, 3 waiting.')
+    expect((await shown()).slice(0, 4)).toEqual(['3 ideas waiting', '1 idea old', '2 idea a', '3 idea b'])
   })
 
   test('/aside undo waits while a step runs, so nothing is done twice', async ($, on) => {
@@ -1183,7 +1291,7 @@ describe('running the plan', () => {
     await aside('plan')
     await idle()
     await savePlan(STEPS)
-    await aside('run')
+    await aside('run all')
     await idle()
     await startTurn(sent.at(-1)!, 's1')
 
@@ -1218,16 +1326,33 @@ describe('when Claude answers', () => {
     expect(sent).toHaveLength(1)
   })
 
-  test('afterClaudeAnswers run all sends the queue as it is', { options: { afterClaudeAnswers: 'run all' } }, async ($, on) => {
-    const { sent, type, startTurn, endTurn, idle } = world($, on)
+  test('afterClaudeAnswers run all runs each entry as a step of its own', { options: { afterClaudeAnswers: 'run all' } }, async ($, on) => {
+    const { sent, toasts, type, startTurn, endTurn, idle } = world($, on)
     await startTurn('build', 't1')
-    await type('+ dark mode', 't1')
+    await type('+ dark mode\n+ tests', 't1')
     await endTurn('t1')
     await idle()
 
+    expect(toasts).toEqual(['Running 2 entries one by one. /aside stop stops after the current one.'])
     expect(sent).toHaveLength(1)
-    expect(sent[0]).toContain('Ideas:\n1. dark mode (branch main)')
-    expect(sent[0]).toContain('Work through all of it now')
+    expect(sent[0]).toContain('(Step 1 of 2 of the queue plan, "dark mode", sent by the aside plugin.')
+  })
+
+  test('afterClaudeAnswers run all leaves a plan another session starts meanwhile, and the entries stay in the queue', { options: { afterClaudeAnswers: 'run all' } }, async ($, on) => {
+    const { w, sent, toasts, type, shown, startTurn, endTurn, idle, fromAnotherSession } = world($, on)
+    await startTurn('build', 't1')
+    await type('+ dark mode', 't1')
+    w.beforeWrite = async key => {
+      if (!key.startsWith('taken')) return
+      w.beforeWrite = undefined
+      await fromAnotherSession('plan:/proj', { steps: STEPS, active: { step: 0, isChain: true, sessionId: 'session-2', turnId: 'other' } })
+    }
+    await endTurn('t1')
+    await idle()
+
+    expect(toasts).toEqual(['Another session started a plan meanwhile; the entries stay in the queue, and /aside shows the plan.'])
+    expect(sent).toEqual([])
+    expect((await shown()).slice(0, 3)).toEqual(['1 idea waiting', '1 idea dark mode', 'Plan: 3 of 3 steps to do (/aside run)'])
   })
 
   test('a saved plan with steps to do holds the automatic hand-over back', { options: { afterClaudeAnswers: 'plan' } }, async ($, on) => {
@@ -1280,7 +1405,7 @@ describe('organizing the queue again', () => {
   test('a plan saved once every step is done replaces it whole', async ($, on) => {
     const { aside, shown, savePlan, answer, idle } = world($, on)
     await savePlan([{ title: 'One', prompt: 'Do one.' }])
-    await aside('run')
+    await aside('run all')
     await idle()
     await answer('s1')
 
@@ -1339,7 +1464,7 @@ describe('adding to a running plan', () => {
   test('/aside plan while a step runs waits for its end, then has Claude add steps after the plan\'s own, and continue runs them in turn', async ($, on) => {
     const { sent, toasts, logged, type, aside, shown, savePlan, startTurn, endTurn, answer, idle } = world($, on)
     await savePlan(STEPS)
-    await aside('run')
+    await aside('run all')
     await idle()
     await startTurn(sent[0]!, 's1')
     await type('+ dark mode', 's1')
@@ -1379,7 +1504,7 @@ describe('adding to a running plan', () => {
   test('a step that waits for an answer keeps waiting while the queue /aside plan asked for is organized once its turn ends', async ($, on) => {
     const { sent, toasts, type, aside, shown, savePlan, wait, startTurn, endTurn, idle } = world($, on)
     await savePlan(STEPS)
-    await aside('run')
+    await aside('run all')
     await idle()
     await startTurn(sent[0]!, 's1')
     await type('+ dark mode', 's1')
@@ -1415,7 +1540,7 @@ describe('adding to a running plan', () => {
   test('an answer turn cut short organizes nothing that /aside plan asked for, and says /aside plan does', async ($, on) => {
     const { sent, toasts, type, aside, savePlan, wait, startTurn, endTurn, idle } = world($, on)
     await savePlan(STEPS)
-    await aside('run')
+    await aside('run all')
     await idle()
     await startTurn(sent[0]!, 's1')
     await wait('x')
@@ -1434,7 +1559,7 @@ describe('adding to a running plan', () => {
   test('/aside plan while a step waits organizes the queue at once, after the plan\'s own steps, and while Claude works on the answer, once it has answered', async ($, on) => {
     const { sent, contexts, type, aside, shown, savePlan, wait, startTurn, endTurn, idle } = world($, on)
     await savePlan(STEPS)
-    await aside('run')
+    await aside('run all')
     await idle()
     await startTurn(sent[0]!, 's1')
     await wait('which colours')
@@ -1478,7 +1603,7 @@ describe('adding to a running plan', () => {
   test('/aside plan that reads the plan as the answer turn ends is organized at once, not after a turn that never comes', async ($, on) => {
     const { w, sent, type, aside, savePlan, wait, startTurn, endTurn, idle } = world($, on)
     await savePlan(STEPS)
-    await aside('run')
+    await aside('run all')
     await idle()
     await startTurn(sent[0]!, 's1')
     await wait('x')
@@ -1504,7 +1629,7 @@ describe('adding to a running plan', () => {
   test('a step that is interrupted organizes nothing, and the queue stays as it was', async ($, on) => {
     const { sent, toasts, type, aside, shown, savePlan, startTurn, endTurn, idle } = world($, on)
     await savePlan(STEPS)
-    await aside('run')
+    await aside('run all')
     await idle()
     await startTurn(sent[0]!, 's1')
     await type('+ dark mode', 's1')
@@ -1520,7 +1645,7 @@ describe('adding to a running plan', () => {
   test('a queue emptied before the step ends sends nothing to organize, and the run goes on', async ($, on) => {
     const { sent, toasts, type, aside, savePlan, startTurn, endTurn, idle } = world($, on)
     await savePlan(STEPS)
-    await aside('run')
+    await aside('run all')
     await idle()
     await startTurn(sent[0]!, 's1')
     await type('+ dark mode', 's1')
@@ -1537,7 +1662,7 @@ describe('adding to a running plan', () => {
   test('/aside plan with an empty queue while a step runs says so, and the run goes on', async ($, on) => {
     const { sent, aside, savePlan, startTurn, endTurn, idle } = world($, on)
     await savePlan(STEPS)
-    await aside('run')
+    await aside('run all')
     await idle()
     await startTurn(sent[0]!, 's1')
 
@@ -1550,7 +1675,7 @@ describe('adding to a running plan', () => {
   test('after the last step, or one /aside stop made the last, the queue is organized and the steps wait for /aside run', async ($, on) => {
     const { sent, toasts, type, aside, shown, savePlan, startTurn, endTurn, answer, idle } = world($, on)
     await savePlan(STEPS)
-    await aside('run')
+    await aside('run all')
     await idle()
     await startTurn(sent[0]!, 's1')
     await type('+ dark mode', 's1')
@@ -1566,7 +1691,7 @@ describe('adding to a running plan', () => {
     expect((await shown()).slice(1)).toEqual(['Plan: 3 of 4 steps to do (/aside run)', '1 done One', '2 to do Two', '3 to do Three', '4 to do Dark mode'])
 
     // A plan run to its end makes way for the steps it was given to add.
-    await aside('run')
+    await aside('run all')
     await idle()
     await answer('s2')
     await answer('s3')
@@ -1587,7 +1712,7 @@ describe('adding to a running plan', () => {
   test('while a step runs, the pane\'s plan button organizes the queue once it ends, saying so in a toast alone', async ($, on) => {
     const { sent, toasts, logged, type, aside, savePlan, startTurn, endTurn, pressBand, pane, idle } = world($, on)
     await savePlan(STEPS)
-    await aside('run')
+    await aside('run all')
     await idle()
     await startTurn(sent[0]!, 's1')
     await type('+ dark mode', 's1')
@@ -1609,7 +1734,7 @@ describe('adding to a running plan', () => {
   // adds the queue to the plan sent.
   const organizing = async (t: ReturnType<typeof world>, ...ideas: string[]) => {
     await t.savePlan(STEPS)
-    await t.aside('run')
+    await t.aside('run all')
     await t.idle()
     await t.startTurn(t.sent[0]!, 's1')
     for (const idea of ideas) await t.type(`+ ${idea}`, 's1')
@@ -1621,7 +1746,7 @@ describe('adding to a running plan', () => {
   test('the prompt that adds to a running plan names every step with where it stands, apart from the items, titles cut at 60', async ($, on) => {
     const { sent, type, aside, savePlan, startTurn, endTurn, idle } = world($, on)
     await savePlan([STEPS[0]!, { title: 'A step whose title runs on well past sixty characters, so it is cut short', prompt: 'Do the long one.' }])
-    await aside('run')
+    await aside('run all')
     await idle()
     await startTurn(sent[0]!, 's1')
     await type('+ dark mode', 's1')
@@ -1646,7 +1771,7 @@ describe('adding to a running plan', () => {
         '- for each step, write a prompt I could send you as it is; it must stand on its own, file paths included;',
         '- leave items that look done, contradictory or unclear out of the steps: pass each to the tool as unclear, with its number and your question, and they go back to my queue;',
         '- when a step handles a comment that is a <!-- --> tag in a file, the step removes that tag.',
-        'Then save the steps with the mcp__aside__plan tool and stop: I see the saved plan in a frame and run it with /aside run (all, in order) or /aside run N.',
+        'Then save the steps with the mcp__aside__plan tool and stop: I see the saved plan in a frame and run it with /aside run all (in order), /aside run (the next step) or /aside run N.',
         '',
         MARKER,
       ].join('\n'),
@@ -1718,14 +1843,14 @@ describe('adding to a running plan', () => {
     const { w, sent, toasts, type, aside, savePlan, idle } = world($, on)
     await type('+ dark mode')
     await savePlan(STEPS)
-    await aside('run')
+    await aside('run all')
     expect(await aside('plan')).toBe(LATER)
     expect(await aside('stop')).toBe('The plan stopped before step 1; /aside plan organizes the queue.')
     await idle()
     expect(sent).toEqual([])
 
     w.isDropping = true
-    await aside('run')
+    await aside('run all')
     await aside('plan')
     await idle()
     expect(sent).toEqual([])
@@ -1735,7 +1860,7 @@ describe('adding to a running plan', () => {
   test('an interrupted step after /aside plan and a clear offers nothing to organize', async ($, on) => {
     const { sent, toasts, type, aside, savePlan, startTurn, endTurn, idle } = world($, on)
     await savePlan(STEPS)
-    await aside('run')
+    await aside('run all')
     await idle()
     await startTurn(sent[0]!, 's1')
     await type('+ dark mode', 's1')
@@ -1749,7 +1874,7 @@ describe('adding to a running plan', () => {
   test('an /aside plan that lands as the last step ends hands the queue over at once', async ($, on) => {
     const { w, sent, toasts, clock, type, aside, savePlan, startTurn, endTurn, idle } = world($, on)
     await savePlan([STEPS[0]!])
-    await aside('run')
+    await aside('run all')
     await idle()
     await startTurn(sent[0]!, 's1')
     await type('+ dark mode', 's1')
@@ -1772,7 +1897,7 @@ describe('adding to a running plan', () => {
   test('an /aside plan that lands as a step of a chain ends waits for the next step, and nothing goes beside it', async ($, on) => {
     const { w, sent, clock, type, aside, shown, savePlan, startTurn, endTurn, idle } = world($, on)
     await savePlan(STEPS)
-    await aside('run')
+    await aside('run all')
     await idle()
     await startTurn(sent[0]!, 's1')
     await type('+ dark mode', 's1')
@@ -1821,7 +1946,7 @@ describe('adding to a running plan', () => {
   // out ahead of the one that adds, and then step 2 runs to its end.
   const continuedEarly = async (t: ReturnType<typeof world>) => {
     await t.savePlan(STEPS)
-    await t.aside('run')
+    await t.aside('run all')
     await t.idle()
     await t.startTurn(t.sent[0]!, 's1')
     await t.type('+ dark mode', 's1')
@@ -1863,7 +1988,7 @@ describe('adding to a running plan', () => {
   test('a plan run to its end before the prompt that adds is organized makes way for its steps, saved once or twice', async ($, on) => {
     const { w, sent, clock, type, aside, shown, savePlan, startTurn, endTurn, idle } = world($, on)
     await savePlan([STEPS[0]!, STEPS[1]!])
-    await aside('run')
+    await aside('run all')
     await idle()
     await startTurn(sent[0]!, 's1')
     await type('+ dark mode', 's1')
@@ -1903,7 +2028,7 @@ describe('adding to a running plan', () => {
   test('a prompt that adds, dropped beneath the plugin, gives the entries back, and the next /aside plan replans', async ($, on) => {
     const { w, sent, toasts, type, aside, shown, savePlan, startTurn, endTurn, idle } = world($, on)
     await savePlan(STEPS)
-    await aside('run')
+    await aside('run all')
     await idle()
     await startTurn(sent[0]!, 's1')
     await type('+ dark mode', 's1')
@@ -1926,7 +2051,7 @@ describe('adding to a running plan', () => {
   test('a planning turn that saves no steps gives the queue back, and the run stays paused', async ($, on) => {
     const { sent, type, aside, shown, savePlan, startTurn, endTurn, idle } = world($, on)
     await savePlan(STEPS)
-    await aside('run')
+    await aside('run all')
     await idle()
     await startTurn(sent[0]!, 's1')
     await type('+ dark mode', 's1')
@@ -1951,7 +2076,7 @@ describe('what a run keeps', () => {
   test('each step keeps the result its answer gives, in markdown too, or else its last paragraph, and /aside shows it under the step', async ($, on) => {
     const { aside, shown, savePlan, answer, idle } = world($, on)
     await savePlan(STEPS)
-    await aside('run')
+    await aside('run all')
     await idle()
     await answer('s1', 'Done.\n\n- **Result**: one is in place, nothing open.')
     await answer('s2', 'There is no result line here.\n\nThe last paragraph says what happened.')
@@ -1974,7 +2099,7 @@ describe('what a run keeps', () => {
     await idle()
     await answer('s1', 'Result: one is in place.')
 
-    await aside('run')
+    await aside('run all')
     await idle()
     expect(sent.at(-1)).toBe(
       `Do two.\n\n(Step 2 of 4 of the queue plan, "Two", sent by the aside plugin.\nPlan: 1 One (done) · 2 Two (this one) · 3 Three (to do) · 4 Four (to do).\n${NEXT})`,
@@ -2188,7 +2313,7 @@ describe('planning on a model of its own', () => {
   test('steps the planner adds while the last step sums the run up wait for /aside run, as the summary said the run ended', SONNET, async ($, on) => {
     const { w, sent, toasts, type, aside, shown, savePlan, wait, startTurn, endTurn, answer, idle } = world($, on)
     await savePlan(STEPS)
-    await aside('run')
+    await aside('run all')
     await idle()
     await answer('s1')
     await answer('s2')
@@ -2212,7 +2337,7 @@ describe('planning on a model of its own', () => {
   test('while a step runs, the planner adds its steps after the plan\'s own at once, and the run goes on to them', SONNET, async ($, on) => {
     const { w, sent, planned, panes, type, aside, shown, savePlan, startTurn, endTurn, answer, idle } = world($, on)
     await savePlan(STEPS)
-    await aside('run')
+    await aside('run all')
     await idle()
     await startTurn(sent[0]!, 's1')
     await type('+ dark mode', 's1')
@@ -2236,7 +2361,7 @@ describe('planning on a model of its own', () => {
   test('a step that ends while the planner thinks, and the next that starts, change nothing it was given', SONNET, async ($, on) => {
     const { w, sent, type, aside, shown, savePlan, startTurn, endTurn, idle } = world($, on)
     await savePlan(STEPS)
-    await aside('run')
+    await aside('run all')
     await idle()
     await startTurn(sent[0]!, 's1')
     await type('+ dark mode', 's1')
@@ -2254,7 +2379,7 @@ describe('planning on a model of its own', () => {
   test('a planner that answers while the step\'s end saves the plan waits for it, so both stand: the step done and the steps added', SONNET, async ($, on) => {
     const { w, sent, clock, type, aside, shown, savePlan, startTurn, endTurn, idle } = world($, on)
     await savePlan(STEPS)
-    await aside('run')
+    await aside('run all')
     await idle()
     await startTurn(sent[0]!, 's1')
     await type('+ dark mode', 's1')
@@ -2280,7 +2405,7 @@ describe('planning on a model of its own', () => {
   test('a step that ends just as the planner saves keeps both: the step done and the steps added', SONNET, async ($, on) => {
     const { w, sent, type, aside, shown, savePlan, startTurn, endTurn, idle } = world($, on)
     await savePlan(STEPS)
-    await aside('run')
+    await aside('run all')
     await idle()
     await startTurn(sent[0]!, 's1')
     await type('+ dark mode', 's1')
@@ -2301,7 +2426,7 @@ describe('planning on a model of its own', () => {
   test('a step that starts to wait, a stop or an interruption while the planner thinks keeps the steps it adds', SONNET, async ($, on) => {
     const { w, sent, type, aside, shown, savePlan, wait, startTurn, endTurn, idle } = world($, on)
     await savePlan(STEPS)
-    await aside('run')
+    await aside('run all')
     await idle()
     await startTurn(sent[0]!, 's1')
     await type('+ dark mode', 's1')
@@ -2357,7 +2482,7 @@ describe('planning on a model of its own', () => {
   test('a plan replaced while the planner adds to it is not added to', SONNET, async ($, on) => {
     const { w, sent, type, aside, shown, savePlan, startTurn, endTurn, idle } = world($, on)
     await savePlan(STEPS)
-    await aside('run')
+    await aside('run all')
     await idle()
     await startTurn(sent[0]!, 's1')
     await type('+ dark mode', 's1')
@@ -2384,7 +2509,7 @@ describe('planning on a model of its own', () => {
     w.planReply = DARK
     for (const [i, other] of others.entries()) {
       await savePlan(STEPS)
-      await aside('run')
+      await aside('run all')
       await idle()
       await startTurn(sent.at(-1)!, `s${i}`)
       w.meanwhile = async () => {
@@ -2435,7 +2560,7 @@ describe('planning on a model of its own', () => {
   test('a plan run to its end while the planner adds to it makes way for the steps added', SONNET, async ($, on) => {
     const { w, sent, type, aside, shown, savePlan, startTurn, endTurn, idle } = world($, on)
     await savePlan([{ title: 'One', prompt: 'Do one.' }])
-    await aside('run')
+    await aside('run all')
     await idle()
     await startTurn(sent[0]!, 's1')
     await type('+ dark mode', 's1')
@@ -2483,7 +2608,7 @@ describe('planning on a model of its own', () => {
     }
     expect(await aside('plan')).toBe('The queue or the plan changed while Sonnet planned; nothing was saved. /aside plan tries again.')
     expect(sent).toHaveLength(1)
-    expect(await shown()).toEqual(['The queue is empty.'])
+    expect(await shown()).toEqual(['The queue is empty.', 'Plan: 1 of 1 step to do (/aside run)', '1 running dark mode'])
   })
 
   test('a tag handed over while the planner thinks makes it save nothing', SONNET, async ($, on) => {
@@ -2507,7 +2632,7 @@ describe('planning on a model of its own', () => {
     w.planReply = '{"steps": [{"title": "One", "prompt": "Do one."}, {"title": "Dark mode", "prompt": "Add a dark mode."}]}'
     w.meanwhile = async () => {
       w.meanwhile = undefined
-      await aside('run')
+      await aside('run all')
       await idle()
       await answer('s1')
     }
@@ -2591,7 +2716,7 @@ describe('the log of plans run to their end', () => {
   test('a plan run to its end goes to the log once another takes its place, with each step\'s time and result', async ($, on) => {
     const { clock, aside, shown, savePlan, answer, idle } = world($, on)
     await savePlan(STEPS)
-    await aside('run')
+    await aside('run all')
     await idle()
     await answer('s1', 'Result: one.', 60_000)
     await answer('s2', 'Result: two.', 60_000)
@@ -2616,7 +2741,7 @@ describe('the log of plans run to their end', () => {
     await savePlan([{ title: 'Four', prompt: 'Do four.' }])
     expect(await aside('log')).toBe('The log is empty: a plan run to its end comes here once another takes its place. /aside shows the plan now.')
 
-    await aside('run')
+    await aside('run all')
     await idle()
     await answer('s4', 'Result: four.')
     await savePlan([{ title: 'Five', prompt: 'Do five.' }])
@@ -2626,19 +2751,19 @@ describe('the log of plans run to their end', () => {
   test('running the queue entry by entry after a plan run to its end puts that plan in the log', async ($, on) => {
     const { type, aside, shown, savePlan, answer, idle } = world($, on)
     await savePlan([STEPS[0]])
-    await aside('run')
+    await aside('run all')
     await idle()
     await answer('s1', 'Result: one.')
     await type('+ a')
 
-    expect(await aside('run')).toBe('Running 1 entry one by one. /aside stop stops after the current one.')
+    expect(await aside('run all')).toBe('Running 1 entry one by one. /aside stop stops after the current one.')
     expect((await shown('log')).slice(1)).toEqual(['1 done One', '↳ one.'])
   })
 
-  test('running chosen entries after a plan run to its end puts that plan in the log, its steps done alone', async ($, on) => {
+  test('running chosen entries after a plan run to its end puts that plan in the log, and a plan another session starts meanwhile stays', async ($, on) => {
     const { w, type, aside, shown, savePlan, answer, idle, fromAnotherSession } = world($, on)
     await savePlan([STEPS[0]])
-    await aside('run')
+    await aside('run all')
     await idle()
     await answer('s1', 'Result: one.')
     await type('+ a\n+ b')
@@ -2648,14 +2773,15 @@ describe('the log of plans run to their end', () => {
     await idle()
     await answer('e1')
     // Another session saves a plan with a step still to do as this one takes the queue, in
-    // place of the plan of entry b: only its step done goes to the log.
+    // place of the plan of entry b: that plan stays, and the entry goes back to the queue.
     w.beforeWrite = async key => {
       if (!key.startsWith('taken')) return
       w.beforeWrite = undefined
       await fromAnotherSession('plan:/proj', { steps: [{ ...STEPS[1], isDone: true, ms: 0 }, STEPS[2]] })
     }
-    await aside('run')
-    expect((await shown('log')).filter(line => /^\d done/.test(line))).toEqual(['1 done Two', '1 done One'])
+    expect(await aside('run all')).toBe('Another session started a plan meanwhile; the entries stay in the queue, and /aside shows the plan.')
+    expect((await shown('log')).filter(line => /^\d done/.test(line))).toEqual(['1 done One'])
+    expect((await shown())[0]).toBe('1 idea waiting')
   })
 
   test('each run in the log is under the number /aside log N takes, with how long ago it ended', async ($, on) => {
@@ -2664,7 +2790,7 @@ describe('the log of plans run to their end', () => {
     const waits = [47 * 3_600_000, 25 * 3_600_000 - 5 * 60_000, 5 * 60_000]
     for (let k = 1; k <= 3; k += 1) {
       await savePlan([{ title: `P${k}`, prompt: `Do ${k}.` }])
-      await aside('run')
+      await aside('run all')
       await idle()
       await answer(`s${k}`)
       await clock.advance(waits[k - 1]!)
@@ -2691,7 +2817,7 @@ describe('the log of plans run to their end', () => {
     const { clock, aside, shown, savePlan, answer, idle } = world($, on)
     for (let k = 1; k <= 22; k += 1) {
       await savePlan([{ title: `P${k}`, prompt: `Do ${k}.` }])
-      await aside('run')
+      await aside('run all')
       await idle()
       await answer(`s${k}`)
       await clock.advance(60_000)
@@ -2707,7 +2833,7 @@ describe('the log of plans run to their end', () => {
   test('a plan saved again after its log entry failed half-way is in the log once', async ($, on) => {
     const { w, aside, shown, savePlan, answer, idle } = world($, on)
     await savePlan([STEPS[0]])
-    await aside('run')
+    await aside('run all')
     await idle()
     await answer('s1', 'Result: one.')
     // The plan's own write fails, after its log entry was written.
@@ -2722,7 +2848,7 @@ describe('the log of plans run to their end', () => {
   test('while Claude works, /aside log goes into the transcript at once', async ($, on) => {
     const { logged, aside, savePlan, answer, startTurn, idle } = world($, on)
     await savePlan([STEPS[0]])
-    await aside('run')
+    await aside('run all')
     await idle()
     await answer('s1', 'Result: one.')
     await savePlan([{ title: 'Two', prompt: 'Do two.' }])

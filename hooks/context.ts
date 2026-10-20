@@ -14,9 +14,9 @@ export type Settings = {
   readonly order: Order
   // Whether a small model tidies each entry's own text once it is stored.
   readonly tidy: boolean
-  // What aside does by itself when Claude finishes answering: wait for /aside, or hand the
-  // queue over at once, as /aside plan or /aside run all would.
-  readonly afterAnswer: 'wait' | 'plan' | 'send'
+  // What aside does by itself when Claude finishes answering: wait for /aside, or take the
+  // queue at once, as /aside plan or /aside run all would.
+  readonly afterAnswer: 'wait' | 'plan' | 'run all'
   readonly planModel: PlanModel
   // Whom a named queue made by its first idea ("+@name", /aside q NAME TEXT, add or import) is
   // for: every project, or this one alone.
@@ -71,7 +71,7 @@ export const createContext = (options: Parameters<Register>[1]): Context => ({
   settings: {
     order: options.order === 'newest' ? 'newest' : 'oldest',
     tidy: options.tidy !== 'off',
-    afterAnswer: options.afterClaudeAnswers === 'plan' ? 'plan' : options.afterClaudeAnswers === 'run all' ? 'send' : 'wait',
+    afterAnswer: options.afterClaudeAnswers === 'plan' ? 'plan' : options.afterClaudeAnswers === 'run all' ? 'run all' : 'wait',
     planModel: PLAN_MODELS.find(model => model === options.planModel) ?? 'session',
     newQueues: options.newQueues === 'local' ? 'local' : 'global',
   },

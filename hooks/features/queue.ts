@@ -206,14 +206,14 @@ export async function moveEntry($: Engine, ctx: Context, from: number, to: numbe
   return listingText([queueSection(list, keys.root)])
 }
 
-// The newest entry, or entry `n`, taken out of the queue into the box, ready to send: no
+// The first entry, or entry `n`, taken out of the queue into the box, ready to send: no
 // "+" in front, a comment with what it is about.
 export async function popEntry($: Engine, ctx: Context, n?: number): Promise<string> {
   const { keys, list } = await shownQueue($, ctx)
   if (list.length === 0) {
     return 'The queue is empty.'
   }
-  const at = n ?? (ctx.settings.order === 'newest' ? 1 : list.length)
+  const at = n ?? 1
   if (!isPlace(at, list.length)) {
     return `Give a number from 1 to ${list.length}, as /aside shows them.`
   }

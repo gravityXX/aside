@@ -44,12 +44,12 @@ describe('the global list', () => {
 
     expect((await aside('g move 3 1')).split('\n').slice(2)).toEqual(['  1  idea  c', '  2  idea  a', '  3  idea  b', '  4  idea  d', '  5  idea  e'])
     expect(await aside('g Remove 2 3')).toBe('Removed from the global list 2 ideas: a; b')
-    expect(await aside('g pop')).toBe('In the prompt box, ready to send: e')
+    expect(await aside('g pop')).toBe('In the prompt box, ready to send: c')
     expect(await aside('g edit 1')).toBe('Global idea 1 is in the prompt box: change it and press Enter; it goes back to place 1.')
-    expect(filled).toEqual(['e', '+g c'])
-    expect(await aside('g')).toBe(['1 idea on the global list', '', '  1  idea  d'].join('\n'))
-    expect(await queue('+g c, sharper')).toBe('queued "c, sharper" to the global list (2 global)')
-    expect((await aside('g')).split('\n').slice(2)).toEqual(['  1  idea  c, sharper', '  2  idea  d'])
+    expect(filled).toEqual(['c', '+g d'])
+    expect(await aside('g')).toBe(['1 idea on the global list', '', '  1  idea  e'].join('\n'))
+    expect(await queue('+g d, sharper')).toBe('queued "d, sharper" to the global list (2 global)')
+    expect((await aside('g')).split('\n').slice(2)).toEqual(['  1  idea  d, sharper', '  2  idea  e'])
   })
 
   test('an idea out with g edit waits for a message of one +g idea, and comes back across a reload', async ($, on) => {
@@ -244,8 +244,8 @@ describe('named queues', () => {
     expect(await aside('q work add 1')).toBe('Moved to @work: x')
     expect((await aside('q work move 3 1')).split('\n').slice(2)).toEqual(['  1  idea  x', '  2  idea  b', '  3  idea  c'])
     expect(await aside('q work remove 2')).toBe('Removed from @work: b')
-    expect(await aside('q work pop')).toBe('In the prompt box, ready to send: c')
-    expect(filled).toEqual(['c'])
+    expect(await aside('q work pop')).toBe('In the prompt box, ready to send: x')
+    expect(filled).toEqual(['x'])
     expect(await shown()).toEqual(['1 idea and 1 comment waiting', '1 question y', '2 idea a'])
     expect(await aside('q work here 5')).toBe('Give a number from 1 to 1, as /aside q work shows them.')
     expect(await aside('q home')).toBe('@home is empty. Start a message with "+@home" to add an idea to it.')
@@ -498,13 +498,13 @@ describe('named queues', () => {
     expect(logged.at(-1)).toBe(['1 idea in @work', '', '  1  idea  a'].join('\n'))
   })
 
-  test('/aside run all sends only this project\'s queue, and the named one keeps its idea', async ($, on) => {
+  test('/aside run runs only this project\'s queue, and the named one keeps its idea', async ($, on) => {
     const { sent, type, aside, idle } = world($, on)
     await type('+@work far away\n+ near')
 
-    expect(await aside('run all')).toBe('Sending 1 idea.')
+    expect(await aside('run')).toBe('Running entry 1: near')
     await idle()
-    expect(sent.at(-1)).toContain('Ideas:\n1. near (branch main)')
+    expect(sent.at(-1)).toContain('near')
     expect(sent.at(-1)).not.toContain('far away')
     expect(await aside('q work')).toBe(['1 idea in @work', '', '  1  idea  far away'].join('\n'))
   })

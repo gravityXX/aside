@@ -193,7 +193,7 @@ describe('what an entry remembers', () => {
     await type('+ rename the loader')
     await aside('and the docs')
 
-    await aside('run all')
+    await aside('plan')
     await idle()
     expect(sent.at(-1)).toContain(
       [

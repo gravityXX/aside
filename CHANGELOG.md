@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- `/aside run` runs one thing: the next step of the plan, or with no step left, the first entry of the queue. `/aside run all` runs the rest of the plan step by step, or the queue entry by entry, as `/aside run` did. `/aside run all` no longer sends the whole queue as one prompt, nor does `afterClaudeAnswers` on `run all`, which now runs the queue entry by entry too; `/aside plan` is there to put entries together. `/aside run` in a paused run runs the next step of it and leaves the rest paused, and `/aside continue` goes on with the whole run, as before. A plan another session starts while `/aside run`, `run all` or `afterClaudeAnswers` takes the queue is kept, and the entries stay in the queue. `/aside pop`, `g pop` and `q NAME pop` take the first entry of the list, not the newest.
+
 ## 0.27.0 - 2026-10-20
 
 - A named queue can belong to one project. `/aside q work local` keeps it for this project, so `+@work` here goes to it and other projects no longer see it, and `/aside q work global` shares it again, joining a queue of its name for every project. The `newQueues` setting, `global` by default or `local`, says whom a queue made by its first idea is for, and the line that makes one says which it is and how to change it. `/aside q` and `/aside find` mark a queue of this project's, and one for every project that it hides here; Tab offers this project's. `/aside q work local` and `global` no longer queue that word as an idea, and `/aside q` heads its list "beside this project's queue".

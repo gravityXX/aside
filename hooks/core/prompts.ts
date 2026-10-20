@@ -129,7 +129,7 @@ export const planningPrompt = (entries: readonly Entry[], root: string, plan: Pl
     [
       `${ORGANIZE_ONLY}: do none of it and answer none of it yet. Use no tool but the ${tool} tool, so read nothing, run nothing and change nothing.`,
       ...organizeRules('pass each to the tool as unclear'),
-      `Then save the steps with the ${tool} tool and stop: I see the saved plan in a frame and run it with /aside run (all, in order) or /aside run N.`,
+      `Then save the steps with the ${tool} tool and stop: I see the saved plan in a frame and run it with /aside run all (in order), /aside run (the next step) or /aside run N.`,
     ].join('\n'),
     COMPOSED_MARKER,
   ].join('\n\n')
@@ -171,21 +171,7 @@ export const readPlanReply = (reply: string): { steps?: unknown; unclear?: unkno
 // What Claude reads under the plan it saved, which the user sees drawn in a frame.
 export const PLAN_SAVED_NOTE =
   'The user sees this plan drawn in a frame, so do not list its steps again. Say in a line or two why they come in this order, ' +
-  'and ask your question about each item left out, if any. /aside run runs the steps in order; /aside run N runs one.'
-
-// The queue handed over as it is, to be worked through now, with no plan in between.
-export const sendPrompt = (entries: readonly Entry[], root: string): string =>
-  [
-    ...describeQueue(entries, root),
-    [
-      'Work through all of it now, in this order, in this one reply:',
-      '- answer the questions first;',
-      '- then the changes, drops and things to dig into, then the ideas;',
-      '- when you handle a comment that is a <!-- --> tag in a file, remove that tag;',
-      '- if an item is unclear or contradicts another, ask instead of guessing.',
-    ].join('\n'),
-    COMPOSED_MARKER,
-  ].join('\n\n')
+  'and ask your question about each item left out, if any. /aside run all runs the steps in order; /aside run runs the next one, /aside run N that one.'
 
 // What a step made of a tag tells Claude besides the tag's own words.
 export const TAG_NOTE = 'This comment is a <!-- --> tag in the file; remove the tag once it is handled.'

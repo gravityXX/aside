@@ -24,7 +24,7 @@
   <path d="M304.5 32 V10.5 a10 10 0 0 1 10 -10 H565.5 a10 10 0 0 1 10 10 V32 Z" fill="#1c232c"/>
   <line x1="304.5" y1="32" x2="575.5" y2="32" stroke="#3d444d"/>
   <text x="440.0" y="21" class="t" text-anchor="middle">Session B · project X</text>
-  <text x="328" y="62" class="m"><tspan class="f">❯ </tspan><tspan class="a"></tspan>/aside run</text>
+  <text x="328" y="62" class="m"><tspan class="f">❯ </tspan><tspan class="a"></tspan>/aside run all</text>
   <path d="M440 88 V118" stroke="#656c76" stroke-width="1.5" fill="none" marker-end="url(#a)"/>
   <rect x="608.5" y="0.5" width="271" height="83" rx="10" fill="#151b23" stroke="#3d444d"/>
   <path d="M608.5 32 V10.5 a10 10 0 0 1 10 -10 H869.5 a10 10 0 0 1 10 10 V32 Z" fill="#1c232c"/>
