@@ -241,6 +241,7 @@ export const stepPrompt = (steps: readonly Step[], index: number, mode: StepMode
       ...resultsSoFar(steps, index),
       SUMMARY_LINE,
       `${waitLine(waitTool)} Then end your reply with the "Result: " line and no summary yet: the summary comes once the step is done.`,
+      'If you leave work running in the background, write no summary yet either: it comes once that work is done.',
     ],
   }[mode]
 
@@ -261,6 +262,20 @@ export const answerContext = (steps: readonly Step[], index: number, isLast: boo
     `(Added by the aside plugin: step ${index + 1} of ${steps.length} of the queue plan, "${step.title}", waits for my answer, and this message most likely gives it. ` +
     `The step ends with your reply to it, unless you call the ${waitTool} tool: call it if you need my answer again, or if this message asks for something else, which you then do, so the step keeps waiting for my answer. ` +
     `Otherwise go on with that step only. Either way, end your reply with one line that starts "Result: " and says in one sentence what the step has done and what is still open.${summary})`
+  )
+}
+
+// What Claude reads beside a background task's notification while a step goes on in the
+// background: the step, and what is still going, or that this ends it.
+export const backgroundContext = (steps: readonly Step[], index: number, left: string, isLast: boolean): string => {
+  const step = steps[index]!
+  const end = left
+    ? `It still waits for: ${left}, so it goes on once you reply.`
+    : `This was the last of it, so the step ends with your reply.${isLast ? ' It is the last step of this run: after the "Result: " line, end your reply with "## Summary of the run": one line per step of the plan on what was done, then what is still open, then what to do next.' : ''}`
+
+  return (
+    `(Added by the aside plugin: this notification ends work in the background of step ${index + 1} of ${steps.length} of the queue plan, "${step.title}". ${end} ` +
+    'End your reply with one line that starts "Result: " and says in one sentence what the step has done and what is still open.)'
   )
 }
 

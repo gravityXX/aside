@@ -108,6 +108,13 @@ export type Listed = { sections: ListingSection[]; note?: string } | string
 export const listedText = (listed: Listed): string =>
   typeof listed === 'string' ? listed : `${listingText(listed.sections)}${listed.note ? `\n\n${listed.note}` : ''}`
 
+// Whether the step goes on in the background, with no turn of it running: work a turn of it
+// started is still going, and the turn its end brings ends the step.
+export const isAway = (active: NonNullable<Plan['active']>) => active.isAway === true && active.turnId === undefined
+
+// What a step that goes on in the background waits for, by name.
+export const awayWork = (active: NonNullable<Plan['active']>) => [...new Set((active.background ?? []).map(one => one.what))].join(', ')
+
 // Whether the step running is waiting for the person's answer, with no turn of it running:
 // Claude asked with the wait tool, and the turn of the person's answer, /aside continue or
 // /aside stop ends it.
@@ -151,9 +158,11 @@ export const planSection = (plan: Plan, now: number): ListingSection | null => {
         ? [timeOf(step.ms) && `took ${timeOf(step.ms)}`, step.result ?? '']
         : waiting?.step === i
           ? [going && `waiting for you, ${going}`, waiting.result ?? '']
-          : active?.step === i
-            ? [going && `running for ${going}`]
-            : []
+          : active?.step === i && isAway(active)
+            ? [`working in the background${awayWork(active) && `: ${awayWork(active)}`}${going && `, ${going}`}`]
+            : active?.step === i
+              ? [going && `running for ${going}`]
+              : []
       const about = said.filter(Boolean).join(' · ')
 
       return { label: String(i + 1), word: stateOf(i), lines: [step.title], about: about ? [about] : [] }

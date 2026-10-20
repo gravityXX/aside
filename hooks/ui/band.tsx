@@ -37,7 +37,7 @@ export async function drawBand(ctx: Context, $: Engine, e: BandRender[1], next: 
 
   const parts: string[] = []
   const plan = `plan ${formatProgress(now.done, now.steps)}`
-  if (now.running !== undefined) parts.push(`${plan} · step ${now.running} running`)
+  if (now.running !== undefined) parts.push(`${plan} · step ${now.running} running${now.isBackground ? ' in the background' : ''}`)
   else if (now.waiting !== undefined) parts.push(`${plan} · step ${now.waiting} waits for you`)
   else if (now.paused !== undefined) parts.push(`${plan} · paused after step ${now.paused}`)
   else if (left > 0) parts.push(plan)

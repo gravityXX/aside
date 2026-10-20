@@ -69,6 +69,12 @@ export type Plan = {
     answerTurnId?: string
     isEnding?: true
     startedAt?: number
+    // The work in the background its turns started (a workflow, an agent, a command), by the
+    // call that started it and its task's id, until its notification says it ended; isAway: a
+    // turn of the step ended with some of it still going, so the step goes on in the
+    // background until a turn ends with none left, and that turn ends it.
+    background?: { callId?: string; taskId: string; what: string }[]
+    isAway?: true
   }
   // A run that paused after a step, as /aside plan asked (or, in earlier releases, the wait
   // tool): the step it paused after, why, and how the run was to go on (as a chain, or with the
@@ -88,6 +94,7 @@ export type Band = {
   steps: number
   done: number
   running?: number
+  isBackground?: true
   waiting?: number
   paused?: number
   global?: number
