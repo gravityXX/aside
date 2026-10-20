@@ -2920,6 +2920,28 @@ describe('planning on a model of its own', () => {
     expect((await shown()).slice(0, 1)).toEqual(['The queue is empty.'])
   })
 
+  test('an entry back from /aside edit is planned as tidied when the planner starts as the edit is forgotten', SONNET, async ($, on) => {
+    const { w, planned, clock, type, enter, aside } = world($, on)
+    await type('+ login bug')
+    await aside('edit 1')
+    w.tidy = { 'fix the login bug': '<note>Fix the login bug.</note>' }
+    w.planReply = '{"steps": [{"title": "Login", "prompt": "Fix the login bug."}]}'
+    w.meanwhile = () => clock.sleep(1)
+    // The reworked entry is stored, and the planner is asked while the edit is on its way out.
+    let planning = Promise.resolve('')
+    w.beforeDelete = async key => {
+      if (!key.startsWith('editing:')) return
+      w.beforeDelete = undefined
+      planning = aside('plan')
+      await clock.sleep(1)
+    }
+
+    await enter('+ fix the login bug')
+    await clock.advance(5)
+    expect(await planning).toBe(['Plan: 1 of 1 step to do (/aside run)', '', '  1  to do  Login'].join('\n'))
+    expect(planned[0]!.prompt).toContain('1. Fix the login bug.')
+  })
+
   test('two asks at once start one planner', SONNET, async ($, on) => {
     const { w, planned, type, aside } = world($, on)
     await type('+ dark mode')

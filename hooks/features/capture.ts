@@ -376,6 +376,9 @@ export async function addEntries(
       value: { keys, added, all, notes, listed, queues },
       afterSave: async () => {
         isStored = true
+        // Each tidying is one a planner waits for from the moment its entry can be read.
+        for (const entry of ctx.settings.tidy ? added : []) whileTidying(ctx, tidyEntry($, entry))
+        for (const idea of ctx.settings.tidy ? onGlobal : []) whileTidying(ctx, tidyGlobalIdea($, idea))
         if (forget) await forgetEditing($, keys.editing)
       },
     }
@@ -384,8 +387,6 @@ export async function addEntries(
     throw error
   })
   const band = await refreshBand($)
-  for (const entry of ctx.settings.tidy ? added : []) whileTidying(ctx, tidyEntry($, entry))
-  for (const idea of ctx.settings.tidy ? onGlobal : []) whileTidying(ctx, tidyGlobalIdea($, idea))
   if (images > 0) notes.push('the image was not kept')
   const parts = [
     ...(added.length > 0 ? [reportQueued(added, notes, keys.root, all.length)] : []),
