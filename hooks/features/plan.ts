@@ -27,21 +27,8 @@ import {
 } from '../core/prompts'
 import type { StepMode } from '../core/prompts'
 import { describeError, describeFailure, formatCount, formatDuration, shortenText } from '../core/text'
-import {
-  bringBackTake,
-  forgetAnsweredTake,
-  giveBackItems,
-  loadEntries,
-  loadHanded,
-  loadPlan,
-  projectKeys,
-  refreshBand,
-  savePlan,
-  takeChosen,
-  takeForHandOver,
-  takePlanned,
-  tagId,
-} from '../io/store'
+import { bringBackTake, forgetAnsweredTake, giveBackItems, takeChosen, takeForHandOver, takePlanned } from '../io/queue'
+import { loadEntries, loadHanded, loadPlan, projectKeys, refreshBand, savePlan, tagId } from '../io/store'
 import type { Keys } from '../io/store'
 import { archivePlan } from './history'
 import { openListPane, tagsInFiles } from './queue'

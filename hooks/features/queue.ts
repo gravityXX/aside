@@ -8,20 +8,8 @@ import type { Listed, ListingSection } from '../core/listing'
 import { popPrompt } from '../core/prompts'
 import { canonicalPath, formatCount, isAbsolutePath, isWindowsPath, relativePath, shortenText } from '../core/text'
 import { resolveFile, tryReadFile, writeExport } from '../io/host'
-import {
-  bringBackTake,
-  loadEntries,
-  loadHanded,
-  loadPlan,
-  projectKeys,
-  readTrackedFiles,
-  refreshBand,
-  saveEditing,
-  saveEntries,
-  saveTake,
-  tagId,
-  trackFile,
-} from '../io/store'
+import { bringBackTake, saveTake } from '../io/queue'
+import { loadEntries, loadHanded, loadPlan, projectKeys, readTrackedFiles, refreshBand, saveEditing, saveEntries, tagId, trackFile } from '../io/store'
 import type { Keys } from '../io/store'
 
 // The <!-- ? --> tags in the session's markdown files, as entries of their own; `onlyNew`
