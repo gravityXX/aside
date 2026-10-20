@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.36.0 - 2026-10-20
 
 - The `/aside` frame and the saved plan take the whole width of the terminal, with the state of a step at its right edge. An entry run as a step keeps up to 120 characters of its text as its title, and while `tidy` is on, a small model names a step made of a long entry once the run has started.
 
