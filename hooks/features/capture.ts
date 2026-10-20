@@ -316,7 +316,7 @@ export async function addEntries(
   // One change on the queue for the whole message, so messages sent one after another are stored
   // in that order, and an entry back from /aside edit is put back by one of them alone. The slow
   // part (git, the clipboard, the files a comment points into) comes before the queue is read,
-  // so the list is read right before it is stored, as it was before the chain.
+  // so the list is read right before it is stored and a removal or a hand-over meanwhile is kept.
   const prepare = async () => {
     const keys = await projectKeys($)
     const seen = await readTrackedFiles($)
