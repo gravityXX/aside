@@ -171,6 +171,51 @@ describe('the global list', () => {
 
     expect((await aside('g')).split('\n').at(-1)).toBe('  1  idea  Read the RFC.')
   })
+
+  test('an idea moved here while a tidy reply is on its way to the store stays in the queue beside the tidied one', async ($, on) => {
+    const { w, clock, type, aside, shown, idle } = world($, on, { tidy: { 'dark mod': '<note>Dark mode.</note>' } })
+    await type('+g read it later')
+    await idle()
+    // The tidied text is a moment on its way to the store while the global idea is moved here.
+    let moving: Promise<string> | undefined
+    w.meanwhile = async () => {
+      w.meanwhile = undefined
+      w.beforeWrite = async key => {
+        if (!key.startsWith('queue:')) return
+        w.beforeWrite = undefined
+        moving = aside('g here 1')
+        await clock.sleep(2)
+      }
+    }
+    await type('+ dark mod')
+    await idle()
+
+    expect(await moving).toBe('Moved here: read it later (2 waiting)')
+    expect(await shown()).toEqual(['2 ideas waiting', '1 idea Dark mode.', '2 idea read it later'])
+    expect(await aside('g')).toBe('The global list is empty. Start a message with "+g" to add an idea to it.')
+  })
+
+  test('an idea moved to the global list while a tidy reply is on its way to the store leaves the queue', async ($, on) => {
+    const { w, clock, type, aside, shown, idle } = world($, on, { tidy: { 'dark mod': '<note>Dark mode.</note>' } })
+    await type('+ read it later')
+    await idle()
+    let moving: Promise<string> | undefined
+    w.meanwhile = async () => {
+      w.meanwhile = undefined
+      w.beforeWrite = async key => {
+        if (!key.startsWith('queue:')) return
+        w.beforeWrite = undefined
+        moving = aside('g add 1')
+        await clock.sleep(2)
+      }
+    }
+    await type('+ dark mod')
+    await idle()
+
+    expect(await moving).toBe('Moved to the global list: read it later')
+    expect(await shown()).toEqual(['1 idea waiting', '1 idea Dark mode.'])
+    expect(await aside('g')).toBe(['1 idea on the global list', '', '  1  idea  read it later'].join('\n'))
+  })
 })
 
 describe('named queues', () => {
