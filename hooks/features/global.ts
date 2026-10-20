@@ -394,7 +394,7 @@ async function runQueue($: Engine, ctx: Context, name: string, args: readonly st
     return undoClear($, name)
   }
   if (verb === 'import' && rest.length > 0 && MARKDOWN_PATH.test(rest.join(' '))) {
-    return importFile($, ctx, rest.join(' '), name)
+    return importFile($, rest.join(' '), name)
   }
   if ((verb === 'local' || verb === 'global') && rest.length === 0) {
     return setScope($, name, verb === 'local')

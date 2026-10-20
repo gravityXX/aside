@@ -260,7 +260,7 @@ async function runCommand($: Engine, ctx: Context, name: Name, args: readonly st
     case 'find':
       return findEntries($, ctx, args.join(' '))
     case 'import':
-      return importFile($, ctx, args.join(' '))
+      return importFile($, args.join(' '))
     case 'scan':
       return scanFile($, args.join(' '))
     case 'export':
