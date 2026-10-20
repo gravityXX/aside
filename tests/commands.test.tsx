@@ -166,6 +166,17 @@ describe('taking entries out', () => {
     expect(await shown()).toEqual(['2 ideas waiting', '1 idea a', '2 idea b'])
     expect(await aside('undo')).toBe('Nothing to bring back.')
   })
+
+  test('/aside undo run again after one the store refused half-way brings nothing back twice', async ($, on) => {
+    const { w, type, aside, shown } = world($, on)
+    await type('+ a')
+    await aside('clear')
+    w.refuseDelete = 1
+
+    expect(await aside('undo')).toBe('/aside undo did not finish (the store is busy). /aside shows where the queue and the plan stand.')
+    expect(await aside('undo')).toBe('Brought back 1 entry, 1 waiting.')
+    expect(await shown()).toEqual(['1 idea waiting', '1 idea a'])
+  })
 })
 
 describe('changing entries', () => {
