@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.28.0 - 2026-10-20
 
 - `/aside run` runs one thing: the next step of the plan, or with no step left, the first entry of the queue. `/aside run all` runs the rest of the plan step by step, or the queue entry by entry, as `/aside run` did. `/aside run all` no longer sends the whole queue as one prompt, nor does `afterClaudeAnswers` on `run all`, which now runs the queue entry by entry too; `/aside plan` is there to put entries together. `/aside run` in a paused run runs the next step of it and leaves the rest paused, and `/aside continue` goes on with the whole run, as before. A plan another session starts while `/aside run`, `run all` or `afterClaudeAnswers` takes the queue is kept, and the entries stay in the queue. `/aside pop`, `g pop` and `q NAME pop` take the first entry of the list, not the newest.
 
