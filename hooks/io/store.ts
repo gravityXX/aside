@@ -145,12 +145,8 @@ const respellTagIds = (stored: unknown): string[] => {
   })
 }
 
-// The tags an earlier /aside already handed over, by tagId.
-export async function loadHanded($: Engine, key: string): Promise<string[]> {
-  return loadTagIds($, key)
-}
-
-// The tagIds stored under `key`, as tagId makes them now: those handed over, or those a take holds.
+// The tagIds stored under `key`, as tagId makes them now: the tags an earlier /aside already
+// handed over, or those a take holds.
 export async function loadTagIds($: Engine, key: string): Promise<string[]> {
   return respellTagIds(await $.store.get(key))
 }

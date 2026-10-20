@@ -3,13 +3,13 @@ import type { EngineInterface as Engine } from 'claude-code'
 import type { Entry } from '../../types'
 import { inOrder, isSameEntry, onlyEntries, withoutEntries } from '../core/entries'
 import type { Order } from '../core/entries'
-import { loadEntries, loadHanded, loadTagIds, projectKeys, tagId } from './store'
+import { loadEntries, loadTagIds, projectKeys, tagId } from './store'
 import type { Keys } from './store'
 
 // What a change makes of the stored queue: the list to store in its place, left out to keep
 // the queue as it is, and the value the caller asked for. `afterSave` writes what goes with the
-// queue once it is stored, before the next change reads anything: the record of an entry back
-// from /aside edit, which a message sent right after must not find there still.
+// queue once it is stored, before the next change reads anything: the record of an entry out for
+// /aside edit, saved or forgotten, so a message sent right after finds it as the queue now stands.
 export type QueueChange<T> = { list?: readonly Entry[]; value: T; afterSave?: () => Promise<unknown> }
 
 // The changes to this project's queue, one after another, so two that overlap never store over
@@ -136,7 +136,7 @@ async function forgetTake($: Engine, keys: Keys) {
 
 // Unmarks tags handed over, so the next hand-over takes them again.
 async function unhandTags($: Engine, keys: Keys, tagIds: readonly string[]) {
-  const handed = await loadHanded($, keys.handed)
+  const handed = await loadTagIds($, keys.handed)
   await $.store.set(keys.handed, handed.filter(id => !tagIds.includes(id)))
 }
 
@@ -175,7 +175,7 @@ export function takePlanned($: Engine, items: readonly Entry[]): Promise<void> {
     const keys = await projectKeys($)
     const tagIds = items.filter(item => item.isTag).map(tagId)
     if (tagIds.length > 0) {
-      await $.store.set(keys.handed, [...new Set([...(await loadHanded($, keys.handed)), ...tagIds])].slice(-500))
+      await $.store.set(keys.handed, [...new Set([...(await loadTagIds($, keys.handed)), ...tagIds])].slice(-500))
     }
     await saveEntries($, keys.queue, withoutEntries(await loadEntries($, keys.queue), items))
     await forgetTake($, keys).catch(() => undefined)
@@ -269,7 +269,7 @@ export function takeForHandOver($: Engine, tags: readonly Entry[]): Promise<{ st
     if (stored.length === 0 && tags.length === 0) {
       return { stored, giveBack: async () => undefined }
     }
-    const before = await loadHanded($, keys.handed)
+    const before = await loadTagIds($, keys.handed)
     const previous = await loadTake($, keys)
     const take: Take = { entries: [...stored], tagIds: tags.map(tagId), by: 'hand-over' }
     // Only the tags this take marks: others marked between the take and its give-back stay so.
