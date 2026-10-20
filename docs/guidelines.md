@@ -45,7 +45,7 @@ How the code in this repository is designed, written, tested and released. Read 
 
 Each value lives where its lifetime fits:
 
-- **`ctx.session`** - this load only: the turn, the clipboard reader, the chained writes. A reload starts it over, so nothing in it may need to outlast one.
+- **`ctx.session`** - this load only: the turn, the clipboard reader, the plan's chained changes. A reload starts it over, so nothing in it may need to outlast one.
 - **Atoms** (`band`, `files` in `io/store.ts`) - values a drawing reads. They last the session, survive a reload, and a write redraws every drawing that read them.
 - **`$.store`** - the queue, the plan and what undo brings back. It lasts across sessions and every session on the machine shares it.
 
@@ -53,7 +53,7 @@ Each value lives where its lifetime fits:
 6. What belongs to one session names it, since the store is shared (`Plan.active.sessionId`).
 7. Stored data from the last release must still load. A new field is optional; renaming or removing one needs code that reads the old shape.
 8. A flag in stored data is `isX?: true`, left out when false.
-9. Writes that may overlap go one after another through `chainWrite`, so two quick entries never overwrite each other. The plan is changed the same way through `changePlan`, which reads it inside the chain, so a step that ends and a planner that adds steps never save over each other.
+9. Changes that may overlap go one after another. The project queue is changed through `changeQueue` in `io/queue.ts`, which reads the stored list inside its chain and resolves once the change is written, so two quick entries never overwrite each other and what is read next holds the change. Slow work that must keep that order, such as git or the clipboard for a typed entry, goes into `changeQueueAfter`'s first step, which runs before the list is read, so the list is never held across it. The plan is changed the same way through `changePlan`, so a step that ends and a planner that adds steps never save over each other. A change never waits for another one, on either chain, which would wait for it.
 
 ## 3. The engine
 
@@ -100,7 +100,7 @@ The plugin runs on the Claude Code plugin API: hooks `($, e, next)` added with `
 
 ### Async and errors
 
-9. Every promise is awaited, returned or handed to `chainWrite`. A deliberate fire-and-forget is written `void f()`, as most buttons do; one that opens a pane returns it (3.15).
+9. Every promise is awaited or returned. A deliberate fire-and-forget is written `void f()`, as most buttons do; one that opens a pane returns it (3.15).
 10. An engine call that may fail is caught where it is made and turned into `undefined`, `false` or a sentence for the person (`tryReadFile`, `.catch(() => undefined)`). No error reaches the person as a stack.
 11. Time comes from `$.clock` (`now`, `after`), never `Date` or `setTimeout`, so tests can drive it.
 
