@@ -2,10 +2,11 @@ import type { CatchHandler, EngineInterface as Engine, Hook, MatchedHook } from 
 
 import { currentOutput, currentTask } from '../context'
 import type { Context } from '../context'
-import { inOrder, KINDS } from '../core/entries'
+import { KINDS } from '../core/entries'
 import { MARKDOWN_PATH } from '../core/markdown'
 import { describeFailure, formatCount, shortenText } from '../core/text'
-import { countQueues, GLOBAL, isHiddenHere, isLocalQueue, loadEntries, loadIdeas, loadPlan, projectKeys, queueName, refreshBand, resolveQueue } from '../io/store'
+import { readQueue } from '../io/queue'
+import { countQueues, GLOBAL, isHiddenHere, isLocalQueue, loadIdeas, loadPlan, projectKeys, queueName, refreshBand, resolveQueue } from '../io/store'
 import { addEntries } from './capture'
 import { findEntries } from './find'
 import { showLog } from './history'
@@ -315,7 +316,7 @@ async function numberRows($: Engine, ctx: Context, of: 'entries' | 'ideas' | 'ru
       ? (ctx.settings.order === 'newest' ? listed.reverse() : listed).map((idea, i) => ({ n: i + 1, label: idea.entry.text, isDone: false }))
       : isSteps
       ? plan.steps.map((step, i) => ({ n: i + 1, label: step.title, isDone: step.isDone === true }))
-      : inOrder(await loadEntries($, keys.queue), ctx.settings.order)
+      : (await readQueue($, ctx.settings.order))
           .map((entry, i) => ({ n: i + 1, label: entry.kind === 'idea' ? entry.text : `${KINDS[entry.kind].label}: ${entry.text}`, isDone: false, isIdea: entry.kind === 'idea' }))
           .filter(item => of !== 'ideas' || item.isIdea)
 

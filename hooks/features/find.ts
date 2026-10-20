@@ -2,12 +2,12 @@ import type { EngineInterface as Engine } from 'claude-code'
 
 import type { Entry } from '../../types'
 import type { Context } from '../context'
-import { inOrder } from '../core/entries'
 import { formatPlace, foundSection, planSection } from '../core/listing'
 import type { Listed, ListingSection } from '../core/listing'
 import { TAG_NOTE } from '../core/prompts'
 import { foldText, splitWords } from '../core/text'
-import { countQueues, GLOBAL, isHiddenHere, isLocalQueue, loadEntries, loadIdeas, loadPlan, projectKeys, queueName } from '../io/store'
+import { readQueue } from '../io/queue'
+import { countQueues, GLOBAL, isHiddenHere, isLocalQueue, loadIdeas, loadPlan, projectKeys, queueName } from '../io/store'
 import { showWhileWorking, tagsInFiles } from './queue'
 
 // What a search looks at in an entry: its text, the quote it is about and where it points, as
@@ -35,7 +35,7 @@ export async function foundListed($: Engine, ctx: Context, query: string): Promi
 
   const keys = await projectKeys($)
   const sections: ListingSection[] = []
-  const queue = numbered(inOrder(await loadEntries($, keys.queue), ctx.settings.order), entry => searchedText(entry, keys.root))
+  const queue = numbered(await readQueue($, ctx.settings.order), entry => searchedText(entry, keys.root))
   if (queue.length > 0) sections.push(foundSection('In the queue (/aside)', queue.map(({ item, label }) => ({ entry: item, label })), keys.root))
   const tags = (await tagsInFiles($)).filter(tag => isMatch(searchedText(tag, keys.root)))
   if (tags.length > 0) sections.push(foundSection('Tags in files', tags.map(entry => ({ entry, label: '·' })), keys.root))
