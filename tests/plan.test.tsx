@@ -268,6 +268,18 @@ describe('handing the queue over', () => {
     expect((await shown()).slice(0, 2)).toEqual(['1 idea waiting', '1 idea b'])
   })
 
+  test('one of two entries typed alike, left out of the plan, goes back alone', async ($, on) => {
+    const { sent, type, aside, shown, savePlan, startTurn, endTurn, idle } = world($, on)
+    await type('+ b\n+ b')
+    await aside('plan')
+    await idle()
+    await startTurn(sent.at(-1)!, 'p1')
+
+    expect((await savePlan([{ title: 'B', prompt: 'Do b.' }], [{ item: 2, question: 'Which b?' }])).result).toContain('Not in the plan, back in the queue')
+    await endTurn('p1')
+    expect((await shown()).slice(0, 2)).toEqual(['1 idea waiting', '1 idea b'])
+  })
+
   test('a tag in a file is handed over once, and then shown as handed over', async ($, on) => {
     const { sent, write, aside, shown, idle } = world($, on, { files: { [REPORT_PATH]: REPORT } })
     await write(REPORT_PATH)
@@ -1495,6 +1507,31 @@ describe('running the plan', () => {
     expect(await running).toBe('Another session started a plan meanwhile; the entries stay in the queue, and /aside shows the plan.')
     expect(await removing).toBe('Removed: dark mode')
     expect(await shown()).toEqual(['The queue is empty.', 'Plan: 3 of 3 steps to do (/aside run)', '1 to do One', '2 to do Two', '3 to do Three'])
+  })
+
+  test('of two entries typed alike, one run as a plan another session started gives it back stays, and the other removed meanwhile stays removed', async ($, on) => {
+    const { w, clock, type, aside, shown, fromAnotherSession } = world($, on)
+    await type('+ dark mode\n+ dark mode')
+    // Another session saves a plan as this one takes entry 1, and the person removes the other
+    // as the queue is stored without it.
+    let removing: Promise<string> | undefined
+    w.beforeWrite = async key => {
+      if (!key.startsWith('taken')) return
+      await fromAnotherSession('plan:/proj', { steps: STEPS })
+      w.beforeWrite = async key => {
+        if (!key.startsWith('queue:')) return
+        w.beforeWrite = undefined
+        removing = aside('remove 1')
+        await clock.sleep(2)
+      }
+    }
+    const running = aside('run 1')
+    await clock.settle()
+    await clock.advance(5)
+
+    expect(await running).toBe('Another session started a plan meanwhile; the entries stay in the queue, and /aside shows the plan.')
+    expect(await removing).toBe('Removed: dark mode')
+    expect((await shown()).slice(0, 2)).toEqual(['1 idea waiting', '1 idea dark mode'])
   })
 })
 

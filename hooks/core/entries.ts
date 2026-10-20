@@ -159,6 +159,17 @@ export const withoutEntries = (list: readonly Entry[], gone: readonly Entry[]): 
   })
 }
 
+// `list` with only `kept`, one same entry for each of them, as withoutEntries leaves them out.
+export const onlyEntries = (list: readonly Entry[], kept: readonly Entry[]): Entry[] => {
+  const left = [...kept]
+
+  return list.filter(entry => {
+    const i = left.findIndex(one => isSameEntry(one, entry))
+    if (i >= 0) left.splice(i, 1)
+    return i >= 0
+  })
+}
+
 // Which entry comes first, from the order setting. The store keeps the oldest first either
 // way, so the setting can change at any time; only what /aside shows, numbers and runs follows it.
 export type Order = 'oldest' | 'newest'
