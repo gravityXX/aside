@@ -415,6 +415,34 @@ describe('handing the queue over', () => {
     expect(await shown()).toEqual(['1 idea waiting', '1 idea a'])
   })
 
+  test('a hand-over that failed gives undo back what it had before, such as a clear', async ($, on) => {
+    const { w, type, aside, shown, idle } = world($, on)
+    await type('+ old')
+    await aside('clear')
+    await type('+ a')
+    w.isDropping = true
+    expect(await aside('plan')).toBe('Organizing 1 idea.')
+    await idle()
+
+    expect(await shown()).toEqual(['1 idea waiting', '1 idea a'])
+    expect(await aside('undo')).toBe('Brought back 1 entry, 2 waiting.')
+    expect(await shown()).toEqual(['2 ideas waiting', '1 idea old', '2 idea a'])
+  })
+
+  test('a clear made while a failing hand-over is on its way keeps what it cleared for undo', async ($, on) => {
+    const { w, type, aside, shown, idle } = world($, on)
+    await type('+ a')
+    w.isDropping = true
+    expect(await aside('plan')).toBe('Organizing 1 idea.')
+    await type('+ b\n+ c')
+    expect(await aside('clear')).toBe('Cleared 2 entries. /aside undo brings them back.')
+    await idle()
+
+    expect(await shown()).toEqual(['1 idea waiting', '1 idea a'])
+    expect(await aside('undo')).toBe('Brought back 2 entries, 3 waiting.')
+    expect(await shown()).toEqual(['3 ideas waiting', '1 idea b', '2 idea c', '3 idea a'])
+  })
+
   test('with no plan, /aside run all runs each entry as a step of its own, one after another', async ($, on) => {
     const { sent, write, type, aside, shown, answer, idle } = world($, on, { files: { [REPORT_PATH]: REPORT } })
     await write(REPORT_PATH)

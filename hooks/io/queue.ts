@@ -95,6 +95,21 @@ async function loadTake($: Engine, keys: Keys): Promise<Take> {
   return { entries: await loadEntries($, keys.taken), tagIds, by }
 }
 
+// Whether two takes hold the same entries and tags, taken the same way.
+const isSameTake = (one: Take, other: Take): boolean =>
+  one.by === other.by &&
+  one.entries.length === other.entries.length &&
+  one.entries.every((entry, i) => other.entries[i] !== undefined && isSameEntry(entry, other.entries[i])) &&
+  one.tagIds.length === other.tagIds.length &&
+  one.tagIds.every((id, i) => id === other.tagIds[i])
+
+// Gives undo back the take it had before `take`, while `take` is still the one stored. A
+// give-back runs in a later turn than its take, once the hand-over has failed, so a clear may
+// have made a newer take meanwhile, and that one stays.
+async function restoreTake($: Engine, keys: Keys, take: Take, previous: Take) {
+  if (isSameTake(await loadTake($, keys), take)) await saveTake($, keys, previous)
+}
+
 async function forgetTake($: Engine, keys: Keys) {
   await saveEntries($, keys.taken, [])
   await $.store.delete(keys.takenTags)
@@ -195,6 +210,7 @@ export function takeChosen(
       return chosen
     }
     const previous = await loadTake($, keys)
+    const take: Take = { entries: [...chosen], tagIds: [], by: 'hand-over' }
     // Puts the chosen entries back where they stood among those still in the queue, before what
     // came since, and gives undo back what it had.
     const giveBack = () =>
@@ -202,10 +218,10 @@ export function takeChosen(
         const now = await loadEntries($, keys.queue)
         const kept = stored.filter(entry => [...chosen, ...now].some(one => isSameEntry(one, entry)))
         await saveEntries($, keys.queue, [...kept, ...withoutEntries(now, kept)])
-        await saveTake($, keys, previous)
+        await restoreTake($, keys, take, previous)
       })
     try {
-      await saveTake($, keys, { entries: [...chosen], tagIds: [], by: 'hand-over' })
+      await saveTake($, keys, take)
       await saveEntries($, keys.queue, withoutEntries(stored, chosen))
     } catch (error) {
       // The chosen entries are still in the queue: undo brings back what it did before, not them.
@@ -221,7 +237,8 @@ export function takeChosen(
 // over: both go where /aside undo finds them, and the tags are marked so they are not handed
 // over again. The queue is read in the take's turn on the chain, so an entry typed meanwhile is
 // either taken with it or stored after it, never written over. It answers the entries taken,
-// oldest first, and `giveBack`, which undoes all of it when the hand-over fails. With nothing
+// oldest first, and `giveBack`, which undoes all of it when the hand-over fails: the entries
+// back in the queue, its tags no longer marked, and the take undo had before. With nothing
 // to take, nothing is written, and the take undo had stays. A take that fails half-way is undone
 // at once, before its error goes on: the queue as it was, and the take undo had before, so
 // nothing is left both in the queue and in the take, and nothing undo had is lost.
@@ -234,6 +251,9 @@ export function takeForHandOver($: Engine, tags: readonly Entry[]): Promise<{ st
     }
     const before = await loadHanded($, keys.handed)
     const previous = await loadTake($, keys)
+    const take: Take = { entries: [...stored], tagIds: tags.map(tagId), by: 'hand-over' }
+    // Only the tags this take marks: others marked between the take and its give-back stay so.
+    const marked = take.tagIds.filter(id => !before.includes(id))
     let isQueueTaken = false
     // The entries go back at the head of the queue, before what came since, once each.
     const putBack = async () => {
@@ -243,16 +263,16 @@ export function takeForHandOver($: Engine, tags: readonly Entry[]): Promise<{ st
     const giveBack = () =>
       inTurn(async () => {
         if (isQueueTaken) await putBack()
-        await $.store.set(keys.handed, before)
-        await forgetTake($, keys)
+        await unhandTags($, keys, marked)
+        await restoreTake($, keys, take, previous)
       })
     try {
-      await saveTake($, keys, { entries: [...stored], tagIds: tags.map(tagId), by: 'hand-over' })
+      await saveTake($, keys, take)
       if (stored.length > 0) {
         await saveEntries($, keys.queue, [])
         isQueueTaken = true
       }
-      await $.store.set(keys.handed, [...new Set([...before, ...tags.map(tagId)])].slice(-500))
+      await $.store.set(keys.handed, [...new Set([...before, ...take.tagIds])].slice(-500))
     } catch (error) {
       // The handed write comes last: when anything failed, it was never made.
       if (isQueueTaken) await putBack().catch(() => undefined)
