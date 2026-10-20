@@ -142,6 +142,11 @@ export const findTags = (source: string): FileTag[] => {
   return found
 }
 
+// Whether two entries are the same one: queued at the same moment, of the same kind, with the
+// same text. Entries hold no id, and one tidied or edited since counts as another, so work that
+// waited on a long call finds nothing under the text it was given (3.16).
+export const isSameEntry = (one: Entry, other: Entry): boolean => one.at === other.at && one.kind === other.kind && one.text === other.text
+
 // Which entry comes first, from the order setting. The store keeps the oldest first either
 // way, so the setting can change at any time; only what /aside shows, numbers and runs follows it.
 export type Order = 'oldest' | 'newest'

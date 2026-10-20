@@ -2,7 +2,7 @@ import type { Args, CatchHandler, EngineInterface as Engine, Hook, MatchedHook }
 
 import type { Entry, Plan, Step } from '../../types'
 import type { Context, PlanModel } from '../context'
-import { inOrder, KINDS } from '../core/entries'
+import { inOrder, isSameEntry, KINDS } from '../core/entries'
 import { awayWork, describeCount, formatPlace, isAway, isWaiting, leftOutSection, listingText, planSection } from '../core/listing'
 import {
   answerContext,
@@ -846,7 +846,7 @@ async function isAsGiven($: Engine, keys: Keys, items: readonly Entry[]): Promis
   const queue = await loadEntries($, keys.queue)
   const handed = new Set(await loadHanded($, keys.handed))
   const isThere = (item: Entry) =>
-    item.isTag ? !handed.has(tagId(item)) : queue.some(entry => entry.at === item.at && entry.kind === item.kind && entry.text === item.text)
+    item.isTag ? !handed.has(tagId(item)) : queue.some(entry => isSameEntry(entry, item))
 
   return items.every(isThere)
 }

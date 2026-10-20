@@ -3,7 +3,7 @@ import type { CatchHandler, EngineInterface as Engine, Hook } from 'claude-code'
 import type { Band, Entry } from '../../types'
 import { currentOutput, chainWrite } from '../context'
 import type { Context } from '../context'
-import { inOrder, KINDS, parseEntries } from '../core/entries'
+import { inOrder, isSameEntry, KINDS, parseEntries } from '../core/entries'
 import type { Order, TypedEntry } from '../core/entries'
 import { formatPlace, isExportText } from '../core/listing'
 import { findFragment, findHeading, fragmentWords, MARKDOWN_PATH, MIN_FRAGMENT_WORDS } from '../core/markdown'
@@ -283,7 +283,7 @@ async function tidyEntry($: Engine, ctx: Context, entry: Entry): Promise<void> {
     async () => {
       const { queue } = await projectKeys($)
       const list = await loadEntries($, queue)
-      const i = list.findIndex(one => one.at === entry.at && one.kind === entry.kind && one.text === entry.text)
+      const i = list.findIndex(one => isSameEntry(one, entry))
       const one = list[i]
       if (one === undefined) return
       const raw = one.raw?.endsWith(one.text) ? `${one.raw.slice(0, one.raw.length - one.text.length)}${fixed}` : one.raw
