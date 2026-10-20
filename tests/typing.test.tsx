@@ -148,6 +148,62 @@ describe('while an entry is on its way to the store', () => {
     expect(await aside('undo')).toBe('Brought back 1 entry, 2 waiting.')
     expect(await shown()).toEqual(['2 ideas waiting', '1 idea first', '2 idea second'])
   })
+
+  test('an entry typed as a clear starts lands in the queue, and undo brings back what was cleared', async ($, on) => {
+    const { w, clock, type, enter, aside, shown } = world($, on)
+    await type('+ first\n+ second')
+    // The clear's take is a moment on its way to the store, as the hand-over's is above.
+    w.beforeWrite = async key => {
+      if (!key.startsWith('taken:')) return
+      w.beforeWrite = undefined
+      await clock.sleep(2)
+    }
+    await enter('+ third')
+    const clearing = aside('clear')
+    await clock.settle()
+    await clock.advance(5)
+
+    expect(await clearing).toBe('Cleared 2 entries. /aside undo brings them back.')
+    expect(await shown()).toEqual(['1 idea waiting', '1 idea third'])
+    expect(await aside('undo')).toBe('Brought back 2 entries, 3 waiting.')
+    expect(await shown()).toEqual(['3 ideas waiting', '1 idea first', '2 idea second', '3 idea third'])
+  })
+
+  test('an entry typed as /aside run 1 starts stays in the queue beside the rest', async ($, on) => {
+    const { w, clock, type, enter, aside, shown } = world($, on)
+    await type('+ first\n+ second')
+    w.beforeWrite = async key => {
+      if (!key.startsWith('taken:')) return
+      w.beforeWrite = undefined
+      await clock.sleep(2)
+    }
+    await enter('+ third')
+    const running = aside('run 1')
+    await clock.settle()
+    await clock.advance(5)
+
+    expect(await running).toBe('Running entry 1: first')
+    expect((await shown()).slice(-3)).toEqual(['2 ideas waiting', '1 idea second', '2 idea third'])
+  })
+
+  test('an entry typed as undo starts lands in the queue after what undo brings back', async ($, on) => {
+    const { w, clock, type, enter, aside, shown } = world($, on)
+    await type('+ first')
+    await aside('clear')
+    // Undo's write of the queue is a moment on its way to the store.
+    w.beforeWrite = async key => {
+      if (!key.startsWith('queue:')) return
+      w.beforeWrite = undefined
+      await clock.sleep(2)
+    }
+    await enter('+ second')
+    const undoing = aside('undo')
+    await clock.settle()
+    await clock.advance(5)
+
+    expect(await undoing).toBe('Brought back 1 entry, 2 waiting.')
+    expect(await shown()).toEqual(['2 ideas waiting', '1 idea first', '2 idea second'])
+  })
 })
 
 describe('the prompt box', () => {
