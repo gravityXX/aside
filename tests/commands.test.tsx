@@ -36,6 +36,12 @@ describe('/aside', () => {
 
     expect(await aside()).toBe(
       [
+        'Plan: 3 of 3 steps to do (/aside run)',
+        '',
+        '  1  running  One',
+        '  2  to do    Two',
+        '  3  to do    Three',
+        '',
         '1 idea and 1 comment waiting',
         '',
         '  1  idea      a',
@@ -47,12 +53,6 @@ describe('/aside', () => {
         '',
         '  ·  question  is this the same for Poland',
         '               ↳ docs/report.md:9 · "Costs stayed flat across all regions."',
-        '',
-        'Plan: 3 of 3 steps to do (/aside run)',
-        '',
-        '  1  running  One',
-        '  2  to do    Two',
-        '  3  to do    Three',
       ].join('\n'),
     )
   })
@@ -422,7 +422,7 @@ describe('exporting the list', () => {
     await idle()
 
     await aside('export')
-    expect(w.files['/proj/aside.md']!.split('\n')[8]).toBe('## Plan waits at step 1 (needs &lt;your> yes & a name), 3 of 3 steps to do (/aside continue)')
+    expect(w.files['/proj/aside.md']!.split('\n')[6]).toBe('## Plan waits at step 1 (needs &lt;your> yes & a name), 3 of 3 steps to do (/aside continue)')
   })
 
   test('code and backticks in an entry stay as typed: no fence in it closes the block it is in', async ($, on) => {

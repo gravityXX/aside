@@ -422,14 +422,14 @@ describe('handing the queue over', () => {
 
     expect(await aside('run all')).toBe('Running 3 entries one by one. /aside stop stops after the current one.')
     expect(await shown()).toEqual([
-      'The queue is empty.',
-      'Tags in files',
-      '· question is this the same for Poland',
-      '↳ docs/report.md:9 · "Costs stayed flat across all regions." · handed over',
       'Plan: 3 of 3 steps to do (/aside run)',
       '1 running dark mode',
       '2 to do as a table',
       '3 to do is this the same for Poland',
+      'The queue is empty.',
+      'Tags in files',
+      '· question is this the same for Poland',
+      '↳ docs/report.md:9 · "Costs stayed flat across all regions." · handed over',
     ])
     await idle()
     await answer('e1')
@@ -510,7 +510,7 @@ describe('running the plan', () => {
     expect(await aside('run 3')).toBe('Running entry 3: c')
     await idle()
     expect(sent.at(-1)).toBe('c (branch main)\n\n(Step 1 of 1 of the queue plan, "c", sent by the aside plugin.)')
-    expect(await shown()).toEqual(['2 ideas waiting', '1 idea a', '2 idea b', 'Plan: 1 of 1 step to do (/aside run)', '1 running c'])
+    expect(await shown()).toEqual(['Plan: 1 of 1 step to do (/aside run)', '1 running c', '2 ideas waiting', '1 idea a', '2 idea b'])
   })
 
   test('/aside run 3 1 runs those entries one after another, in that order', async ($, on) => {
@@ -577,7 +577,7 @@ describe('running the plan', () => {
     await wait('needs your yes')
     await endTurn('s1', 'answer', 'Result: asked.', 30_000)
     await clock.advance(20 * 60_000)
-    expect((await shown()).slice(2, 4)).toEqual(['1 waiting One', '↳ waiting for you, 22 min · asked.'])
+    expect((await shown()).slice(1, 3)).toEqual(['1 waiting One', '↳ waiting for you, 22 min · asked.'])
 
     await aside('continue')
     await idle()
@@ -627,9 +627,9 @@ describe('running the plan', () => {
     const { clock, aside, shown } = world($, on, { stored })
     await clock.advance(60 * 60_000)
 
-    expect((await shown()).slice(2, 4)).toEqual(['1 waiting One', '↳ waiting for you, 3 min · asked.'])
+    expect((await shown()).slice(1, 3)).toEqual(['1 waiting One', '↳ waiting for you, 3 min · asked.'])
     await aside('continue')
-    expect((await shown()).slice(2, 4)).toEqual(['1 done One', '↳ took 3 min · asked.'])
+    expect((await shown()).slice(1, 3)).toEqual(['1 done One', '↳ took 3 min · asked.'])
   })
 
   test('a step that needs an answer waits for it with the wait tool: the answer is the step\'s own, and Claude\'s reply to it ends the step and goes on', async ($, on) => {
@@ -645,12 +645,12 @@ describe('running the plan', () => {
     expect(sent).toHaveLength(1)
     expect(toasts).toEqual([asks(1, 'needs your yes on the design')])
     expect(await shown()).toEqual([
-      'The queue is empty.',
       'Plan waits at step 1 (needs your yes on the design), 3 of 3 steps to do (/aside continue) · 1 min so far',
       '1 waiting One',
       '↳ waiting for you, 1 min · the design is drawn up; it waits for a yes.',
       '2 to do Two',
       '3 to do Three',
+      'The queue is empty.',
     ])
 
     await type('yes, build it')
@@ -667,7 +667,7 @@ describe('running the plan', () => {
     expect(sent).toHaveLength(3)
     expect(sent.at(-1)).toBe(`Do two.\n\n(Step 2 of 3 of the queue plan, "Two", sent by the aside plugin.\nPlan: 1 One (done) · 2 Two (this one) · 3 Three (to do).\n${NEXT})`)
     expect(contexts.at(-1)).toEqual([])
-    expect((await shown()).slice(1, 4)).toEqual(['Plan: 2 of 3 steps to do (/aside run) · 3 min so far', '1 done One', '↳ took 3 min · built it; the tests pass.'])
+    expect((await shown()).slice(0, 3)).toEqual(['Plan: 2 of 3 steps to do (/aside run) · 3 min so far', '1 done One', '↳ took 3 min · built it; the tests pass.'])
   })
 
   test('a step asked again after an answer waits for that answer, and every turn meanwhile is its own, a cut-short one too', async ($, on) => {
@@ -689,14 +689,14 @@ describe('running the plan', () => {
     await wait('may I push')
     await endTurn('a1', 'answer', 'Result: built; may I push?', 60_000)
     expect(toasts.at(-1)).toBe(asks(1, 'may I push'))
-    expect((await shown())[1]).toBe('Plan waits at step 1 (may I push), 3 of 3 steps to do (/aside continue) · 2 min so far')
+    expect((await shown())[0]).toBe('Plan waits at step 1 (may I push), 3 of 3 steps to do (/aside continue) · 2 min so far')
 
     await type('yes')
     expect(contexts.at(-1)).toEqual([answering(1, 'One')])
     await startTurn('yes', 'a2')
     await endTurn('a2', 'aborted', 'Result: half done.', 60_000)
     expect(toasts.at(-1)).toBe("Step 1 waits: answer again, and Claude's reply ends it, or /aside continue ends it now.")
-    expect((await shown()).slice(1, 4)).toEqual([
+    expect((await shown()).slice(0, 3)).toEqual([
       'Plan waits at step 1 (answered), 3 of 3 steps to do (/aside continue) · 3 min so far',
       '1 waiting One',
       '↳ waiting for you, 3 min · built; may I push?',
@@ -705,7 +705,7 @@ describe('running the plan', () => {
     await endTurn('n1', 'answer', 'Result: pushed.', 60_000)
     await idle()
     expect(sent).toHaveLength(3)
-    expect((await shown()).slice(1, 4)).toEqual([
+    expect((await shown()).slice(0, 3)).toEqual([
       'Plan waits at step 1 (answered), 3 of 3 steps to do (/aside continue) · 4 min so far',
       '1 waiting One',
       '↳ waiting for you, 4 min · pushed.',
@@ -726,7 +726,7 @@ describe('running the plan', () => {
     expect(await aside('continue')).toBe('Step 1 done; going on with the plan from step 2. /aside stop stops after the current one.')
     await idle()
     await answer('s2', 'Result: two.')
-    expect((await shown()).slice(1, 4)).toEqual(['Plan: 1 of 3 steps to do (/aside run)', '1 done One', '↳ asks x.'])
+    expect((await shown()).slice(0, 3)).toEqual(['Plan: 1 of 3 steps to do (/aside run)', '1 done One', '↳ asks x.'])
     await type('a plain message')
     expect(contexts.at(-1)).toEqual([])
   })
@@ -955,7 +955,7 @@ describe('running the plan', () => {
     await endTurn('a1', 'answer', 'Result: built the first.', 60_000)
     await idle()
     expect(sent).toEqual([expect.stringContaining('Step 1 of 3'), 'the first'])
-    expect((await shown())[1]).toBe('Plan waits at step 1 (answered), 3 of 3 steps to do (/aside continue) · 2 min so far')
+    expect((await shown())[0]).toBe('Plan waits at step 1 (answered), 3 of 3 steps to do (/aside continue) · 2 min so far')
   })
 
   test('an answer again right after an answer turn cut short ends the step; one in which Claude asks again does not', async ($, on) => {
@@ -1038,7 +1038,7 @@ describe('running the plan', () => {
     await startTurn('', 'n1')
     expect(await aside('run 3')).toBe('Step 1 is running. /aside stop stops after it.')
     await endTurn('n1', 'answer', 'Result: a notice.')
-    expect((await shown())[1]).toMatch(/^Plan waits at step 1 \(answered\)/)
+    expect((await shown())[0]).toMatch(/^Plan waits at step 1 \(answered\)/)
 
     await type('the first, again')
     await startTurn('the first, again', 'a2')
@@ -1110,7 +1110,7 @@ describe('running the plan', () => {
     await startTurn('hello', 't1')
     await endTurn('t1', 'answer', 'Result: hi.', 60_000)
     await idle()
-    expect((await shown())[1]).toBe('Plan waits at step 1 (x), 3 of 3 steps to do (/aside continue) · 1 min so far')
+    expect((await shown())[0]).toBe('Plan waits at step 1 (x), 3 of 3 steps to do (/aside continue) · 1 min so far')
 
     expect(await aside('run 3')).toBe('Step 1 waits for your answer; /aside continue ends it and goes on, /aside stop ends it there.')
     expect(await aside('undo')).toBe('Step 1 of the plan waits for your answer; /aside stop first, so nothing is done twice.')
@@ -1119,7 +1119,7 @@ describe('running the plan', () => {
     )
     await idle()
     expect(sent.at(-1)).toContain('Do two.')
-    expect((await shown()).slice(1, 3)).toEqual(['Plan: 2 of 3 steps to do (/aside run) · 1 min so far', '1 done One'])
+    expect((await shown()).slice(0, 2)).toEqual(['Plan: 2 of 3 steps to do (/aside run) · 1 min so far', '1 done One'])
   })
 
   test('the last step of a run that waits in another session sums the run up here at /aside continue', async ($, on) => {
@@ -1167,13 +1167,13 @@ describe('running the plan', () => {
     await endTurn('t1', 'answer', 'Result: hi.', 60_000)
     await idle()
     expect(sent.at(-1)).toContain('Do two.')
-    expect((await shown()).slice(1, 5)).toEqual(['Plan: 2 of 3 steps to do (/aside run)', '1 done One', '↳ asks x.', '2 running Two'])
+    expect((await shown()).slice(0, 4)).toEqual(['Plan: 2 of 3 steps to do (/aside run)', '1 done One', '↳ asks x.', '2 running Two'])
   })
 
   test('a plan saved by an earlier release, paused after a step by the wait tool, still loads, and a step run by its number drops the pause', async ($, on) => {
     const stored = { 'plan:/proj': { steps: [{ ...STEPS[0], isDone: true, ms: 0 }, STEPS[1], STEPS[2]], paused: { step: 0, reason: 'needs your yes', isChain: true } } }
     const { sent, aside, shown, answer, idle } = world($, on, { stored })
-    expect((await shown())[1]).toBe('Plan paused after step 1 (needs your yes), 2 of 3 steps to do (/aside continue)')
+    expect((await shown())[0]).toBe('Plan paused after step 1 (needs your yes), 2 of 3 steps to do (/aside continue)')
 
     expect(await aside('run 3')).toBe('Running step 3: Three')
     await idle()
@@ -1377,7 +1377,7 @@ describe('running the plan', () => {
     await idle()
     expect(sent[0]).toContain(ALONE)
     await answer('s4')
-    expect((await shown())[1]).toBe('Plan paused after step 4 (needs your yes), 2 of 4 steps to do (/aside continue)')
+    expect((await shown())[0]).toBe('Plan paused after step 4 (needs your yes), 2 of 4 steps to do (/aside continue)')
 
     expect(await aside('run')).toBe('Running step 3: Three; /aside continue then goes on with the paused run.')
     await idle()
@@ -1426,9 +1426,9 @@ describe('running the plan', () => {
     expect(await aside('run')).toBe('Another session started a plan meanwhile; the entries stay in the queue, and /aside shows the plan.')
     await idle()
     expect(sent).toEqual([])
-    expect((await shown()).slice(0, 4)).toEqual(['2 ideas waiting', '1 idea a', '2 idea b', 'Plan: 3 of 3 steps to do (/aside run)'])
+    expect(await shown()).toEqual(['Plan: 3 of 3 steps to do (/aside run)', '1 running One', '2 to do Two', '3 to do Three', '2 ideas waiting', '1 idea a', '2 idea b'])
     expect(await aside('undo')).toBe('Brought back 1 entry, 3 waiting.')
-    expect((await shown()).slice(0, 4)).toEqual(['3 ideas waiting', '1 idea old', '2 idea a', '3 idea b'])
+    expect((await shown()).slice(4, 8)).toEqual(['3 ideas waiting', '1 idea old', '2 idea a', '3 idea b'])
   })
 
   test('/aside undo waits while a step runs, so nothing is done twice', async ($, on) => {
@@ -1498,7 +1498,7 @@ describe('when Claude answers', () => {
 
     expect(toasts).toEqual(['Another session started a plan meanwhile; the entries stay in the queue, and /aside shows the plan.'])
     expect(sent).toEqual([])
-    expect((await shown()).slice(0, 3)).toEqual(['1 idea waiting', '1 idea dark mode', 'Plan: 3 of 3 steps to do (/aside run)'])
+    expect(await shown()).toEqual(['Plan: 3 of 3 steps to do (/aside run)', '1 running One', '2 to do Two', '3 to do Three', '1 idea waiting', '1 idea dark mode'])
   })
 
   test('a saved plan with steps to do holds the automatic hand-over back', { options: { afterClaudeAnswers: 'plan' } }, async ($, on) => {
@@ -1631,12 +1631,12 @@ describe('adding to a running plan', () => {
     await savePlan([{ title: 'Dark mode', prompt: 'Add a dark mode.' }])
     await endTurn('p1')
     expect(await shown()).toEqual([
-      'The queue is empty.',
       'Plan paused after step 1 (to organize the queue), 3 of 4 steps to do (/aside continue)',
       '1 done One',
       '2 to do Two',
       '3 to do Three',
       '4 to do Dark mode',
+      'The queue is empty.',
     ])
     expect(await aside('continue')).toBe('Going on with the plan from step 2. /aside stop stops after the current one.')
     await idle()
@@ -1665,7 +1665,7 @@ describe('adding to a running plan', () => {
     expect((await wait('x')).deny).toBe('no step of the aside plan is running; call this tool only from a step of the plan')
     await savePlan([{ title: 'Dark mode', prompt: 'Add a dark mode.' }])
     await endTurn('p1')
-    expect((await shown()).slice(1)).toEqual([
+    expect((await shown()).slice(0, -1)).toEqual([
       'Plan waits at step 1 (which colours), 4 of 4 steps to do (/aside continue)',
       '1 waiting One',
       '2 to do Two',
@@ -1720,7 +1720,7 @@ describe('adding to a running plan', () => {
     expect(contexts.at(-1)).toEqual([])
     await savePlan([{ title: 'Dark mode', prompt: 'Add a dark mode.' }])
     await endTurn('p1')
-    expect((await shown())[1]).toBe('Plan waits at step 1 (which colours), 4 of 4 steps to do (/aside continue)')
+    expect((await shown())[0]).toBe('Plan waits at step 1 (which colours), 4 of 4 steps to do (/aside continue)')
 
     await type('blue')
     await startTurn('blue', 'a1')
@@ -1735,7 +1735,7 @@ describe('adding to a running plan', () => {
     await startTurn(sent.at(-1)!, 'p2')
     await savePlan([{ title: 'Light mode', prompt: 'Add a light mode.' }])
     await endTurn('p2')
-    expect((await shown()).slice(1)).toEqual([
+    expect((await shown()).slice(0, -1)).toEqual([
       'Plan paused after step 1 (to organize the queue), 4 of 5 steps to do (/aside continue)',
       '1 done One',
       '↳ blue it is.',
@@ -1937,13 +1937,13 @@ describe('adding to a running plan', () => {
     await t.idle()
     expect(t.sent).toHaveLength(2)
     expect(await t.shown()).toEqual([
-      '1 idea waiting',
-      '1 idea light mode',
       'Plan paused after step 1 (to organize the queue), 3 of 4 steps to do (/aside continue)',
       '1 done One',
       '2 to do Two',
       '3 to do Three',
       '4 to do Dark mode',
+      '1 idea waiting',
+      '1 idea light mode',
     ])
   })
 
@@ -1958,7 +1958,7 @@ describe('adding to a running plan', () => {
     await t.startTurn(t.sent[1]!, 'p1')
     await t.savePlan([{ title: 'Dark mode', prompt: 'Add a dark mode.' }])
     await t.endTurn('p1')
-    expect((await t.shown()).slice(-4)).toEqual(['1 done One', '2 to do Two', '3 to do Three', '4 to do Dark mode'])
+    expect((await t.shown()).slice(-6, -2)).toEqual(['1 done One', '2 to do Two', '3 to do Three', '4 to do Dark mode'])
   })
 
   test('saved twice in the turn that adds to the plan, the second save takes the place of what the first added', async ($, on) => {
@@ -1969,7 +1969,7 @@ describe('adding to a running plan', () => {
     await t.savePlan([{ title: 'Dark mode', prompt: 'Add a dark mode.' }])
     await t.savePlan([{ title: 'Dark and light', prompt: 'Add both modes.' }])
     await t.endTurn('p1')
-    expect((await t.shown()).slice(-4)).toEqual(['1 done One', '2 to do Two', '3 to do Three', '4 to do Dark and light'])
+    expect((await t.shown()).slice(-5, -1)).toEqual(['1 done One', '2 to do Two', '3 to do Three', '4 to do Dark and light'])
   })
 
   test('continue pressed while Claude organizes the queue starts the next step, and the steps saved still go after the plan\'s own', async ($, on) => {
@@ -1983,7 +1983,7 @@ describe('adding to a running plan', () => {
     await t.endTurn('p1')
     await t.idle()
     expect(t.sent.at(-1)).toContain('Do two.')
-    expect((await t.shown()).slice(1)).toEqual(['Plan: 3 of 4 steps to do (/aside run)', '1 done One', '2 running Two', '3 to do Three', '4 to do Dark mode'])
+    expect((await t.shown()).slice(0, -1)).toEqual(['Plan: 3 of 4 steps to do (/aside run)', '1 done One', '2 running Two', '3 to do Three', '4 to do Dark mode'])
   })
 
   test('a step that never runs, stopped before it starts or its prompt dropped, says /aside plan organizes the queue', async ($, on) => {
@@ -2061,7 +2061,7 @@ describe('adding to a running plan', () => {
     expect(await said).toBe(LATER.replace('Step 1', 'Step 2'))
     expect(sent).toHaveLength(2)
     expect(sent[1]).toContain('Do two.')
-    expect((await shown()).slice(0, 2)).toEqual(['1 idea waiting', '1 idea dark mode'])
+    expect((await shown()).slice(-2)).toEqual(['1 idea waiting', '1 idea dark mode'])
   })
 
   test('once the turn that adds to the plan is over, a plan saved later replans as usual', async ($, on) => {
@@ -2120,7 +2120,7 @@ describe('adding to a running plan', () => {
 
     expect((await t.savePlan([{ title: 'Dark mode', prompt: 'Add a dark mode.' }])).deny).toBeUndefined()
     await t.endTurn('p1')
-    expect((await t.shown()).slice(1)).toEqual(['Plan: 2 of 4 steps to do (/aside run)', '1 done One', '2 done Two', '3 running Three', '4 to do Dark mode'])
+    expect((await t.shown()).slice(0, -1)).toEqual(['Plan: 2 of 4 steps to do (/aside run)', '1 done One', '2 done Two', '3 running Three', '4 to do Dark mode'])
   })
 
   test('a step that runs ahead of the prompt that adds leaves its hand-over to be given back when nothing is saved', async ($, on) => {
@@ -2129,7 +2129,7 @@ describe('adding to a running plan', () => {
 
     await t.endTurn('p1')
     expect(t.toasts.at(-1)).toBe('No plan was saved: 1 entry back in the queue.')
-    expect((await t.shown()).slice(0, 2)).toEqual(['1 idea waiting', '1 idea dark mode'])
+    expect((await t.shown()).slice(-2)).toEqual(['1 idea waiting', '1 idea dark mode'])
   })
 
   test('a plan run to its end before the prompt that adds is organized makes way for its steps, saved once or twice', async ($, on) => {
@@ -2184,7 +2184,7 @@ describe('adding to a running plan', () => {
     await endTurn('s1')
     await idle()
     expect(toasts.at(-1)).toBe('Could not hand the queue over (blocked by a hook); the entries are back in it')
-    expect((await shown()).slice(0, 2)).toEqual(['1 idea waiting', '1 idea dark mode'])
+    expect((await shown()).slice(-2)).toEqual(['1 idea waiting', '1 idea dark mode'])
 
     await aside('plan')
     await idle()
@@ -2209,12 +2209,12 @@ describe('adding to a running plan', () => {
     await startTurn(sent[1]!, 'p1')
     await endTurn('p1')
     expect(await shown()).toEqual([
-      '1 idea waiting',
-      '1 idea dark mode',
       'Plan paused after step 1 (to organize the queue), 2 of 3 steps to do (/aside continue)',
       '1 done One',
       '2 to do Two',
       '3 to do Three',
+      '1 idea waiting',
+      '1 idea dark mode',
     ])
   })
 })
@@ -2229,13 +2229,13 @@ describe('what a run keeps', () => {
     await answer('s2', 'There is no result line here.\n\nThe last paragraph says what happened.')
 
     expect(await shown()).toEqual([
-      'The queue is empty.',
       'Plan: 1 of 3 steps to do (/aside run)',
       '1 done One',
       '↳ one is in place, nothing open.',
       '2 done Two',
       '↳ The last paragraph says what happened.',
       '3 running Three',
+      'The queue is empty.',
     ])
   })
 
@@ -2513,7 +2513,7 @@ describe('planning on a model of its own', () => {
 
     await endTurn('s1')
     await idle()
-    expect((await shown())[0]).toBe('The queue is empty.')
+    expect((await shown()).at(-1)).toBe('The queue is empty.')
     await answer('s2')
     await answer('s3')
     expect(sent.at(-1)).toContain('Add a dark mode.\n\n(Step 4 of 4 of the queue plan, "Dark mode"')
@@ -2560,7 +2560,7 @@ describe('planning on a model of its own', () => {
     await planning
     await idle()
     expect(sent).toHaveLength(2)
-    expect((await shown()).slice(1)).toEqual(['Plan: 3 of 4 steps to do (/aside run)', '1 done One', '2 running Two', '3 to do Three', '4 to do Dark mode'])
+    expect((await shown()).slice(0, -1)).toEqual(['Plan: 3 of 4 steps to do (/aside run)', '1 done One', '2 running Two', '3 to do Three', '4 to do Dark mode'])
   })
 
   test('a step that ends just as the planner saves keeps both: the step done and the steps added', SONNET, async ($, on) => {
@@ -2581,7 +2581,7 @@ describe('planning on a model of its own', () => {
     await ending
     await idle()
     expect(sent).toHaveLength(2)
-    expect((await shown()).slice(1)).toEqual(['Plan: 3 of 4 steps to do (/aside run)', '1 done One', '2 running Two', '3 to do Three', '4 to do Dark mode'])
+    expect((await shown()).slice(0, -1)).toEqual(['Plan: 3 of 4 steps to do (/aside run)', '1 done One', '2 running Two', '3 to do Three', '4 to do Dark mode'])
   })
 
   test('a step that starts to wait, a stop or an interruption while the planner thinks keeps the steps it adds', SONNET, async ($, on) => {
@@ -2600,7 +2600,7 @@ describe('planning on a model of its own', () => {
     }
 
     await aside('plan')
-    expect((await shown()).slice(1)).toEqual([
+    expect((await shown()).slice(0, -1)).toEqual([
       'Plan waits at step 1 (which colours), 4 of 4 steps to do (/aside continue)',
       '1 waiting One',
       '2 to do Two',
@@ -2769,7 +2769,7 @@ describe('planning on a model of its own', () => {
     }
     expect(await aside('plan')).toBe('The queue or the plan changed while Sonnet planned; nothing was saved. /aside plan tries again.')
     expect(sent).toHaveLength(1)
-    expect(await shown()).toEqual(['The queue is empty.', 'Plan: 1 of 1 step to do (/aside run)', '1 running dark mode'])
+    expect(await shown()).toEqual(['Plan: 1 of 1 step to do (/aside run)', '1 running dark mode', 'The queue is empty.'])
   })
 
   test('a tag handed over while the planner thinks makes it save nothing', SONNET, async ($, on) => {
@@ -3046,7 +3046,7 @@ describe('a step with work in the background', () => {
 
     expect(sent).toHaveLength(1)
     expect(toasts.at(-1)).toBe('Step 1 goes on in the background (review); it ends once that work is done and Claude has answered it, or /aside continue ends it now.')
-    expect((await shown()).slice(2, 4)).toEqual(['1 running One', '↳ working in the background: review, 1 min'])
+    expect((await shown()).slice(1, 3)).toEqual(['1 running One', '↳ working in the background: review, 1 min'])
     const ui = await band()
     expect((await ui.find({ type: 'Text', text: /^aside: / }))?.text).toBe('aside: plan ▱▱▱ 0/3 · step 1 running in the background · ')
     await ui.unmount()
@@ -3060,7 +3060,7 @@ describe('a step with work in the background', () => {
     await endTurn('n1', 'answer', 'Result: reviewed; two fixes.', 60_000)
     await idle()
     expect(sent.at(-1)).toContain('(Step 2 of 3 of the queue plan, "Two", sent by the aside plugin.')
-    expect((await shown()).slice(2, 4)).toEqual(['1 done One', '↳ took 2 min · reviewed; two fixes.'])
+    expect((await shown()).slice(1, 3)).toEqual(['1 done One', '↳ took 2 min · reviewed; two fixes.'])
   })
 
   test('with two pieces of work, the step goes on until the last one ends, and an agent or a command counts as one', async ($, on) => {
@@ -3073,13 +3073,13 @@ describe('a step with work in the background', () => {
     await $.tool.call({ tool: 'Agent', prompt: 'x', description: 'find the docs', run_in_background: true, tool_use_id: 'toolu_a' } as never)
     await $.tool.call({ tool: 'Bash', command: 'sleep 9', description: 'wait for CI', run_in_background: true, tool_use_id: 'toolu_b' } as never)
     await endTurn('s1', 'answer', 'Result: started both.')
-    expect((await shown())[3]).toBe('↳ working in the background: find the docs, wait for CI')
+    expect((await shown())[2]).toBe('↳ working in the background: find the docs, wait for CI')
 
     await notify($, notice('a7', 'toolu_a'))
     expect(contexts.at(-1)?.[0]).toContain('It still waits for: wait for CI, so it goes on once you reply.')
     await startTurn(notice('a7', 'toolu_a'), 'n1')
     await endTurn('n1', 'answer', 'Result: docs found.')
-    expect((await shown())[3]).toBe('↳ working in the background: wait for CI')
+    expect((await shown())[2]).toBe('↳ working in the background: wait for CI')
 
     await notify($, notice('b3', 'toolu_b'))
     await startTurn(notice('b3', 'toolu_b'), 'n2')
@@ -3099,7 +3099,7 @@ describe('a step with work in the background', () => {
     await $.tool.call({ tool: 'Workflow', script: 'x', tool_use_id: 'toolu_1', agentId: 'sub1' } as never)
     await endTurn('s1', 'answer', 'Result: one.')
     await idle()
-    expect((await shown()).slice(2, 4)).toEqual(['1 done One', '↳ one.'])
+    expect((await shown()).slice(1, 3)).toEqual(['1 done One', '↳ one.'])
   })
 
   test('/aside stop ends a step that goes on in the background as it stands, and a late notification changes nothing', async ($, on) => {
@@ -3136,7 +3136,7 @@ describe('a step with work in the background', () => {
     await idle()
 
     expect(sent).toHaveLength(2)
-    expect((await shown()).slice(2, 4)).toEqual(['1 running One', '↳ working in the background: review'])
+    expect((await shown()).slice(1, 3)).toEqual(['1 running One', '↳ working in the background: review'])
   })
 
   test('work stopped with TaskStop leaves the step, and the turn that stopped it ends the step', async ($, on) => {
@@ -3149,14 +3149,14 @@ describe('a step with work in the background', () => {
     await startTurn(sent[0]!, 's1')
     await $.tool.call({ tool: 'Bash', command: 'npm run dev', description: 'the dev server', run_in_background: true, tool_use_id: 'toolu_b' } as never)
     await endTurn('s1', 'answer', 'Result: server up.')
-    expect((await shown())[3]).toBe('↳ working in the background: the dev server')
+    expect((await shown())[2]).toBe('↳ working in the background: the dev server')
 
     await startTurn('stop the server', 'h1')
     await $.tool.call({ tool: 'TaskStop', task_id: 'b3' } as never)
     await endTurn('h1', 'answer', 'Result: page checked, server stopped.')
     await idle()
     expect(sent.at(-1)).toContain('(Step 2 of 3 of the queue plan, "Two", sent by the aside plugin.')
-    expect((await shown()).slice(2, 4)).toEqual(['1 done One', '↳ page checked, server stopped.'])
+    expect((await shown()).slice(1, 3)).toEqual(['1 done One', '↳ page checked, server stopped.'])
   })
 
   test('/aside continue ends a step in the background and goes on, from any session', async ($, on) => {
@@ -3172,7 +3172,7 @@ describe('a step with work in the background', () => {
     expect(await aside('continue')).toBe('Step 1 done; going on with the plan from step 2. /aside stop stops after the current one.')
     await idle()
     expect(sent.at(-1)).toContain('(Step 2 of 3 of the queue plan, "Two", sent by the aside plugin.')
-    expect((await shown()).slice(2, 4)).toEqual(['1 done One', '↳ review started.'])
+    expect((await shown()).slice(1, 3)).toEqual(['1 done One', '↳ review started.'])
   })
 
   test('the person\'s own turns while a step is in the background are not the step\'s: they keep its result, and Esc in one keeps it there', async ($, on) => {
@@ -3192,7 +3192,7 @@ describe('a step with work in the background', () => {
     await type('and now')
     await startTurn('and now', 'h2')
     await endTurn('h2', 'answer', 'It is noon.')
-    expect((await shown()).slice(2, 4)).toEqual(['1 running One', '↳ working in the background: review'])
+    expect((await shown()).slice(1, 3)).toEqual(['1 running One', '↳ working in the background: review'])
     await idle()
     expect(sent.filter(text => text.includes('(Step 2 of 3'))).toEqual([])
   })
@@ -3235,7 +3235,7 @@ describe('a step with work in the background', () => {
     await endTurn('s1', 'answer', 'Result: started again.')
     await notify($, notice('other', 'toolu_other'))
     expect(contexts.at(-1)).toEqual([])
-    expect((await shown())[3]).toBe('↳ working in the background: review')
+    expect((await shown())[2]).toBe('↳ working in the background: review')
     await idle()
     expect(sent.filter(text => text.includes('(Step 2 of 3'))).toEqual([])
   })
@@ -3293,7 +3293,7 @@ describe('a step with work in the background', () => {
     await wait('which fix')
     await endTurn('n1', 'answer', 'Result: asks which fix.')
 
-    expect((await shown()).slice(2, 4)).toEqual(['1 waiting One', '↳ asks which fix.'])
+    expect((await shown()).slice(1, 3)).toEqual(['1 waiting One', '↳ asks which fix.'])
     expect(await aside('run 2')).toBe('Step 1 waits for your answer; /aside continue ends it and goes on, /aside stop ends it there.')
   })
 
@@ -3311,7 +3311,7 @@ describe('a step with work in the background', () => {
     await startTurn('yes', 'a1')
     await endTurn('a1', 'answer', 'Result: done.')
     await idle()
-    expect((await shown()).slice(2, 4)).toEqual(['1 done One', '↳ done.'])
+    expect((await shown()).slice(1, 3)).toEqual(['1 done One', '↳ done.'])
   })
 
 
@@ -3329,10 +3329,10 @@ describe('a step with work in the background', () => {
     await endTurn('n1', 'aborted', '')
 
     expect(toasts.at(-1)).toBe('Step 1 waits for /aside continue, which ends it: its work in the background is done.')
-    expect((await shown()).slice(2, 4)).toEqual(['1 running One', '↳ working in the background'])
+    expect((await shown()).slice(1, 3)).toEqual(['1 running One', '↳ working in the background'])
     expect(await aside('continue')).toBe('Step 1 done; going on with the plan from step 2. /aside stop stops after the current one.')
     await idle()
-    expect((await shown()).slice(2, 4)).toEqual(['1 done One', '↳ review started.'])
+    expect((await shown()).slice(1, 3)).toEqual(['1 done One', '↳ review started.'])
   })
 
 })
