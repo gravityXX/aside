@@ -540,6 +540,18 @@ describe('tidying what was typed', () => {
     expect(await shown()).toEqual(['3 ideas waiting', '1 idea write the docs', '2 idea fix the login bug', '3 idea Dark mode.'])
   })
 
+  test('a tidy reply changes only the entry it was asked for, not an older one typed alike', async ($, on) => {
+    const { w, type, shown, idle } = world($, on)
+    // No reply comes for the first one, which keeps its text as typed.
+    await type('+ dark mod')
+    await idle()
+    w.tidy = { 'dark mod': '<note>Dark mode.</note>' }
+    await type('+ dark mod')
+    await idle()
+
+    expect(await shown()).toEqual(['2 ideas waiting', '1 idea dark mod', '2 idea Dark mode.'])
+  })
+
   test('with tidy off, nothing is sent to the model', { options: { tidy: 'off' } }, async ($, on) => {
     const { asked, type, shown, idle } = world($, on, { tidy: { 'dark mode': '<note>Dark mode.</note>' } })
     await type('+ dark mode')
