@@ -8,6 +8,10 @@ const SURFACES: readonly RenderSurface[] = ['terminal', 'desktop']
 
 export const isDrawnOn = (surface: RenderSurface) => SURFACES.includes(surface)
 
+// The surfaces a listing in the transcript is framed on: the mobile app too, which draws no
+// pane or band of aside's.
+export const isFramedOn = (surface: RenderSurface) => isDrawnOn(surface) || surface === 'mobile'
+
 // The elements aside draws with; Box and Text are the same on every surface.
 export type Drawing = Pick<Elements['terminal'], 'Box' | 'Text'>
 

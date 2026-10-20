@@ -92,7 +92,7 @@ Some ideas belong to no project. `+g` puts one on the global list and `+@work` i
 ![Three queues: the global list, +g, this project's queue and a named queue, +@work. /aside g here 1 brings an idea from the global list into this project's queue and /aside g add 1 sends one back; /aside q work here 1 and /aside q work add 1 do the same with the queue named work. They wait in every project, counted above the prompt.](../assets/use-queues-light.svg#gh-light-mode-only)
 ![Three queues: the global list, +g, this project's queue and a named queue, +@work. /aside g here 1 brings an idea from the global list into this project's queue and /aside g add 1 sends one back; /aside q work here 1 and /aside q work add 1 do the same with the queue named work. They wait in every project, counted above the prompt.](../assets/use-queues-dark.svg#gh-dark-mode-only)
 
-- **`/aside q`** lists the global list and every named queue, with its count and newest idea.
+- **`/aside q`** lists the global list and every named queue, with its count and its first three ideas.
 - **`/aside g`** and **`/aside q work`** show one, and take the commands the queue does: `remove`, `edit`, `pop`, `move` and `clear`. Their `undo` brings back what this session's last `clear` of that list took.
 - **`/aside q work rename office`** moves a queue to another name, merging it with any ideas already there.
 - **`/aside q work local`** keeps a queue for this project alone, so other projects no longer see it, and `global` shares it again; the `newQueues` setting says which a queue made by its first idea is.

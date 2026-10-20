@@ -234,7 +234,7 @@ describe('named queues', () => {
     await type('+g c')
     await type('+@work d')
 
-    expect(await aside('q')).toBe(["3 queues beside this project's queue", '', 'global  1 idea   c', '@work   2 ideas  d', '@home   1 idea   b'].join('\n'))
+    expect(await aside('q')).toBe(["3 queues beside this project's queue", '', 'global · 1 idea', '', '  1  idea  c', '', '@work · 2 ideas', '', '  1  idea  a', '  2  idea  d', '', '@home · 1 idea', '', '  1  idea  b'].join('\n'))
     const ui = await band()
     expect((await ui.find({ type: 'Text', text: /^aside: / }))?.text).toBe('aside: 4 in other queues · ')
   })
@@ -459,7 +459,24 @@ describe('named queues', () => {
 
     const ui = await band()
     expect((await ui.find({ type: 'Text', text: /^aside: / }))?.text).toBe('aside: 5 in other queues · ')
-    expect((await aside('q')).split('\n').slice(2)).toEqual(['@d   1 idea   one', '@c   1 idea   one', '@b   2 ideas  two', '@a   1 idea   one'])
+    expect((await aside('q')).split('\n').filter(line => line.startsWith('@'))).toEqual(['@d · 1 idea', '@c · 1 idea', '@b · 2 ideas', '@a · 1 idea'])
+  })
+
+  test('/aside q shows the first three ideas of a queue, and says how to see them all', async ($, on) => {
+    const { type, aside } = world($, on)
+    await type('+@work a\n+@work b\n+@work c\n+@work d')
+    await type('+g e')
+
+    expect(await aside('q')).toBe(
+      ["2 queues beside this project's queue", '', 'global · 1 idea', '', '  1  idea  e', '', '@work · 4 ideas', '', '  1  idea  a', '  2  idea  b', '  3  idea  c', '', '/aside q NAME lists all the ideas of a queue.'].join('\n'),
+    )
+  })
+
+  test('/aside q adds no line when every queue shows all its ideas', async ($, on) => {
+    const { type, aside } = world($, on)
+    await type('+@work a\n+@work b\n+@work c')
+
+    expect((await aside('q')).split('\n').at(-1)).toBe('  3  idea  c')
   })
 
   test('/aside q work add makes @work the queue added to last', async ($, on) => {
@@ -471,7 +488,7 @@ describe('named queues', () => {
 
     const ui = await band()
     expect((await ui.find({ type: 'Text', text: /^aside: / }))?.text).toBe('aside: 3 in other queues · ')
-    expect((await aside('q')).split('\n')[2]).toMatch(/^@work /)
+    expect((await aside('q')).split('\n')[2]).toBe('@work · 2 ideas')
   })
 
   test('a queue whose name starts another\'s holds only its own ideas', async ($, on) => {
@@ -499,7 +516,7 @@ describe('named queues', () => {
     await startTurn('build the parser', 't1')
 
     expect(await aside('q')).toBe('Wrote the queues above while Claude was working.')
-    expect(logged.at(-1)).toBe(["1 queue beside this project's queue", '', '@work  1 idea  a'].join('\n'))
+    expect(logged.at(-1)).toBe(["1 queue beside this project's queue", '', '@work · 1 idea', '', '  1  idea  a'].join('\n'))
     expect(await aside('q work')).toBe('Wrote @work above while Claude was working.')
     expect(logged.at(-1)).toBe(['1 idea in @work', '', '  1  idea  a'].join('\n'))
   })
@@ -563,7 +580,7 @@ describe('queues for this project alone', () => {
     }
 
     expect(await queue('+@later read the RFC')).toBe('queued "read the RFC" to @later, a new queue of this project\'s; /aside q later global shares it with every project')
-    expect(await shown('q')).toEqual(["1 queue beside this project's queue", '@later 1 idea read the RFC', "↳ this project's"])
+    expect(await shown('q')).toEqual(["1 queue beside this project's queue", "@later · 1 idea, this project's", '1 idea read the RFC'])
     expect(await shown('q later')).toEqual(["1 idea in @later, this project's", '1 idea read the RFC'])
     expect(await read()).toBe('aside: 1 in another queue · ')
 
@@ -586,10 +603,10 @@ describe('queues for this project alone', () => {
     w.root = '/proj'
     expect(await shown('q')).toEqual([
       "2 queues beside this project's queue",
-      '@work 1 idea b',
-      "↳ for every project; hidden here by this project's @work",
-      '@work 1 idea a',
-      "↳ this project's",
+      "@work · 1 idea, for every project; hidden here by this project's @work",
+      '1 idea b',
+      "@work · 1 idea, this project's",
+      '1 idea a',
     ])
     expect(await shown('find b')).toEqual(["In @work for every project, hidden here by this project's", '1 idea b'])
     expect(await queue('+@work c')).toBe('queued "c" to @work · 2 in @work')
@@ -622,7 +639,7 @@ describe('queues for this project alone', () => {
     expect(await aside('q later rename bad.name')).toBe('A queue\'s name has letters, digits, "-" and "_", at most 20 of them: /aside q later rename office')
     expect(await aside('q later rename soon')).toBe('@later is now @soon: 1 idea.')
     expect(await aside('q soon import ideas.md')).toBe('Imported 1 idea from ideas.md to @soon (2 in @soon).')
-    expect(await shown('q')).toEqual(["1 queue beside this project's queue", '@soon 2 ideas from a file', "↳ this project's"])
+    expect(await shown('q')).toEqual(["1 queue beside this project's queue", "@soon · 2 ideas, this project's", '1 idea a, reworked', '2 idea from a file'])
     w.root = '/other'
     expect((await shown('q'))[0]).toBe('The global list and the named queues are empty. Start a message with "+@work" to add an idea to the queue work, or with "+g" to the global list.')
   })
@@ -649,7 +666,7 @@ describe('queues for this project alone', () => {
 
     expect(await aside('q work local')).toBe('/aside q work local did not finish (the store is busy). /aside shows where the queue and the plan stand.')
     expect(await aside('q work local')).toBe("Moved 1 idea into this project's @work, which now has 2.")
-    expect(await shown('q')).toEqual(["1 queue beside this project's queue", '@work 2 ideas b', "↳ this project's"])
+    expect(await shown('q')).toEqual(["1 queue beside this project's queue", "@work · 2 ideas, this project's", '1 idea a', '2 idea b'])
   })
 
   test('a move to every project cut short after its writes is finished by running it again, each idea once', async ($, on) => {
@@ -661,9 +678,9 @@ describe('queues for this project alone', () => {
 
     expect(await aside('q work global')).toBe('/aside q work global did not finish (the store is busy). /aside shows where the queue and the plan stand.')
     expect(await aside('q work global')).toBe('Moved 1 idea into @work for every project, which now has 2.')
-    expect(await shown('q')).toEqual(["1 queue beside this project's queue", '@work 2 ideas b'])
+    expect(await shown('q')).toEqual(["1 queue beside this project's queue", '@work · 2 ideas', '1 idea a', '2 idea b'])
     w.root = '/other'
-    expect(await shown('q')).toEqual(["1 queue beside this project's queue", '@work 2 ideas b'])
+    expect(await shown('q')).toEqual(["1 queue beside this project's queue", '@work · 2 ideas', '1 idea a', '2 idea b'])
   })
 
   test('an idea out for editing and what a clear took go with a queue to its other scope, and come back there', async ($, on) => {
@@ -727,7 +744,7 @@ describe('queues for this project alone', () => {
     await queue('+@work b')
     w.root = '/proj'
 
-    expect(await shown('q')).toEqual(["1 queue beside this project's queue", '@work 1 idea b', "↳ for every project; hidden here by this project's @work"])
+    expect(await shown('q')).toEqual(["1 queue beside this project's queue", "@work · 1 idea, for every project; hidden here by this project's @work", '1 idea b'])
     expect(await aside('q work')).toBe('@work is empty. Start a message with "+@work" to add an idea to it.')
     expect(await shown('find b')).toEqual(["In @work for every project, hidden here by this project's", '1 idea b'])
   })
