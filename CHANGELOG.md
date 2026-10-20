@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.33.0 - 2026-10-20
 
 - The line above the prompt counts the ideas of all other queues as one number, `3 in other queues`, in place of each queue by name; `/aside q` names them. The line a queued entry leaves in the transcript is shorter: a quote of 30 characters and `· 2 waiting` in place of `(2 waiting)`.
 
