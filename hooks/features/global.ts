@@ -7,6 +7,7 @@ import { QUEUE_PEEK, listingText, namedSection, queuesSections } from '../core/l
 import type { Listed } from '../core/listing'
 import { MARKDOWN_PATH } from '../core/markdown'
 import { formatCount, newQueueNote, shortenText } from '../core/text'
+import { changeQueue } from '../io/queue'
 import {
   addIdeas,
   countQueues,
@@ -16,18 +17,15 @@ import {
   isHiddenHere,
   isLocalQueue,
   loadCleared,
-  loadEntries,
   loadIdeas,
   moveSessionRecords,
   NAME_PATTERN,
-  projectKeys,
   queueName,
   rankOf,
   refreshBand,
   resolveQueue,
   restoreIdea,
   saveCleared,
-  saveEntries,
   saveGlobalEditing,
   saveGlobalIdea,
 } from '../io/store'
@@ -106,6 +104,8 @@ export async function queuesListed($: Engine): Promise<Listed> {
 
 // /aside q NAME here N ...: ideas from a queue to the end of this project's queue, into the
 // project's queue first, so a failure between the writes leaves an idea in both, never in neither.
+// The queue is read in the change's turn on its chain, so a tidy reply on its way meanwhile is
+// stored before it, not over it.
 async function moveHere($: Engine, ctx: Context, name: string, numbers: readonly number[]): Promise<string> {
   const ideas = await shownIdeas($, ctx, name)
   if (ideas.length === 0) {
@@ -115,47 +115,50 @@ async function moveHere($: Engine, ctx: Context, name: string, numbers: readonly
     return askPlaces(name, ideas.length, numbers.length)
   }
   const chosen = [...new Set(numbers)].map(n => ideas[n - 1]!)
-  const keys = await projectKeys($)
-  const stored = await loadEntries($, keys.queue)
   // Typed as "+g idea" or "+@work idea", it is "+ idea" in the queue, so /aside edit keeps it here.
   const moved = chosen.map(({ entry }) => ({ text: entry.text, at: entry.at, kind: entry.kind, ...(entry.raw ? { raw: entry.raw.replace(/^\+(?:g|@[A-Za-z0-9_-]{1,20})(?=\s)/, '+') } : {}) }))
-  // An idea moved half-way, by a command that failed after its first write, is not moved a
-  // second time when the command runs again.
-  const fresh = moved.filter(entry => !stored.some(one => isSameEntry(one, entry)))
-  await saveEntries($, keys.queue, [...stored, ...fresh])
+  const waiting = await changeQueue($, stored => {
+    // An idea moved half-way, by a command that failed after its first write, is not moved a
+    // second time when the command runs again.
+    const fresh = moved.filter(entry => !stored.some(one => isSameEntry(one, entry)))
+    return { list: [...stored, ...fresh], value: stored.length + fresh.length }
+  })
   await forgetGlobalIdeas($, chosen.map(idea => idea.key))
   await refreshBand($)
 
-  return `${sayIdeas('Moved here', moved)} (${stored.length + fresh.length} waiting)`
+  return `${sayIdeas('Moved here', moved)} (${waiting} waiting)`
 }
 
 // /aside q NAME add N ...: ideas from this project's queue to the end of a queue of no project,
-// onto it first, for the same reason. A comment stays in the queue.
+// onto it first, for the same reason, within the change that takes them out of the queue, so
+// the numbers are read against the queue as that change finds it. A comment stays in the queue.
 async function moveToQueue($: Engine, ctx: Context, name: string, numbers: readonly number[]): Promise<string> {
-  const keys = await projectKeys($)
-  const list = inOrder(await loadEntries($, keys.queue), ctx.settings.order)
-  if (list.length === 0) {
-    return 'The queue is empty.'
-  }
-  if (!numbers.every(n => isPlace(n, list.length))) {
-    return `Give ${numbers.length === 1 ? 'a number' : 'numbers'} from 1 to ${list.length}, as /aside shows them.`
-  }
-  const comments = [...new Set(numbers)].filter(n => list[n - 1]!.kind !== 'idea')
-  if (comments.length > 0) {
-    return `Only ideas go to ${nameOf(name)}; ${comments.join(', ')} ${comments.length === 1 ? 'is a comment' : 'are comments'}.`
-  }
-  const chosen = [...new Set(numbers)].map(n => list[n - 1]!)
-  const there = await loadIdeas($, name)
-  const now = await $.clock.now()
-  // As in moveHere, an idea already there from a run that failed half-way is not added again.
-  const fresh = chosen.filter(entry => !there.some(idea => isSameEntry(idea.entry, entry)))
-  await addIdeas($, name, fresh.map(({ text, at }, i) => ({ text, at, kind: 'idea' as const, order: now + i / 1000 })))
-  await saveEntries($, keys.queue, inOrder(withoutEntries(list, chosen), ctx.settings.order))
-  await refreshBand($)
+  const { text, isMoved } = await changeQueue($, async stored => {
+    const list = inOrder(stored, ctx.settings.order)
+    if (list.length === 0) {
+      return { value: { text: 'The queue is empty.', isMoved: false } }
+    }
+    if (!numbers.every(n => isPlace(n, list.length))) {
+      return { value: { text: `Give ${numbers.length === 1 ? 'a number' : 'numbers'} from 1 to ${list.length}, as /aside shows them.`, isMoved: false } }
+    }
+    const comments = [...new Set(numbers)].filter(n => list[n - 1]!.kind !== 'idea')
+    if (comments.length > 0) {
+      return { value: { text: `Only ideas go to ${nameOf(name)}; ${comments.join(', ')} ${comments.length === 1 ? 'is a comment' : 'are comments'}.`, isMoved: false } }
+    }
+    const chosen = [...new Set(numbers)].map(n => list[n - 1]!)
+    const there = await loadIdeas($, name)
+    const now = await $.clock.now()
+    // As in moveHere, an idea already there from a run that failed half-way is not added again.
+    const fresh = chosen.filter(entry => !there.some(idea => isSameEntry(idea.entry, entry)))
+    await addIdeas($, name, fresh.map(({ text, at }, i) => ({ text, at, kind: 'idea' as const, order: now + i / 1000 })))
+    const said = sayIdeas(`Moved to ${nameOf(name)}`, chosen)
+    const text = name !== GLOBAL && there.length === 0 ? `${said}. ${nameOf(name)} is ${newQueueNote(queueName(name), isLocalQueue(name))}.` : said
 
-  const said = sayIdeas(`Moved to ${nameOf(name)}`, chosen)
+    return { list: withoutEntries(stored, chosen), value: { text, isMoved: true } }
+  })
+  if (isMoved) await refreshBand($)
 
-  return name !== GLOBAL && there.length === 0 ? `${said}. ${nameOf(name)} is ${newQueueNote(queueName(name), isLocalQueue(name))}.` : said
+  return text
 }
 
 async function removeIdeas($: Engine, ctx: Context, name: string, numbers: readonly number[]): Promise<string> {
