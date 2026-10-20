@@ -109,7 +109,8 @@ export const listedText = (listed: Listed): string =>
   typeof listed === 'string' ? listed : `${listingText(listed.sections)}${listed.note ? `\n\n${listed.note}` : ''}`
 
 // Whether the step running is waiting for the person's answer, with no turn of it running:
-// Claude asked with the wait tool, and only /aside continue or /aside stop ends it now.
+// Claude asked with the wait tool, and the turn of the person's answer, /aside continue or
+// /aside stop ends it.
 export const isWaiting = (active: NonNullable<Plan['active']>) => active.pausedFor !== undefined && active.turnId === undefined
 
 // The plan, with what each step done took and said under it, and how long the step running

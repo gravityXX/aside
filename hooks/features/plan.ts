@@ -144,7 +144,7 @@ async function planAfterStep($: Engine, ctx: Context, asker: Asker): Promise<str
     return handOverQueue($, ctx, asker)
   }
   const text = step.isAnswer
-    ? `Step ${step.n} is running on your answer; once Claude has answered, it organizes the queue into steps after the plan's own.`
+    ? `Step ${step.n} is running on your answer; once Claude has answered, it organizes the queue into steps after the plan's own, and /aside continue goes on.`
     : `Step ${step.n} is running; once it ends, Claude organizes the queue into steps after the plan's own, and /aside continue goes on.`
   // While Claude works, the command's own text shows only after the turn.
   if (asker === 'command' && ctx.session.isRunning) $.ui.log(text)
@@ -273,8 +273,9 @@ function sendStep($: Engine, ctx: Context, steps: readonly Step[], index: number
 const takeOverNote = (plan: Plan) =>
   plan.active ? ` (another session had step ${plan.active.step + 1} ${isWaiting(plan.active) ? 'waiting for an answer' : 'running'}; this one takes over)` : ''
 
-// Whether the turn of the step running now took up the person's answer after it waited.
-const isAnswerTurn = (active: NonNullable<Plan['active']>) => active.pausedFor !== undefined && active.turnId !== undefined && active.ms !== undefined
+// Whether the turn of the step running now took up the person's answer after it waited, and
+// ends the step as it ends.
+const isAnswerTurn = (active: NonNullable<Plan['active']>) => active.pausedFor !== undefined && active.turnId !== undefined && active.answerTurnId === active.turnId
 
 // Why nothing new starts while a step of the plan runs in this session, or waits for the
 // person in any session, if one does: a step that waits runs nowhere, so any session ends it,
@@ -287,7 +288,7 @@ async function runningHere($: Engine, plan: Plan): Promise<string | undefined> {
   const n = active.step + 1
   if (isWaiting(active)) {
     return active.isAnswered
-      ? `Step ${n} waits for /aside continue, which ends it and goes on; /aside stop ends it there.`
+      ? `Step ${n} waits: answer again, and Claude's reply ends it, or /aside continue ends it and goes on; /aside stop ends it there.`
       : `Step ${n} waits for your answer; /aside continue ends it and goes on, /aside stop ends it there.`
   }
   if (active.sessionId !== (await $.session.id())) {
@@ -295,7 +296,7 @@ async function runningHere($: Engine, plan: Plan): Promise<string | undefined> {
   }
 
   return isAnswerTurn(active)
-    ? `Step ${n} is running on your answer; once Claude has answered, /aside continue ends it. /aside stop stops after it.`
+    ? `Step ${n} is running on your answer, and ends once Claude has answered. /aside stop stops after it.`
     : `Step ${n} is running. /aside stop stops after it.`
 }
 
@@ -862,7 +863,7 @@ export async function registerWaitTool($: Engine): Promise<string> {
   const registered = await $.tool.register({
     name: 'wait',
     description:
-      "Keeps the step of the user's aside plan you are working on open for their answer: their next message comes to this step, and the step ends when they press continue. " +
+      "Keeps the step of the user's aside plan you are working on open for their answer: their next message comes to this step, which ends with your reply to it unless you call this tool again. " +
       'Call it only from a step of the aside plan that needs the user\'s answer or decision, then ask your question and end your reply with the "Result: " line.',
     inputSchema: {
       type: 'object',
@@ -875,8 +876,8 @@ export async function registerWaitTool($: Engine): Promise<string> {
   return registered.tool
 }
 
-// The step stays open once this turn ends: the person's answer comes to it, and /aside continue
-// ends it. A new question since an answer was taken up makes the step wait for that one.
+// The step stays open once this turn ends: the person's answer comes to it, and Claude's reply
+// to that answer ends it, or /aside continue does. A new question since an answer was taken up makes the step wait for that one.
 export async function pausePlanFromTool(ctx: Context, $: Engine, e: PlanToolCall[1], next: PlanToolCall[2]) {
   if (e.tool !== ctx.session.waitTool) {
     return next(e)
@@ -889,6 +890,7 @@ export async function pausePlanFromTool(ctx: Context, $: Engine, e: PlanToolCall
     if (active.isEnding) return 'ending'
     active.pausedFor = typeof reason === 'string' && reason.trim() !== '' ? shortenText(reason, 120) : 'it needs your answer'
     delete active.isAnswered
+    delete active.answerTurnId
     return isSummingUp(plan.steps, stepMode(plan.steps, active.step, active.isChain, active.then)) ? 'last' : 'waits'
   })
   if (said === undefined) {
@@ -899,7 +901,7 @@ export async function pausePlanFromTool(ctx: Context, $: Engine, e: PlanToolCall
   }
   const summary = said === 'last' ? ' Write no summary of the run yet: it comes once the step ends.' : ''
 
-  return { result: `The step waits for the user's answer. Ask your question, then end your reply with the "Result: " line; their answer comes to this step, and /aside continue ends it.${summary}` }
+  return { result: `The step waits for the user's answer. Ask your question, then end your reply with the "Result: " line; their answer comes to this step, which ends with your reply to it unless you call this tool again.${summary}` }
 }
 
 // The turn of a plan step: remember which, so its end runs the next one. The step's time
@@ -923,12 +925,19 @@ async function bindAnswerTurn($: Engine, ctx: Context, turnId: string, text: str
   const me = await $.session.id()
   // Kept through a turn it does not start, such as a background task's notice before it.
   const isAnswer = ctx.session.answer === text
-  if (isAnswer) delete ctx.session.answer
+  // Only an answer sent with the step's own words ends the step with the reply to it.
+  const isTold = isAnswer && ctx.session.isAnswerTold === true
+  if (isAnswer) {
+    delete ctx.session.answer
+    delete ctx.session.isAnswerTold
+  }
   const isBound = await changePlan($, ctx, plan => {
     const active = plan.active
     if (!active || active.sessionId !== me || !isWaiting(active)) return false
     active.turnId = turnId
     if (isAnswer) active.isAnswered = true
+    if (isTold) active.answerTurnId = turnId
+    else delete active.answerTurnId
     return true
   })
   if (isBound) await refreshBand($)
@@ -951,10 +960,12 @@ export async function noteStepAnswer(ctx: Context, $: Engine, e: Submit[1], next
     return next(e)
   }
   ctx.session.answer = e.text
+  ctx.session.isAnswerTold = false
   if (e.turnId !== undefined || !isWaiting(active)) {
     return next(e)
   }
   const isLast = isSummingUp(plan.steps, stepMode(plan.steps, active.step, active.isChain, active.then))
+  ctx.session.isAnswerTold = true
 
   return next({ ...e, context: [...(e.context ?? []), answerContext(plan.steps, active.step, isLast, ctx.session.waitTool)] })
 }
@@ -991,7 +1002,8 @@ type TurnEndReason = Args<'turn.complete'>['reason']
 const PLANNING_PAUSE = 'to organize the queue'
 
 // The turn of the step running here ends. A step that waits for the person stays open, as
-// whatever ended the turn, keeping its time and what it said so far; with /aside plan asked
+// whatever ended the turn, keeping its time and what it said so far, unless the turn took their
+// answer and Claude asked nothing again in it: it is then done, as any step after an answer; with /aside plan asked
 // meanwhile, the queue goes to Claude now, after an answer. A step that continue or stop ended
 // is done, as it stands when the turn was cut short. Any other step, after an answer, is done,
 // keeping what the answer said it did and how long it took by the clock, and the next one starts when
@@ -1019,7 +1031,9 @@ async function finishStep($: Engine, ctx: Context, e: TurnComplete[1]) {
       completeStep(plan, active, me, false, now)
       return { active, waits: false, after: -1, isPausing: false, isPlanning: isPlanning && isAnswer, hint, steps: structuredClone(plan.steps) }
     }
-    if (active.pausedFor !== undefined) {
+    // The turn that took the person's answer ends the step, unless Claude asked again in it.
+    const isAnswered = isAnswer && active.isAnswered === true && active.answerTurnId === e.turnId
+    if (active.pausedFor !== undefined && !isAnswered) {
       delete active.turnId
       delete active.isPlanningAfter
       return { active: structuredClone(active), waits: true, after: -1, isPausing: false, isPlanning: isPlanning && isAnswer, hint, steps: structuredClone(plan.steps) }
@@ -1043,8 +1057,8 @@ async function finishStep($: Engine, ctx: Context, e: TurnComplete[1]) {
   if (waits) {
     $.ui.toast(
       active.isAnswered
-        ? `Step ${n} waits for /aside continue, which ends it${hint}.`
-        : `Step ${n} waits for your answer: ${active.pausedFor}. Answer as usual; /aside continue ends the step${hint}.`,
+        ? `Step ${n} waits: answer again, and Claude's reply ends it, or /aside continue ends it now${hint}.`
+        : `Step ${n} waits for your answer: ${active.pausedFor}. Answer as usual, and the step ends with Claude's reply; /aside continue ends it now${hint}.`,
     )
   } else if (e.reason !== 'answer' && !active.isEnding) {
     $.ui.toast(`Plan stopped: step ${n} ${e.reason === 'aborted' ? 'was interrupted' : 'did not finish'}${hint}`)

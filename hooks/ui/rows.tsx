@@ -45,7 +45,7 @@ const planRows = ({ Box, Text }: Drawing, section: ListingSection) => {
     const join = row.label === pausedAfter || isWaiting ? '║' : isLast ? ' ' : '│'
     const under = [...row.lines.slice(1), ...row.about.map(about => `↳ ${about}`)].map(line => line.trim()).filter(line => line !== '')
     if (row.label === pausedAfter) under.push('paused here: /aside continue')
-    if (isWaiting) under.push('waits for you here: /aside continue ends it')
+    if (isWaiting) under.push('waits for you here: your answer, or /aside continue, ends it')
 
     return (
       <Box flexDirection="column" marginTop={n === 0 ? 1 : 0}>

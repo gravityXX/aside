@@ -24,13 +24,20 @@ const last = (...said: string[]) =>
     `${WAIT} Then end your reply with the "Result: " line and no summary yet: the summary comes once the step is done.`,
   ].join('\n')
 // What Claude reads beside the person's message to step `n` of 3 that waits for it.
-const answering = (n: number, title: string, isLast = false) =>
+// With `said`, what the steps done said, for the last step of the run.
+const answering = (n: number, title: string, said?: string[]) =>
   `(Added by the aside plugin: step ${n} of 3 of the queue plan, "${title}", waits for my answer, and this message most likely gives it. ` +
-  'If it asks for something else, do that, and the step stays open; otherwise go on with that step only. If you need my answer again, call the mcp__aside__wait tool and stop. ' +
-  'Either way, end your reply with one line that starts "Result: " and says in one sentence what the step has done so far and what is still open. ' +
-  `The step ends when I press continue.${isLast ? ' It is the last step of this run, so write no summary of the run: it comes once I press continue.' : ''})`
+  'The step ends with your reply to it, unless you call the mcp__aside__wait tool: call it if you need my answer again, or if this message asks for something else, which you then do, so the step keeps waiting for my answer. ' +
+  'Otherwise go on with that step only. Either way, end your reply with one line that starts "Result: " and says in one sentence what the step has done and what is still open.' +
+  (said
+    ? ' It is the last step of this run: if your reply ends it, write the "Result: " line, then end your reply with "## Summary of the run": one line per step of the plan on what was done, then what is still open, then what to do next.' +
+      `${['', ...(said.length > 0 ? ['What the steps done said:', ...said] : [])].join('\n')}\nIf you call the mcp__aside__wait tool, write no summary yet.`
+    : '') +
+  ')'
 const WAITS =
-  'The step waits for the user\'s answer. Ask your question, then end your reply with the "Result: " line; their answer comes to this step, and /aside continue ends it.'
+  'The step waits for the user\'s answer. Ask your question, then end your reply with the "Result: " line; their answer comes to this step, which ends with your reply to it unless you call this tool again.'
+// What the person reads once a step asks.
+const asks = (n: number, why: string) => `Step ${n} waits for your answer: ${why}. Answer as usual, and the step ends with Claude's reply; /aside continue ends it now.`
 
 describe('handing the queue over', () => {
   test('/aside plan sends the queue as one planning prompt: ideas, then comments by file', async ($, on) => {
@@ -624,7 +631,7 @@ describe('running the plan', () => {
     expect((await shown()).slice(2, 4)).toEqual(['1 done One', '↳ took 3 min · asked.'])
   })
 
-  test('a step that needs an answer waits for it with the wait tool: the answer is the step\'s own, and /aside continue ends it and goes on', async ($, on) => {
+  test('a step that needs an answer waits for it with the wait tool: the answer is the step\'s own, and Claude\'s reply to it ends the step and goes on', async ($, on) => {
     const { sent, contexts, toasts, type, aside, shown, savePlan, wait, startTurn, endTurn, idle, band } = world($, on)
     await savePlan(STEPS)
     await aside('run all')
@@ -635,7 +642,7 @@ describe('running the plan', () => {
     await endTurn('s1', 'answer', 'A design.\n\nResult: the design is drawn up; it waits for a yes.', 60_000)
     await idle()
     expect(sent).toHaveLength(1)
-    expect(toasts).toEqual(['Step 1 waits for your answer: needs your yes on the design. Answer as usual; /aside continue ends the step.'])
+    expect(toasts).toEqual([asks(1, 'needs your yes on the design')])
     expect(await shown()).toEqual([
       'The queue is empty.',
       'Plan waits at step 1 (needs your yes on the design), 3 of 3 steps to do (/aside continue) · 1 min so far',
@@ -653,19 +660,10 @@ describe('running the plan', () => {
     expect((await ui.find({ type: 'Text', text: /^aside: / }))?.text).toBe('aside: plan ▱▱▱ 0/3 · step 1 running · ')
     expect((await ui.find({ key: 'action' }))?.props.label).toBe('stop')
     await ui.unmount()
-    expect(await aside('continue')).toBe('Step 1 is running on your answer; once Claude has answered, /aside continue ends it. /aside stop stops after it.')
+    expect(await aside('continue')).toBe('Step 1 is running on your answer, and ends once Claude has answered. /aside stop stops after it.')
     await endTurn('a1', 'answer', 'Built.\n\nResult: built it; the tests pass.', 2 * 60_000)
     await idle()
-    expect(sent).toHaveLength(2)
-    expect(toasts.at(-1)).toBe('Step 1 waits for /aside continue, which ends it.')
-    expect((await shown()).slice(1, 4)).toEqual([
-      'Plan waits at step 1 (answered), 3 of 3 steps to do (/aside continue) · 3 min so far',
-      '1 waiting One',
-      '↳ waiting for you, 3 min · built it; the tests pass.',
-    ])
-
-    expect(await aside('continue')).toBe('Step 1 done; going on with the plan from step 2. /aside stop stops after the current one.')
-    await idle()
+    expect(sent).toHaveLength(3)
     expect(sent.at(-1)).toBe(`Do two.\n\n(Step 2 of 3 of the queue plan, "Two", sent by the aside plugin.\nPlan: 1 One (done) · 2 Two (this one) · 3 Three (to do).\n${NEXT})`)
     expect(contexts.at(-1)).toEqual([])
     expect((await shown()).slice(1, 4)).toEqual(['Plan: 2 of 3 steps to do (/aside run) · 3 min so far', '1 done One', '↳ took 3 min · built it; the tests pass.'])
@@ -683,20 +681,20 @@ describe('running the plan', () => {
     // takes up no answer.
     await startTurn('', 'n0')
     await endTurn('n0')
-    expect(toasts.at(-1)).toBe('Step 1 waits for your answer: which design. Answer as usual; /aside continue ends the step.')
+    expect(toasts.at(-1)).toBe(asks(1, 'which design'))
 
     await type('the first')
     await startTurn('the first', 'a1')
     await wait('may I push')
     await endTurn('a1', 'answer', 'Result: built; may I push?', 60_000)
-    expect(toasts.at(-1)).toBe('Step 1 waits for your answer: may I push. Answer as usual; /aside continue ends the step.')
+    expect(toasts.at(-1)).toBe(asks(1, 'may I push'))
     expect((await shown())[1]).toBe('Plan waits at step 1 (may I push), 3 of 3 steps to do (/aside continue) · 2 min so far')
 
     await type('yes')
     expect(contexts.at(-1)).toEqual([answering(1, 'One')])
     await startTurn('yes', 'a2')
     await endTurn('a2', 'aborted', 'Result: half done.', 60_000)
-    expect(toasts.at(-1)).toBe('Step 1 waits for /aside continue, which ends it.')
+    expect(toasts.at(-1)).toBe("Step 1 waits: answer again, and Claude's reply ends it, or /aside continue ends it now.")
     expect((await shown()).slice(1, 4)).toEqual([
       'Plan waits at step 1 (answered), 3 of 3 steps to do (/aside continue) · 3 min so far',
       '1 waiting One',
@@ -732,7 +730,7 @@ describe('running the plan', () => {
     expect(contexts.at(-1)).toEqual([])
   })
 
-  test('the last step of a run that waits writes no summary until /aside continue, which has Claude sum the run up in one more turn', async ($, on) => {
+  test('the last step of a run that waits sums the run up in Claude\'s reply to the answer, which ends it', async ($, on) => {
     const { sent, contexts, toasts, type, aside, shown, savePlan, wait, startTurn, endTurn, answer, idle } = world($, on)
     await savePlan(STEPS)
     await aside('run all')
@@ -744,36 +742,23 @@ describe('running the plan', () => {
     expect((await wait('which name')).result).toBe(`${WAITS} Write no summary of the run yet: it comes once the step ends.`)
     await endTurn('s3', 'answer', 'Result: asks for a name.', 60_000)
     await idle()
-    expect(toasts.at(-1)).toBe('Step 3 waits for your answer: which name. Answer as usual; /aside continue ends the step.')
+    expect(toasts.at(-1)).toBe(asks(3, 'which name'))
     await type('call it x')
-    expect(contexts.at(-1)).toEqual([answering(3, 'Three', true)])
+    expect(contexts.at(-1)).toEqual([answering(3, 'Three', ['1 One: one.', '2 Two: two.'])])
     await startTurn('call it x', 'a1')
-    await endTurn('a1', 'answer', 'Result: named x.', 60_000)
+    await endTurn('a1', 'answer', 'Named.\n\nResult: three is named x.\n\n## Summary of the run\n\nAll three done.', 60_000)
     await idle()
 
-    expect(await aside('continue')).toBe('Step 3 ends here; Claude sums the run up.')
-    await idle()
-    expect(sent.at(-1)).toBe(
-      [
-        '(Step 3 of 3 of the queue plan, "Three", sent by the aside plugin: I pressed continue, so this step ends here, and it was the last one of this run.',
-        'Do no more work on it.',
-        'What the steps done said:',
-        '1 One: one.',
-        '2 Two: two.',
-        `${SUMMARY})`,
-      ].join('\n'),
-    )
-    expect((await shown())[1]).toBe('Plan: 1 of 3 steps to do (/aside run) · 4 min so far')
-    await answer('c1', 'Summed up.\n\nResult: three is named x.', 60_000)
-    expect(toasts.at(-1)).toBe('Plan done: 3 steps in 5 min')
+    expect(sent).toHaveLength(4)
+    expect(toasts.at(-1)).toBe('Plan done: 3 steps in 4 min')
     expect((await shown()).slice(1)).toEqual([
-      'Plan done: 3 steps in 5 min',
+      'Plan done: 3 steps in 4 min',
       '1 done One',
       '↳ took 1 min · one.',
       '2 done Two',
       '↳ took 1 min · two.',
       '3 done Three',
-      '↳ took 3 min · three is named x.',
+      '↳ took 2 min · three is named x.',
     ])
   })
 
@@ -911,8 +896,8 @@ describe('running the plan', () => {
   })
 
   test('the turn that sums the run up keeps the last step done, cut short, stopped before it starts or dropped', async ($, on) => {
-    const { w, sent, toasts, type, aside, shown, savePlan, wait, startTurn, endTurn, answer, idle } = world($, on)
-    // A run of three whose last step asked, and took the answer.
+    const { w, sent, toasts, aside, shown, savePlan, wait, startTurn, endTurn, answer, idle } = world($, on)
+    // A run of three whose last step asked, and waits for the answer.
     const answeredAtLast = async (id: string) => {
       await savePlan(STEPS)
       await aside('run all')
@@ -921,10 +906,7 @@ describe('running the plan', () => {
       await answer(`${id}2`)
       await startTurn(sent.at(-1)!, `${id}3`)
       await wait('which name')
-      await endTurn(`${id}3`, 'answer', '', 60_000)
-      await type('call it x')
-      await startTurn('call it x', `${id}a`)
-      await endTurn(`${id}a`, 'answer', 'Result: named x.', 60_000)
+      await endTurn(`${id}3`, 'answer', 'Result: asks for a name.', 60_000)
       await idle()
     }
 
@@ -934,8 +916,8 @@ describe('running the plan', () => {
     await startTurn(sent.at(-1)!, 'c1')
     await endTurn('c1', 'aborted', '', 60_000)
     await idle()
-    expect(toasts.at(-1)).toBe('Plan done: 3 steps in 3 min')
-    expect((await shown()).slice(-2)).toEqual(['3 done Three', '↳ took 3 min · named x.'])
+    expect(toasts.at(-1)).toBe('Plan done: 3 steps in 2 min')
+    expect((await shown()).slice(-2)).toEqual(['3 done Three', '↳ took 2 min · asks for a name.'])
 
     await answeredAtLast('u')
     await aside('continue')
@@ -943,18 +925,18 @@ describe('running the plan', () => {
     const before = sent.length
     await idle()
     expect(sent).toHaveLength(before)
-    expect((await shown()).slice(-2)).toEqual(['3 done Three', '↳ took 2 min · named x.'])
+    expect((await shown()).slice(-2)).toEqual(['3 done Three', '↳ took 1 min · asks for a name.'])
 
     await answeredAtLast('v')
     w.isDropping = true
     await aside('continue')
     await idle()
     expect(toasts.at(-1)).toBe('Could not ask Claude to sum the run up (blocked by a hook); step 3 is done as it stands.')
-    expect((await shown()).slice(-2)).toEqual(['3 done Three', '↳ took 2 min · named x.'])
+    expect((await shown()).slice(-2)).toEqual(['3 done Three', '↳ took 1 min · asks for a name.'])
   })
 
-  test('an answer typed before the asking turn has ended is taken up all the same by the turn it starts', async ($, on) => {
-    const { sent, toasts, type, aside, shown, savePlan, wait, startTurn, endTurn, idle } = world($, on)
+  test('an answer typed before the asking turn has ended is taken up by the turn it starts, which leaves the step waiting for continue', async ($, on) => {
+    const { sent, type, aside, shown, savePlan, wait, startTurn, endTurn, idle } = world($, on)
     await savePlan(STEPS)
     await aside('run all')
     await idle()
@@ -966,11 +948,103 @@ describe('running the plan', () => {
     await startTurn('', 'n1')
     await endTurn('n1')
 
+    // Typed over a turn, it went without the step's own words, so Claude was never told its
+    // reply ends the step: the step waits on.
     await startTurn('the first', 'a1')
     await endTurn('a1', 'answer', 'Result: built the first.', 60_000)
     await idle()
-    expect(toasts.at(-1)).toBe('Step 1 waits for /aside continue, which ends it.')
+    expect(sent).toEqual([expect.stringContaining('Step 1 of 3'), 'the first'])
     expect((await shown())[1]).toBe('Plan waits at step 1 (answered), 3 of 3 steps to do (/aside continue) · 2 min so far')
+  })
+
+  test('an answer again right after an answer turn cut short ends the step; one in which Claude asks again does not', async ($, on) => {
+    const { sent, type, aside, savePlan, wait, startTurn, endTurn, idle } = world($, on)
+    await savePlan(STEPS)
+    await aside('run all')
+    await idle()
+    await startTurn(sent[0]!, 's1')
+    await wait('which design')
+    await endTurn('s1', 'answer', 'Result: two designs.')
+    await type('the first')
+    await startTurn('the first', 'a1')
+    await endTurn('a1', 'aborted', '')
+
+    await type('the first, please')
+    await startTurn('the first, please', 'a2')
+    await wait('which colour')
+    expect(await aside('run 3')).toBe('Step 1 is running. /aside stop stops after it.')
+    await endTurn('a2', 'answer', 'Result: asks for a colour.')
+    await type('blue')
+    await startTurn('blue', 'a3')
+    await endTurn('a3', 'answer', 'Result: built it in blue.')
+    await idle()
+    expect(sent.at(-1)).toContain('(Step 2 of 3 of the queue plan, "Two", sent by the aside plugin.')
+  })
+
+  test('the answer typed again right after an answer turn cut short ends the step with Claude\'s reply', async ($, on) => {
+    const { sent, type, aside, savePlan, wait, startTurn, endTurn, idle } = world($, on)
+    await savePlan(STEPS)
+    await aside('run all')
+    await idle()
+    await startTurn(sent[0]!, 's1')
+    await wait('which design')
+    await endTurn('s1', 'answer', 'Result: two designs.')
+    await type('the first')
+    await startTurn('the first', 'a1')
+    await endTurn('a1', 'aborted', '')
+
+    await type('the first, please')
+    await startTurn('the first, please', 'a2')
+    await endTurn('a2', 'answer', 'Result: built the first.')
+    await idle()
+    expect(sent.at(-1)).toContain('(Step 2 of 3 of the queue plan, "Two", sent by the aside plugin.')
+  })
+
+  test('the last step answered over its asking turn waits for continue, which has Claude sum the run up', async ($, on) => {
+    const { sent, contexts, type, aside, savePlan, wait, startTurn, endTurn, answer, idle } = world($, on)
+    await savePlan(STEPS)
+    await aside('run all')
+    await idle()
+    await answer('s1', 'Result: one.')
+    await answer('s2', 'Result: two.')
+    await startTurn(sent.at(-1)!, 's3')
+    await wait('which name')
+    await type('call it x', 's3')
+    expect(contexts.at(-1)).toEqual([])
+    await endTurn('s3', 'answer', 'Result: asks for a name.')
+    await startTurn('call it x', 'a1')
+    await endTurn('a1', 'answer', 'Named it x.')
+    await idle()
+    expect(sent.at(-1)).toBe('call it x')
+
+    expect(await aside('continue')).toBe('Step 3 ends here; Claude sums the run up.')
+    await idle()
+    expect(sent.at(-1)).toContain('I pressed continue, so this step ends here, and it was the last one of this run.')
+  })
+
+  test('after an answer turn cut short, the next answer ends the step, and a turn of something else meanwhile does not', async ($, on) => {
+    const { sent, type, aside, shown, savePlan, wait, startTurn, endTurn, idle } = world($, on)
+    await savePlan(STEPS)
+    await aside('run all')
+    await idle()
+    await startTurn(sent[0]!, 's1')
+    await wait('which design')
+    await endTurn('s1', 'answer', 'Result: two designs.')
+    await type('the first')
+    await startTurn('the first', 'a1')
+    await endTurn('a1', 'aborted', '')
+
+    await startTurn('', 'n1')
+    expect(await aside('run 3')).toBe('Step 1 is running. /aside stop stops after it.')
+    await endTurn('n1', 'answer', 'Result: a notice.')
+    expect((await shown())[1]).toMatch(/^Plan waits at step 1 \(answered\)/)
+
+    await type('the first, again')
+    await startTurn('the first, again', 'a2')
+    expect(await aside('run 3')).toBe('Step 1 is running on your answer, and ends once Claude has answered. /aside stop stops after it.')
+    await endTurn('a2', 'answer', 'Result: built the first.')
+    await idle()
+    expect(sent.at(-1)).toContain('(Step 2 of 3 of the queue plan, "Two", sent by the aside plugin.')
   })
 
   test('a slash command typed while a step waits reads nothing beside it, and an answer through Remote Control is the step\'s own', async ($, on) => {
@@ -1006,11 +1080,12 @@ describe('running the plan', () => {
     await idle()
     expect(sent).toHaveLength(1)
 
+    // An answer turn cut short leaves the step waiting for continue.
     await type('yes')
     await startTurn('yes', 'a1')
-    await endTurn('a1', 'answer', 'Result: done.')
-    expect(await aside('run 3')).toBe('Step 1 waits for /aside continue, which ends it and goes on; /aside stop ends it there.')
-    expect(await aside('undo')).toBe('Step 1 of the plan waits for /aside continue; /aside stop first, so nothing is done twice.')
+    await endTurn('a1', 'aborted', 'Result: done.')
+    expect(await aside('run 3')).toBe("Step 1 waits: answer again, and Claude's reply ends it, or /aside continue ends it and goes on; /aside stop ends it there.")
+    expect(await aside('undo')).toBe('Step 1 of the plan waits for your answer again or /aside continue; /aside stop first, so nothing is done twice.')
   })
 
   test('in the turn that called the wait tool, /aside continue and /aside plan take the step as running, not as running on an answer', async ($, on) => {
@@ -1583,7 +1658,7 @@ describe('adding to a running plan', () => {
 
     await endTurn('s1')
     await idle()
-    expect(toasts).toEqual(['Step 1 waits for your answer: which colours. Answer as usual; /aside continue ends the step.'])
+    expect(toasts).toEqual([asks(1, 'which colours')])
     expect(sent[1]).toContain(adding('S1. One (waits for my answer)', 'S2. Two (to do)', 'S3. Three (to do)'))
     await startTurn(sent[1]!, 'p1')
     expect((await wait('x')).deny).toBe('no step of the aside plan is running; call this tool only from a step of the plan')
@@ -1603,8 +1678,7 @@ describe('adding to a running plan', () => {
     await startTurn('blue', 'a1')
     await endTurn('a1', 'answer', 'Result: blue it is.')
     await idle()
-    expect(sent.at(-1)).toBe('blue')
-    expect(toasts.at(-1)).toBe('Step 1 waits for /aside continue, which ends it.')
+    expect(sent.at(-1)).toContain('(Step 2 of 4 of the queue plan, "Two", sent by the aside plugin.')
   })
 
   test('an answer turn cut short organizes nothing that /aside plan asked for, and says /aside plan does', async ($, on) => {
@@ -1623,7 +1697,7 @@ describe('adding to a running plan', () => {
     await endTurn('a1', 'aborted')
     await idle()
     expect(sent.at(-1)).toBe('go')
-    expect(toasts.at(-1)).toBe('Step 1 waits for /aside continue, which ends it; /aside plan organizes the queue.')
+    expect(toasts.at(-1)).toBe("Step 1 waits: answer again, and Claude's reply ends it, or /aside continue ends it now; /aside plan organizes the queue.")
   })
 
   test('/aside plan while a step waits organizes the queue at once, after the plan\'s own steps, and while Claude works on the answer, once it has answered', async ($, on) => {
@@ -1650,18 +1724,19 @@ describe('adding to a running plan', () => {
     await type('blue')
     await startTurn('blue', 'a1')
     await type('+ light mode', 'a1')
-    expect(await aside('plan')).toBe("Step 1 is running on your answer; once Claude has answered, it organizes the queue into steps after the plan's own.")
+    expect(await aside('plan')).toBe("Step 1 is running on your answer; once Claude has answered, it organizes the queue into steps after the plan's own, and /aside continue goes on.")
     await idle()
     expect(sent.at(-1)).toBe('blue')
     await endTurn('a1', 'answer', 'Result: blue it is.')
     await idle()
-    expect(sent.at(-1)).toContain(adding('S1. One (waits for my answer)', 'S2. Two (to do)', 'S3. Three (to do)', 'S4. Dark mode (to do)'))
+    // The answer ends the step, and the run waits for the queue to be organized.
+    expect(sent.at(-1)).toContain(adding('S1. One (done)', 'S2. Two (to do)', 'S3. Three (to do)', 'S4. Dark mode (to do)'))
     await startTurn(sent.at(-1)!, 'p2')
     await savePlan([{ title: 'Light mode', prompt: 'Add a light mode.' }])
     await endTurn('p2')
     expect((await shown()).slice(1)).toEqual([
-      'Plan waits at step 1 (answered), 5 of 5 steps to do (/aside continue)',
-      '1 waiting One',
+      'Plan paused after step 1 (to organize the queue), 4 of 5 steps to do (/aside continue)',
+      '1 done One',
       '↳ blue it is.',
       '2 to do Two',
       '3 to do Three',
@@ -1670,7 +1745,7 @@ describe('adding to a running plan', () => {
     ])
   })
 
-  test('/aside plan that reads the plan as the answer turn ends is organized at once, not after a turn that never comes', async ($, on) => {
+  test('/aside plan that reads the plan as the answer turn ends waits for the step that answer starts', async ($, on) => {
     const { w, sent, type, aside, savePlan, wait, startTurn, endTurn, idle } = world($, on)
     await savePlan(STEPS)
     await aside('run all')
@@ -1690,10 +1765,11 @@ describe('adding to a running plan', () => {
       for (let i = 0; i < 50; i++) await Promise.resolve()
     }
 
+    // The answer's end ends the step and starts the next, so the queue waits for that one's end.
     await endTurn('a1', 'answer', 'Result: went.')
-    expect(await planned).toBe('Organizing 1 idea.')
+    expect(await planned).toBe("Step 2 is running; once it ends, Claude organizes the queue into steps after the plan's own, and /aside continue goes on.")
     await idle()
-    expect(sent.at(-1)).toContain(adding('S1. One (waits for my answer)', 'S2. Two (to do)', 'S3. Three (to do)'))
+    expect(sent.at(-1)).toContain('(Step 2 of 3 of the queue plan, "Two", sent by the aside plugin.')
   })
 
   test('a step that is interrupted organizes nothing, and the queue stays as it was', async ($, on) => {

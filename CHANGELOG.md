@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- A step that waits for your answer ends with Claude's reply to it, and the run goes on to the next step by itself, unless Claude asks again with the wait tool; the last step of a run sums the run up in that reply. An answer typed while a turn still runs goes without the step's own words, so its turn leaves the step waiting, and `/aside continue` ends it, with the summary for a last step; answering again ends it too. `/aside continue` ends a waiting step without an answer, as before.
+
 ## 0.30.0 - 2026-10-20
 
 - While Claude works, `/aside g`, `/aside q`, `/aside q NAME`, `/aside find` and `/aside log` show their list in the pane, as `/aside` does, instead of a line in the transcript that showed only once the turn ended. The pane keeps up with that list, a named queue there followed by name as it moves between this project and every project, and its <kbd>queue</kbd> button, `/aside` and the band's <kbd>list</kbd> button go back to the queue; a plan organized meanwhile shows there whatever it showed before. Where the terminal has no room for the pane, the list goes into the transcript as before.

@@ -47,9 +47,10 @@ export type Plan = {
   // then the steps still to run after it when /aside run named them (in place of the chain).
   // pausedFor: what Claude asked for with the wait tool. The step then waits for the person:
   // every turn of that session but the plugin's own prompts is the step's, each with its turnId
-  // while it runs, until /aside continue or /aside stop ends it, and ms and result keep the time
-  // those turns took and what the last one said. isAnswered: a turn took the person's answer
-  // since Claude last asked. isEnding: continue or stop ended the step, which is done once the
+  // while it runs, until the turn that takes their answer ends with no new question, or /aside
+  // continue or /aside stop ends it, and ms and result keep the time those turns took and what
+  // the last one said. isAnswered: a turn took the person's answer since Claude last asked, the
+  // turn answerTurnId. isEnding: continue or stop ended the step, which is done once the
   // turn it has left ends, whatever ends it. isPlanningAfter: /aside plan asked, while a turn of
   // the step ran, for the queue to be organized once it ends, as Claude cannot be asked in the
   // middle of one. startedAt: when, by the clock, the step's first turn started (none
@@ -65,6 +66,7 @@ export type Plan = {
     ms?: number
     result?: string
     isAnswered?: true
+    answerTurnId?: string
     isEnding?: true
     startedAt?: number
   }

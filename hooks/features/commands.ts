@@ -66,7 +66,7 @@ const COMMANDS: readonly Command[] = [
   {
     name: 'continue',
     takes: none,
-    help: ['/aside continue - end the step that waits for your answer and go on, or go on with a paused run, as /aside run all does'],
+    help: ['/aside continue - end the step that waits for your answer without one and go on, or go on with a paused run, as /aside run all does'],
     about: 'go on with the plan',
   },
   {
