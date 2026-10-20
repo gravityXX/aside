@@ -67,18 +67,13 @@ export async function projectKeys($: Engine): Promise<Keys> {
   }
 }
 
+// The entries stored under `key`, as earlier releases stored them too, an entry with no kind
+// being an idea. Features read the project queue through readQueue in io/queue.ts and change it
+// only there, which alone stores lists of entries.
 export async function loadEntries($: Engine, key: string): Promise<Entry[]> {
   const value = await $.store.get(key)
 
   return Array.isArray(value) ? (value as Entry[]).map(entry => ({ ...entry, kind: entry.kind ?? 'idea' })) : []
-}
-
-export async function saveEntries($: Engine, key: string, list: readonly Entry[]) {
-  if (list.length === 0) {
-    await $.store.delete(key)
-  } else {
-    await $.store.set(key, list)
-  }
 }
 
 export async function loadPlan($: Engine, key: string): Promise<Plan> {

@@ -1,8 +1,9 @@
 import type { EngineInterface as Engine } from 'claude-code'
 
 import type { Entry } from '../../types'
-import { isSameEntry, withoutEntries } from '../core/entries'
-import { loadEntries, loadHanded, loadTagIds, projectKeys, saveEntries, tagId } from './store'
+import { inOrder, isSameEntry, withoutEntries } from '../core/entries'
+import type { Order } from '../core/entries'
+import { loadEntries, loadHanded, loadTagIds, projectKeys, tagId } from './store'
 import type { Keys } from './store'
 
 // What a change makes of the stored queue: the list to store in its place, left out to keep
@@ -49,6 +50,23 @@ export function changeQueueAfter<P, T>(
   preparing = done.catch(() => undefined)
 
   return done
+}
+
+// The queue as /aside shows it, in the order setting, read as it is stored now: for what is
+// only listed, counted or checked. What is read here and written back would store over a change
+// made meanwhile; that goes through changeQueue.
+export async function readQueue($: Engine, order: Order): Promise<Entry[]> {
+  return inOrder(await loadEntries($, (await projectKeys($)).queue), order)
+}
+
+// Stores a list of entries under `key`, the queue or the take, and an empty one as no key at
+// all. Only the changes here write them, so nothing else can store over one on its way.
+async function saveEntries($: Engine, key: string, list: readonly Entry[]) {
+  if (list.length === 0) {
+    await $.store.delete(key)
+  } else {
+    await $.store.set(key, list)
+  }
 }
 
 // One change in its turn: the queue read as it is stored, the list it makes stored in its

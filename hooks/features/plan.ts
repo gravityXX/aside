@@ -27,8 +27,8 @@ import {
 } from '../core/prompts'
 import type { StepMode } from '../core/prompts'
 import { describeError, describeFailure, formatCount, formatDuration, shortenText } from '../core/text'
-import { bringBackTake, forgetAnsweredTake, giveBackItems, takeChosen, takeForHandOver, takePlanned } from '../io/queue'
-import { loadEntries, loadHanded, loadPlan, projectKeys, refreshBand, savePlan, tagId } from '../io/store'
+import { bringBackTake, forgetAnsweredTake, giveBackItems, readQueue, takeChosen, takeForHandOver, takePlanned } from '../io/queue'
+import { loadHanded, loadPlan, projectKeys, refreshBand, savePlan, tagId } from '../io/store'
 import type { Keys } from '../io/store'
 import { archivePlan } from './history'
 import { openListPane, tagsInFiles } from './queue'
@@ -111,9 +111,7 @@ export async function handOverQueue($: Engine, ctx: Context, asker: Asker = 'com
 
 // Whether there is anything to hand over: an entry, or a tag not handed over yet.
 async function hasItems($: Engine): Promise<boolean> {
-  const keys = await projectKeys($)
-
-  return (await loadEntries($, keys.queue)).length > 0 || (await tagsInFiles($, true)).length > 0
+  return (await readQueue($, 'oldest')).length > 0 || (await tagsInFiles($, true)).length > 0
 }
 
 // /aside plan while a step runs here, for Claude in this conversation, who cannot be asked in
@@ -560,7 +558,7 @@ export async function runNext($: Engine, ctx: Context): Promise<string> {
   if (next >= 0) {
     return runChosenSteps($, ctx, plan, [next + 1])
   }
-  if ((await loadEntries($, keys.queue)).length === 0) {
+  if ((await readQueue($, 'oldest')).length === 0) {
     const tags = (await tagsInFiles($, true)).length
     return tags > 0 ? `The queue is empty; /aside run all runs the ${formatCount(tags, 'tag')} in files.` : 'Nothing to run: the queue is empty and the plan is done.'
   }
@@ -833,7 +831,8 @@ const describeNoPlan = (reply: Awaited<ReturnType<Engine['model']['complete']>> 
 // Whether the queue still holds what a planner was given: every entry in it as it was, and no
 // tag handed over since. The plan is checked as it is saved (savePlanSteps).
 async function isAsGiven($: Engine, keys: Keys, items: readonly Entry[]): Promise<boolean> {
-  const queue = await loadEntries($, keys.queue)
+  // In the order the store keeps: only whether each entry is there counts.
+  const queue = await readQueue($, 'oldest')
   const handed = new Set(await loadHanded($, keys.handed))
   const isThere = (item: Entry) =>
     item.isTag ? !handed.has(tagId(item)) : queue.some(entry => isSameEntry(entry, item))
@@ -860,7 +859,7 @@ async function planOutside($: Engine, ctx: Context, model: Exclude<PlanModel, 's
     const keys = await projectKeys($)
     const before = await loadPlan($, keys.plan)
     const isAdding = (await runningHere($, before)) !== undefined
-    const items = [...inOrder(await loadEntries($, keys.queue), ctx.settings.order), ...(await tagsInFiles($, true))]
+    const items = [...(await readQueue($, ctx.settings.order)), ...(await tagsInFiles($, true))]
     if (items.length === 0) {
       return 'The queue is empty. Start a message with "+" to add an idea, or "+?" to comment on a copied fragment.'
     }

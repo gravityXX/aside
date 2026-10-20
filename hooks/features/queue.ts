@@ -8,9 +8,9 @@ import type { Listed, ListingSection } from '../core/listing'
 import { popPrompt } from '../core/prompts'
 import { canonicalPath, formatCount, isAbsolutePath, isWindowsPath, relativePath, shortenText } from '../core/text'
 import { resolveFile, tryReadFile, writeExport } from '../io/host'
-import { bringBackTake, changeQueue, takeCleared } from '../io/queue'
+import { bringBackTake, changeQueue, readQueue, takeCleared } from '../io/queue'
 import type { QueueChange } from '../io/queue'
-import { loadEntries, loadHanded, loadPlan, projectKeys, readTrackedFiles, refreshBand, saveEditing, tagId, trackFile } from '../io/store'
+import { loadHanded, loadPlan, projectKeys, readTrackedFiles, refreshBand, saveEditing, tagId, trackFile } from '../io/store'
 
 // The <!-- ? --> tags in the session's markdown files, as entries of their own; `onlyNew`
 // leaves out those an earlier /aside already handed over.
@@ -33,8 +33,8 @@ export async function tagsInFiles($: Engine, onlyNew = false): Promise<Entry[]> 
 // While a run goes on, a step running, waiting or paused after, the plan comes first, so what
 // happens now is at the top however long the queue is.
 async function loadListing($: Engine, ctx: Context) {
-  const { root, queue, plan: planKey, handed } = await projectKeys($)
-  const list = inOrder(await loadEntries($, queue), ctx.settings.order)
+  const { root, plan: planKey, handed } = await projectKeys($)
+  const list = await readQueue($, ctx.settings.order)
   const tags = await tagsInFiles($)
   const handedOver = new Set(await loadHanded($, handed))
   const plan = await loadPlan($, planKey)
