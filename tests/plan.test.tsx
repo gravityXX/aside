@@ -1471,6 +1471,31 @@ describe('running the plan', () => {
 
     expect(await aside('undo')).toBe('Step 1 of the plan is running; /aside stop first, so nothing is done twice.')
   })
+
+  test('an entry removed as run all gives the queue back to a plan another session started stays removed', async ($, on) => {
+    const { w, clock, type, aside, shown, fromAnotherSession } = world($, on)
+    await type('+ dark mode')
+    // Another session saves a plan as this one takes the queue, and the person removes the entry
+    // while it is on its way back.
+    let removing: Promise<string> | undefined
+    w.beforeWrite = async key => {
+      if (!key.startsWith('taken')) return
+      await fromAnotherSession('plan:/proj', { steps: STEPS })
+      w.beforeWrite = async key => {
+        if (!key.startsWith('queue:')) return
+        w.beforeWrite = undefined
+        removing = aside('remove 1')
+        await clock.sleep(2)
+      }
+    }
+    const running = aside('run all')
+    await clock.settle()
+    await clock.advance(5)
+
+    expect(await running).toBe('Another session started a plan meanwhile; the entries stay in the queue, and /aside shows the plan.')
+    expect(await removing).toBe('Removed: dark mode')
+    expect(await shown()).toEqual(['The queue is empty.', 'Plan: 3 of 3 steps to do (/aside run)', '1 to do One', '2 to do Two', '3 to do Three'])
+  })
 })
 
 describe('when Claude answers', () => {
