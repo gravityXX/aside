@@ -846,7 +846,7 @@ async function planOutside($: Engine, ctx: Context, model: Exclude<PlanModel, 's
     // While Claude works, the command's own text shows only after the turn: the pane, or else
     // the transcript, shows the plan now.
     if (asker === 'command' && ctx.session.isRunning) {
-      const opened = await openListPane($).catch((error: unknown) => ({ isPlaced: false, reason: describeError(error) }))
+      const opened = await openListPane($, ctx, { kind: 'queue' }).catch((error: unknown) => ({ isPlaced: false, reason: describeError(error) }))
       if (!opened.isPlaced) $.ui.log(text)
     }
     const line = left.length > 0 ? `${sections[0]!.title}; ${formatCount(left.length, 'entry')} left in the queue, with a question.` : sections[0]!.title

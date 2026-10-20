@@ -32,7 +32,7 @@ A fresh copy comes first. In fullscreen mode, with the clipboard unchanged since
 
 ## Look at the queue and tidy it
 
-`/aside` shows the queue, the tags in files and the plan in a frame, numbered. While Claude works it opens them in a pane instead, as does the <kbd>list</kbd> button above the prompt.
+`/aside` shows the queue, the tags in files and the plan in a frame, numbered. While Claude works it opens them in a pane instead, as does the <kbd>list</kbd> button above the prompt. `/aside g`, `/aside q`, `/aside find` and `/aside log` show their lists in that pane too, kept up to date, and its <kbd>queue</kbd> button goes back to the queue.
 
 ![/aside shows the list in a frame, 1 idea and 1 comment with its file, line and quote; /aside pop 2 puts entry 2 in the prompt box.](../assets/step-3-light.svg#gh-light-mode-only)
 ![/aside shows the list in a frame, 1 idea and 1 comment with its file, line and quote; /aside pop 2 puts entry 2 in the prompt box.](../assets/step-3-dark.svg#gh-dark-mode-only)

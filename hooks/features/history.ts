@@ -2,8 +2,10 @@ import type { EngineInterface as Engine } from 'claude-code'
 
 import type { PastRun, Plan } from '../../types'
 import type { Context } from '../context'
-import { listingText, runSection } from '../core/listing'
+import { runSection } from '../core/listing'
+import type { Listed } from '../core/listing'
 import { loadPlan, loadRuns, projectKeys, saveRun } from '../io/store'
+import { showWhileWorking } from './queue'
 
 // How many plans /aside log shows unless asked for one.
 const RUNS_SHOWN = 5
@@ -37,9 +39,14 @@ export async function archivePlan($: Engine, plan: Plan) {
 const EMPTY_LOG = 'The log is empty: a plan run to its end comes here once another takes its place.'
 
 // /aside log [N]: the plans run to their end, the one that ended last first, or plan N alone.
-// While Claude works, a command's text shows only after the turn: the log goes into the
-// transcript at once instead.
+// While Claude works, a command's text shows only after the turn: the log goes into the list
+// pane at once instead.
 export async function showLog($: Engine, ctx: Context, n?: number): Promise<string> {
+  return showWhileWorking($, ctx, { kind: 'log', ...(n === undefined ? {} : { n }) }, await logListed($, n), 'the log')
+}
+
+// What /aside log [N] lists, and the list pane too.
+export async function logListed($: Engine, n?: number): Promise<Listed> {
   const keys = await projectKeys($)
   const runs = await loadRuns($, keys.history)
   if (runs.length === 0) {
@@ -50,12 +57,6 @@ export async function showLog($: Engine, ctx: Context, n?: number): Promise<stri
   }
   const now = await $.clock.now()
   const chosen = n === undefined ? runs.slice(0, RUNS_SHOWN).map((run, i) => ({ run, i })) : [{ run: runs[n - 1]!, i: n - 1 }]
-  const more = n === undefined && runs.length > RUNS_SHOWN ? `\n\n${runs.length - RUNS_SHOWN} older in the log: /aside log ${RUNS_SHOWN + 1} shows the next.` : ''
-  const text = `${listingText(chosen.map(({ run, i }) => runSection(run, i + 1, now)))}${more}`
-  if (!ctx.session.isRunning) {
-    return text
-  }
-  $.ui.log(text)
-
-  return 'Wrote the log above while Claude was working.'
+  const more = n === undefined && runs.length > RUNS_SHOWN ? `${runs.length - RUNS_SHOWN} older in the log: /aside log ${RUNS_SHOWN + 1} shows the next.` : ''
+  return { sections: chosen.map(({ run, i }) => runSection(run, i + 1, now)), ...(more ? { note: more } : {}) }
 }

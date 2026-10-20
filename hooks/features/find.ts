@@ -3,12 +3,12 @@ import type { EngineInterface as Engine } from 'claude-code'
 import type { Entry } from '../../types'
 import type { Context } from '../context'
 import { inOrder } from '../core/entries'
-import { formatPlace, foundSection, listingText, planSection } from '../core/listing'
-import type { ListingSection } from '../core/listing'
+import { formatPlace, foundSection, planSection } from '../core/listing'
+import type { Listed, ListingSection } from '../core/listing'
 import { TAG_NOTE } from '../core/prompts'
 import { foldText, splitWords } from '../core/text'
 import { countQueues, GLOBAL, isHiddenHere, isLocalQueue, loadEntries, loadIdeas, loadPlan, projectKeys, queueName } from '../io/store'
-import { tagsInFiles } from './queue'
+import { showWhileWorking, tagsInFiles } from './queue'
 
 // What a search looks at in an entry: its text, the quote it is about and where it points, as
 // its row shows them, so a word of the project's own path finds nothing the row does not show.
@@ -17,8 +17,13 @@ const searchedText = (entry: Entry, root: string) => foldText([entry.text, entry
 // /aside find TEXT: every entry, tag, step and idea of a queue of no project that holds all the
 // words, in any case and with or without accents, each with the number its own list shows, so
 // /aside pop 2, /aside g here 1 or /aside q work pop 3 takes it from there. While Claude works,
-// the result goes into the transcript at once, as a command's text shows only after the turn.
+// the result goes into the list pane at once, as a command's text shows only after the turn.
 export async function findEntries($: Engine, ctx: Context, query: string): Promise<string> {
+  return showWhileWorking($, ctx, { kind: 'find', query }, await foundListed($, ctx, query), 'what was found')
+}
+
+// What /aside find lists for `query`, and the list pane too.
+export async function foundListed($: Engine, ctx: Context, query: string): Promise<Listed> {
   const words = splitWords(query)
   if (words.length === 0) {
     return 'Give words to look for: /aside find dark mode'
@@ -59,11 +64,6 @@ export async function findEntries($: Engine, ctx: Context, query: string): Promi
   if (sections.length === 0) {
     return `Nothing holds "${query.trim()}": not the queue, the tags, the plan, the global list or a named queue.`
   }
-  const text = listingText(sections)
-  if (!ctx.session.isRunning) {
-    return text
-  }
-  $.ui.log(text)
 
-  return 'Wrote what was found above while Claude was working.'
+  return { sections }
 }

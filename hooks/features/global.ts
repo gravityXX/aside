@@ -4,6 +4,7 @@ import type { Entry } from '../../types'
 import type { Context } from '../context'
 import { inOrder } from '../core/entries'
 import { listingText, namedSection, queuesSection } from '../core/listing'
+import type { Listed } from '../core/listing'
 import { MARKDOWN_PATH } from '../core/markdown'
 import { formatCount, newQueueNote, shortenText } from '../core/text'
 import {
@@ -33,6 +34,7 @@ import {
 import type { GlobalIdea } from '../io/store'
 import { addEntries } from './capture'
 import { importFile } from './importing'
+import { showWhileWorking } from './queue'
 
 // How the commands name a queue: the global list in the words it always had, and any other queue
 // by the name it is typed under, for this project's queues too.
@@ -64,24 +66,18 @@ async function shownIdeas($: Engine, ctx: Context, name: string): Promise<Global
 const sayIdeas = (done: string, entries: readonly Entry[]) =>
   entries.length === 1 ? `${done}: ${shortenText(entries[0]!.text, 60)}` : `${done} ${formatCount(entries.length, 'idea')}: ${entries.map(entry => shortenText(entry.text, 40)).join('; ')}`
 
-// While Claude works, a command's text shows only after the turn: the list goes into the
-// transcript at once instead.
-function shownNow($: Engine, ctx: Context, text: string, what: string): string {
-  if (!ctx.session.isRunning) {
-    return text
-  }
-  $.ui.log(text)
-
-  return `Wrote ${what} above while Claude was working.`
-}
-
-async function showQueue($: Engine, ctx: Context, name: string): Promise<string> {
+// The ideas of queue `name`, as /aside g or /aside q NAME lists them, and the list pane too.
+export async function queueListed($: Engine, ctx: Context, name: string): Promise<Listed> {
   const ideas = await shownIdeas($, ctx, name)
   if (ideas.length === 0) {
     return emptyOf(name)
   }
 
-  return shownNow($, ctx, listingText([namedSection(queueName(name), ideas.map(idea => idea.entry), isLocalQueue(name))]), nameOf(name))
+  return { sections: [namedSection(queueName(name), ideas.map(idea => idea.entry), isLocalQueue(name))] }
+}
+
+async function showQueue($: Engine, ctx: Context, name: string): Promise<string> {
+  return showWhileWorking($, ctx, { kind: 'named', typed: queueName(name) }, await queueListed($, ctx, name), nameOf(name))
 }
 
 export async function showGlobal($: Engine, ctx: Context): Promise<string> {
@@ -90,6 +86,11 @@ export async function showGlobal($: Engine, ctx: Context): Promise<string> {
 
 // /aside q: every queue of no project that holds an idea, in the order countQueues gives.
 async function showQueues($: Engine, ctx: Context): Promise<string> {
+  return showWhileWorking($, ctx, { kind: 'queues' }, await queuesListed($), 'the queues')
+}
+
+// The queues as /aside q lists them, and the list pane too.
+export async function queuesListed($: Engine): Promise<Listed> {
   const queues = await countQueues($)
   if (queues.length === 0) {
     return 'The global list and the named queues are empty. Start a message with "+@work" to add an idea to the queue work, or with "+g" to the global list.'
@@ -104,7 +105,7 @@ async function showQueues($: Engine, ctx: Context): Promise<string> {
     rows.push({ name: queueName(one.name), count: ideas.length, newest: newest?.entry.text ?? '', note })
   }
 
-  return shownNow($, ctx, listingText([queuesSection(rows)]), 'the queues')
+  return { sections: [queuesSection(rows)] }
 }
 
 // /aside q NAME here N ...: ideas from a queue to the end of this project's queue, into the

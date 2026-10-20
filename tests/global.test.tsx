@@ -118,7 +118,7 @@ describe('the global list', () => {
   })
 
   test('an idea moved here is edited as one of the queue, and the list shows at once while Claude works', async ($, on) => {
-    const { filled, logged, type, aside, startTurn } = world($, on)
+    const { filled, logged, type, aside, startTurn, pane } = world($, on)
     await type('+g read the RFC')
     await aside('g here 1')
     await aside('edit 1')
@@ -126,8 +126,13 @@ describe('the global list', () => {
 
     await type('+g learn Rust')
     await startTurn('build the parser', 't1')
-    expect(await aside('g')).toBe('Wrote the global list above while Claude was working.')
-    expect(logged.at(-1)).toBe(['1 idea on the global list', '', '  1  idea  learn Rust'].join('\n'))
+    expect(await aside('g')).toBe('Opened the global list in the pane while Claude was working.')
+    const ui = await pane()
+    expect((await ui.find({ type: 'Text', text: '1 idea on the global list' }))?.text).toBe('1 idea on the global list')
+    expect((await ui.find({ type: 'Text', text: 'learn Rust' }))?.text).toBe('learn Rust')
+    // Only the lines that say what was queued go into the transcript, no list.
+    expect(logged.filter(line => line.includes('\n'))).toEqual([])
+    await ui.unmount()
   })
 
   test('plan and run take only this project\'s queue', async ($, on) => {
@@ -487,8 +492,8 @@ describe('named queues', () => {
     expect(await aside('q abcdefghijklmnopqrst')).toBe(['1 idea in @abcdefghijklmnopqrst', '', '  1  idea  x'].join('\n'))
   })
 
-  test('/aside q and /aside q work show at once while Claude works', async ($, on) => {
-    const { logged, type, aside, startTurn } = world($, on)
+  test('/aside q and /aside q work show at once while Claude works on a narrow terminal', async ($, on) => {
+    const { logged, type, aside, startTurn } = world($, on, { isNarrow: true })
     await type('+@work a')
     await startTurn('build the parser', 't1')
 

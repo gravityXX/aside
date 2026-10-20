@@ -25,7 +25,7 @@
 
 ### 2. Answer Claude as usual
 
-Your reply goes to Claude. By default the queue just waits, in a line above the prompt. Its <kbd>list</kbd> button opens a pane with the queue, the tags in files and the plan, and <kbd>plan</kbd> to organize them. Beside it, <kbd>run plan</kbd> shows while the plan has steps left, <kbd>continue</kbd> while a step waits for you or a run is paused, and <kbd>stop</kbd> while a step runs. `/aside` opens the same pane while Claude works.
+Your reply goes to Claude. By default the queue just waits, in a line above the prompt. Its <kbd>list</kbd> button opens a pane with the queue, the tags in files and the plan, and <kbd>plan</kbd> to organize them. Beside it, <kbd>run plan</kbd> shows while the plan has steps left, <kbd>continue</kbd> while a step waits for you or a run is paused, and <kbd>stop</kbd> while a step runs. `/aside` opens the same pane while Claude works, and `/aside g`, `q`, `find` and `log` show their lists there too, with <kbd>queue</kbd> to go back.
 
 ![Claude asks whether to update the docs. Above the prompt, the queue line shows 1 idea and 4 comments with a list button. You answer as usual; the queue keeps waiting.](assets/step-2-light.svg#gh-light-mode-only)
 ![Claude asks whether to update the docs. Above the prompt, the queue line shows 1 idea and 4 comments with a list button. You answer as usual; the queue keeps waiting.](assets/step-2-dark.svg#gh-dark-mode-only)
@@ -108,7 +108,7 @@ read it later +@work   the whole draft, into the queue work
 
 The global list and the named queues wait in every project: the line above the prompt counts them, as in `1 global, 2 @work`, `/aside` leaves them out, and plan and run take only this queue, so `/aside g here` or `/aside q work here` brings an idea in first. The global list is the queue named `global`, so `+@global` is `+g`. Several sessions can add to them at once. `/aside undo` does not bring back what left them; a queue's own `undo` brings back what its last `clear` took. A named queue can also be this project's alone: `/aside q work local` keeps it here, where `+@work` then goes to it and other projects no longer see it, and with the `newQueues` setting on `local` a queue is this project's from its first idea.
 
-`N` is a number as `/aside` shows it, and `[N]` may be left out. `FILE` is one word ending in `.md`. While Claude works, `/aside` opens the list in a pane. Tab completes every command.
+`N` is a number as `/aside` shows it, and `[N]` may be left out. `FILE` is one word ending in `.md`. While Claude works, `/aside`, `/aside g`, `q`, `find` and `log` open their list in a pane, with <kbd>queue</kbd> to go back. Tab completes every command.
 
 <details>
 <summary>Other ways to comment</summary>
