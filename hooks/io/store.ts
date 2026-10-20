@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface as Engine } from 'claude-code'
 
 import type { Band, Entry, PastRun, Plan } from '../../types'
-import { isWaiting } from '../core/listing'
+import { isAway, isWaiting } from '../core/listing'
 import { canonicalPath, pathKey } from '../core/text'
 
 const EMPTY_BAND: Band = { ideas: 0, comments: 0, tags: 0, steps: 0, done: 0 }
@@ -331,6 +331,7 @@ export async function refreshBand($: Engine, tagCount?: number): Promise<Band> {
     steps: plan.steps.length,
     done: plan.steps.filter(step => step.isDone).length,
     ...(plan.active && !isWaiting(plan.active) ? { running: plan.active.step + 1 } : {}),
+    ...(plan.active && isAway(plan.active) ? { isBackground: true as const } : {}),
     ...(plan.active && isWaiting(plan.active) ? { waiting: plan.active.step + 1 } : {}),
     ...(plan.paused && !plan.active ? { paused: plan.paused.step + 1 } : {}),
     ...(global > 0 ? { global } : {}),

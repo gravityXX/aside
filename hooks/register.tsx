@@ -4,6 +4,8 @@ import { createContext } from './context'
 import { dropFailedEntry, emptyBoxAfterQueue, queueTyped, rememberMarkdownFile, rememberToolOutput } from './features/capture'
 import { asideFailed, completeAside, runAside, startSession } from './features/commands'
 import {
+  noteBackgroundEnd,
+  noteBackgroundWork,
   noteStepAnswer,
   onTurnEnd,
   onTurnStart,
@@ -29,10 +31,13 @@ export const register: Register = (on, options) => {
   // Beneath the one above, which drops a queued entry before it comes here: what the person
   // typed, at this terminal or through Remote Control.
   on('prompt.submit', { origin: { kind: /^(composer|bridge)$/ } }, ($, e, next) => noteStepAnswer(ctx, $, e, next)).catch(stepAnswerFailed)
+  // A background task's notification: the step that started the work it names goes on.
+  on('prompt.submit', { origin: { kind: 'task-notification' } }, ($, e, next) => noteBackgroundEnd(ctx, $, e, next)).catch(stepAnswerFailed)
   on('prompt.change', ($, e, next) => emptyBoxAfterQueue(ctx, $, e, next))
   on('prompt.autocomplete', ($, e, next) => completeAside(ctx, $, e, next))
 
   on('tool.call', ($, e, next) => rememberToolOutput(ctx, e, next))
+  on('tool.call', { tool: /^(Workflow|Agent|Bash|TaskStop)$/ }, ($, e, next) => noteBackgroundWork(ctx, $, e, next))
   on('tool.call', { tool: 'Write' }, async ($, e, next) => rememberMarkdownFile($, e.file_path, await next(e)))
   on('tool.call', { tool: 'Edit' }, async ($, e, next) => rememberMarkdownFile($, e.file_path, await next(e)))
   // A RegExp: the laid types know only the tools connected when they were written, and the

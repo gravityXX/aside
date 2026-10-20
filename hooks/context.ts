@@ -51,6 +51,9 @@ export type Session = {
   // so its turn leaves the step waiting for /aside continue.
   answer?: string
   isAnswerTold?: boolean
+  // The notification of a step's work in the background, until the turn it starts is bound to
+  // the step, which that turn's end then ends.
+  notice?: string
   // What /aside plan handed over, until the turn that organizes it ends: the items as the
   // planning prompt numbered them, that turn once it starts, and whether Claude saved a plan.
   // A reload loses it, and the take then waits for /aside undo as it did before. isAdding: it

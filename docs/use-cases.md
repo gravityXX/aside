@@ -76,6 +76,7 @@ A step that needs your answer or decision, such as a yes before a push, makes Cl
 ![A step that asks you waits. Step 2 asks for a yes, and the line above the prompt says waits for you. Your answer, yes, build it, goes to that same step, which builds it while the line says step 2 running. Claude's reply to it ends step 2, and step 3 runs by itself.](../assets/use-waiting-dark.svg#gh-dark-mode-only)
 
 - **The line above the prompt** says `step 2 running` while Claude works and `step 2 waits for you` in between, with a <kbd>continue</kbd> button that ends the step without an answer.
+- **Work in the background** that a step starts, a workflow, an agent or a command, keeps the step running: the line above the prompt says `step 2 running in the background`, the plan names the work, and the turn of its notification ends the step. Your own messages meanwhile are not the step's, and <kbd>continue</kbd> ends it sooner.
 - **The last step of a run** sums the run up in the reply to your answer, or, when <kbd>continue</kbd> ends it, in one more short turn.
 - **`/aside stop`** on a step that waits ends it as it stands, and the run stops there.
 - **A turn you interrupt** after the step has asked leaves it waiting, with its time and its last result. A step interrupted before it asks stops the plan and is to do again.
