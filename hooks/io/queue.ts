@@ -164,13 +164,15 @@ export function takePlanned($: Engine, items: readonly Entry[]): Promise<void> {
   })
 }
 
-// Puts back all the last take took: its entries at the head of the queue, its tags in their
-// files for the next hand-over. Returns what it put back.
+// Puts back all the last take took: its entries at the head of the queue, once each, its tags
+// in their files for the next hand-over. Returns what it put back.
 export function bringBackTake($: Engine): Promise<Take> {
   return inTurn(async () => {
     const keys = await projectKeys($)
     const take = await loadTake($, keys)
-    await saveEntries($, keys.queue, [...take.entries, ...(await loadEntries($, keys.queue))])
+    // A call made again after one that failed half-way finds the entries back already.
+    const queue = await loadEntries($, keys.queue)
+    await saveEntries($, keys.queue, [...take.entries, ...withoutEntries(queue, take.entries)])
     await unhandTags($, keys, take.tagIds)
     await forgetTake($, keys)
 
