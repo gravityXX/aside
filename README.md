@@ -103,9 +103,10 @@ read it later +@work   the whole draft, into the queue work
 /aside q               show the global list and every named queue, with its count and newest idea
 /aside q work          show the queue work; the commands of /aside g work on it, as in /aside q work here 1
 /aside q work clear    empty it, or with rename X move it all to the queue X, merged with any ideas there
+/aside q work local    keep it for this project alone; /aside q work global shares it again
 ```
 
-The global list and the named queues wait in every project: the line above the prompt counts them, as in `1 global, 2 @work`, `/aside` leaves them out, and plan and run take only this queue, so `/aside g here` or `/aside q work here` brings an idea in first. The global list is the queue named `global`, so `+@global` is `+g`. Several sessions can add to them at once. `/aside undo` does not bring back what left them; a queue's own `undo` brings back what its last `clear` took.
+The global list and the named queues wait in every project: the line above the prompt counts them, as in `1 global, 2 @work`, `/aside` leaves them out, and plan and run take only this queue, so `/aside g here` or `/aside q work here` brings an idea in first. The global list is the queue named `global`, so `+@global` is `+g`. Several sessions can add to them at once. `/aside undo` does not bring back what left them; a queue's own `undo` brings back what its last `clear` took. A named queue can also be this project's alone: `/aside q work local` keeps it here, where `+@work` then goes to it and other projects no longer see it, and with the `newQueues` setting on `local` a queue is this project's from its first idea.
 
 `N` is a number as `/aside` shows it, and `[N]` may be left out. `FILE` is one word ending in `.md`. While Claude works, `/aside` opens the list in a pane. Tab completes every command.
 
@@ -133,6 +134,7 @@ Change these in `/config`:
 
 - `afterClaudeAnswers`: `wait` (default), `plan` or `run all`. What <kbd>aside</kbd> does once Claude answers.
 - `planModel`: `session` (default), `sonnet`, `haiku` or `opus`. Who organizes the queue on `/aside plan`: Claude in this conversation, knowing the work so far, or one call to that model outside it, which adds nothing to the conversation and runs while Claude works, but sees only the queue.
+- `newQueues`: `global` (default) or `local`. Whom a named queue made by its first idea, as in `+@work`, is for: every project, or the one it was made in.
 - `order`: `oldest` (default) or `newest`. Which entry comes first in the list and in a run.
 - `tidy`: `on` (default) or `off`. Whether a small model fixes the spelling and wording of what you type.
 

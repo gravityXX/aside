@@ -5,9 +5,9 @@ import type { Context } from '../context'
 import { KINDS, parseEntries } from '../core/entries'
 import { describeCount, isExportText } from '../core/listing'
 import { listItems } from '../core/markdown'
-import { formatCount, relativePath } from '../core/text'
+import { formatCount, newQueueNote, relativePath } from '../core/text'
 import { resolveFile, tryReadFile } from '../io/host'
-import { addIdeas, GLOBAL, loadEntries, loadIdeas, projectKeys, readTrackedFiles, refreshBand, saveEntries } from '../io/store'
+import { addIdeas, GLOBAL, isLocalQueue, loadEntries, loadIdeas, projectKeys, queueName, readTrackedFiles, refreshBand, saveEntries } from '../io/store'
 
 // How many list items one /aside import takes, so a long file is not queued by mistake.
 const MOST_ITEMS = 100
@@ -101,7 +101,7 @@ async function importInto($: Engine, queue: string, shown: string, items: readon
   const now = await $.clock.now()
   await addIdeas($, queue, fresh.map(({ text }) => ({ text, at: now, kind: 'idea' as const })))
   await refreshBand($)
-  const where = queue === GLOBAL ? 'the global list' : `@${queue}`
+  const where = queue === GLOBAL ? 'the global list' : `@${queueName(queue)}`
   const count = there.length + fresh.length
   const parts = leftOutParts(ideas, there, fresh.length, 'there')
   const notIdeas = comments > 0 ? `${formatCount(comments, 'comment')}, as ${where} holds ideas only` : ''
@@ -109,5 +109,7 @@ async function importInto($: Engine, queue: string, shown: string, items: readon
     return `Nothing new in ${shown} for ${where}.${leftOut([...parts, notIdeas, ticked])}`
   }
 
-  return `Imported ${formatCount(fresh.length, 'idea')} from ${shown} to ${where} (${queue === GLOBAL ? `${count} global` : `${count} in @${queue}`}).${leftOut([...parts, notIdeas, ticked])}`
+  const tally = queue === GLOBAL ? `${count} global` : there.length === 0 ? newQueueNote(queueName(queue), isLocalQueue(queue)) : `${count} in @${queueName(queue)}`
+
+  return `Imported ${formatCount(fresh.length, 'idea')} from ${shown} to ${where} (${tally}).${leftOut([...parts, notIdeas, ticked])}`
 }

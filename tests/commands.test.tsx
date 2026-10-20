@@ -276,6 +276,22 @@ describe('tab completion', () => {
       .then(result => result.suggestions.map(row => `${row.text}: ${row.description ?? ''}`))
   }
 
+  test('after "/aside q " Tab offers a queue of this project\'s as its own, hiding one of its name for every project, and its local and global', { options: { newQueues: 'local' } }, async ($, on) => {
+    const { w, type, aside } = world($, on)
+    on('prompt.autocomplete', () => ({ suggestions: [] }))
+    await type('+@work here')
+    w.root = '/other'
+    await type('+@work for every project')
+    await aside('q work global')
+    await type('+@later elsewhere')
+    w.root = '/proj'
+
+    expect(await complete($, '/aside q ')).toEqual(["work: 1 idea, this project's"])
+    expect(await complete($, '/aside q w')).toEqual(["work: 1 idea, this project's"])
+    expect(await complete($, '/aside q work lo')).toEqual(['local: keep it for this project alone'])
+    expect(await complete($, '/aside q work pop ')).toEqual(['1: here'])
+  })
+
   test('after "/aside " Tab offers the subcommands, then the entry numbers', async ($, on) => {
     const { type } = world($, on)
     on('prompt.autocomplete', () => ({ suggestions: [] }))

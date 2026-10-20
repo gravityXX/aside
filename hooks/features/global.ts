@@ -5,20 +5,25 @@ import type { Context } from '../context'
 import { inOrder } from '../core/entries'
 import { listingText, namedSection, queuesSection } from '../core/listing'
 import { MARKDOWN_PATH } from '../core/markdown'
-import { formatCount, shortenText } from '../core/text'
+import { formatCount, newQueueNote, shortenText } from '../core/text'
 import {
   addIdeas,
   countQueues,
   forgetCleared,
   forgetGlobalIdeas,
   GLOBAL,
+  isHiddenHere,
+  isLocalQueue,
   loadCleared,
   loadEntries,
   loadIdeas,
+  moveSessionRecords,
   NAME_PATTERN,
   projectKeys,
+  queueName,
   rankOf,
   refreshBand,
+  resolveQueue,
   restoreIdea,
   saveCleared,
   saveEntries,
@@ -29,15 +34,15 @@ import type { GlobalIdea } from '../io/store'
 import { addEntries } from './capture'
 import { importFile } from './importing'
 
-// How the commands name a queue of no project: the global list in the words it always had,
-// any other queue by its name.
-const nameOf = (name: string) => (name === GLOBAL ? 'the global list' : `@${name}`)
-const inName = (name: string) => (name === GLOBAL ? 'on the global list' : `in @${name}`)
-const commandOf = (name: string) => (name === GLOBAL ? '/aside g' : `/aside q ${name}`)
-const markOf = (name: string) => (name === GLOBAL ? '+g' : `+@${name}`)
+// How the commands name a queue: the global list in the words it always had, and any other queue
+// by the name it is typed under, for this project's queues too.
+const nameOf = (name: string) => (name === GLOBAL ? 'the global list' : `@${queueName(name)}`)
+const inName = (name: string) => (name === GLOBAL ? 'on the global list' : `in @${queueName(name)}`)
+const commandOf = (name: string) => (name === GLOBAL ? '/aside g' : `/aside q ${queueName(name)}`)
+const markOf = (name: string) => (name === GLOBAL ? '+g' : `+@${queueName(name)}`)
 
 const emptyOf = (name: string) =>
-  name === GLOBAL ? 'The global list is empty. Start a message with "+g" to add an idea to it.' : `@${name} is empty. Start a message with "+@${name}" to add an idea to it.`
+  name === GLOBAL ? 'The global list is empty. Start a message with "+g" to add an idea to it.' : `${nameOf(name)} is empty. Start a message with "${markOf(name)}" to add an idea to it.`
 
 const isPlace = (n: number, length: number) => Number.isInteger(n) && n >= 1 && n <= length
 
@@ -76,7 +81,7 @@ async function showQueue($: Engine, ctx: Context, name: string): Promise<string>
     return emptyOf(name)
   }
 
-  return shownNow($, ctx, listingText([namedSection(name, ideas.map(idea => idea.entry))]), nameOf(name))
+  return shownNow($, ctx, listingText([namedSection(queueName(name), ideas.map(idea => idea.entry), isLocalQueue(name))]), nameOf(name))
 }
 
 export async function showGlobal($: Engine, ctx: Context): Promise<string> {
@@ -93,7 +98,10 @@ async function showQueues($: Engine, ctx: Context): Promise<string> {
   for (const one of queues) {
     const ideas = await loadIdeas($, one.name)
     const newest = ideas.reduce<GlobalIdea | undefined>((last, idea) => (last === undefined || idea.entry.at >= last.entry.at ? idea : last), undefined)
-    rows.push({ name: one.name, count: ideas.length, newest: newest?.entry.text ?? '' })
+    // One every project sees but this project's own of its name hides here.
+    const isHidden = await isHiddenHere($, one.name)
+    const note = isLocalQueue(one.name) ? "this project's" : isHidden ? `for every project; hidden here by this project's @${one.name}` : ''
+    rows.push({ name: queueName(one.name), count: ideas.length, newest: newest?.entry.text ?? '', note })
   }
 
   return shownNow($, ctx, listingText([queuesSection(rows)]), 'the queues')
@@ -145,7 +153,9 @@ async function moveToQueue($: Engine, ctx: Context, name: string, numbers: reado
   await saveEntries($, keys.queue, inOrder(list.filter(entry => !chosen.includes(entry)), ctx.settings.order))
   await refreshBand($)
 
-  return sayIdeas(`Moved to ${nameOf(name)}`, chosen)
+  const said = sayIdeas(`Moved to ${nameOf(name)}`, chosen)
+
+  return name !== GLOBAL && there.length === 0 ? `${said}. ${nameOf(name)} is ${newQueueNote(queueName(name), isLocalQueue(name))}.` : said
 }
 
 async function removeIdeas($: Engine, ctx: Context, name: string, numbers: readonly number[]): Promise<string> {
@@ -205,7 +215,7 @@ async function editIdea($: Engine, ctx: Context, name: string, n: number): Promi
   await saveGlobalEditing($, idea)
   await forgetGlobalIdeas($, [idea.key])
   await refreshBand($)
-  const which = name === GLOBAL ? `Global idea ${n}` : `Idea ${n} of @${name}`
+  const which = name === GLOBAL ? `Global idea ${n}` : `Idea ${n} of ${nameOf(name)}`
 
   return `${which} is in the prompt box: change it and press Enter; it goes back to place ${n}.`
 }
@@ -239,7 +249,7 @@ async function moveIdea($: Engine, ctx: Context, name: string, from: number, to:
     }
   }
 
-  return listingText([namedSection(name, ideas.map(one => one.entry))])
+  return listingText([namedSection(queueName(name), ideas.map(one => one.entry), isLocalQueue(name))])
 }
 
 // /aside q NAME clear: what the queue holds is kept for /aside q NAME undo first, and its ideas
@@ -269,7 +279,7 @@ async function undoClear($: Engine, name: string): Promise<string> {
     await forgetCleared($, record)
   }
   const band = await refreshBand($)
-  const count = name === GLOBAL ? `${band.global ?? 0} global` : `${band.named?.find(one => one.name === name)?.count ?? 0} in @${name}`
+  const count = name === GLOBAL ? `${band.global ?? 0} global` : `${band.named?.find(one => one.name === queueName(name))?.count ?? 0} ${inName(name)}`
 
   return `Brought back ${formatCount(cleared.length, 'idea')} to ${nameOf(name)} (${count}).`
 }
@@ -282,29 +292,72 @@ async function renameQueue($: Engine, name: string, to: string): Promise<string>
     return `The global list keeps its name; /aside g here N ... moves its ideas into this queue.`
   }
   if (!NAME_PATTERN.test(to)) {
-    return `A queue's name has letters, digits, "-" and "_", at most 20 of them: ${commandOf(name)} rename ${name === 'office' ? 'work' : 'office'}`
+    return `A queue's name has letters, digits, "-" and "_", at most 20 of them: ${commandOf(name)} rename ${queueName(name) === 'office' ? 'work' : 'office'}`
   }
-  const target = to.toLowerCase()
+  // A queue keeps whom it is for: this project's stays this project's.
+  const target = isLocalQueue(name) ? `.${to.toLowerCase()}` : to.toLowerCase()
   if (target === name) {
-    return `@${name} has that name already.`
+    return `${nameOf(name)} has that name already.`
   }
   const ideas = await loadIdeas($, name)
   if (ideas.length === 0) {
     return emptyOf(name)
   }
+  // The new name has to mean this queue here after: under a name this project reads as a queue
+  // of the other scope, the ideas would hide that queue, or be hidden by it.
+  const seen = await resolveQueue($, to.toLowerCase(), isLocalQueue(name))
+  if (seen !== target) {
+    return isLocalQueue(seen)
+      ? `@${queueName(seen)} is this project's, and ${nameOf(name)} is for every project: /aside q ${queueName(name)} local moves it here first, or pick another name.`
+      : `@${queueName(seen)} is for every project, and ${nameOf(name)} is this project's: /aside q ${queueName(name)} global shares it first, or pick another name.`
+  }
   const there = await loadIdeas($, target)
   const fresh = ideas.filter(idea => !there.some(one => isSame(one.entry, idea.entry)))
   await addIdeas($, target, fresh.map(idea => idea.entry))
+  await moveSessionRecords($, name, target)
   await forgetGlobalIdeas($, ideas.map(idea => idea.key))
   await refreshBand($)
   const moved = formatCount(ideas.length, 'idea')
 
   return there.length === 0
-    ? `@${name} is now ${nameOf(target)}: ${moved}.`
-    : `Moved ${moved} from @${name} to ${nameOf(target)}, which now has ${there.length + fresh.length}.`
+    ? `${nameOf(name)} is now ${nameOf(target)}: ${moved}.`
+    : `Moved ${moved} from ${nameOf(name)} to ${nameOf(target)}, which now has ${there.length + fresh.length}.`
 }
 
 const isNumbers = (words: readonly string[]) => words.length > 0 && words.every(word => /^\d+$/.test(word))
+
+// /aside q NAME local | global: the queue of that name for every project goes to this project
+// alone, or this project's goes to every project, joining the queue of its name there; so a
+// queue this project's own hides here is taken in too. Each idea is written there first and taken
+// from here after, so a failure between leaves it in both, and running it again moves the rest.
+async function setScope($: Engine, name: string, isLocal: boolean): Promise<string> {
+  const typed = queueName(name)
+  if (name === GLOBAL) {
+    return 'The global list is for every project; /aside q NAME local keeps a named queue for this one.'
+  }
+  const source = isLocal ? typed : `.${typed}`
+  const target = isLocal ? `.${typed}` : typed
+  const ideas = await loadIdeas($, source)
+  const there = await loadIdeas($, target)
+  if (ideas.length === 0) {
+    if (there.length > 0) {
+      return isLocal ? `@${typed} is this project's already.` : `@${typed} is for every project already.`
+    }
+    return `@${typed} holds no ideas yet: "+@${typed}" starts it, for every project or, with the newQueues setting on local, for this one.`
+  }
+  const fresh = ideas.filter(idea => !there.some(one => isSame(one.entry, idea.entry)))
+  await addIdeas($, target, fresh.map(idea => idea.entry))
+  // What undo and an edit hold of the queue go with it, so neither brings back the one it left.
+  await moveSessionRecords($, source, target)
+  await forgetGlobalIdeas($, ideas.map(idea => idea.key))
+  await refreshBand($)
+  const moved = formatCount(ideas.length, 'idea')
+  if (there.length > 0) {
+    return `Moved ${moved} into ${isLocal ? `this project's @${typed}` : `@${typed} for every project`}, which now has ${there.length + fresh.length}.`
+  }
+
+  return isLocal ? `@${typed} is now this project's, with ${moved}; other projects no longer see it.` : `@${typed} is now for every project, with ${moved}.`
+}
 
 // /aside q NAME ...: a command on that queue when the words have its shape, else an idea for it,
 // as "+@NAME TEXT" would.
@@ -342,6 +395,9 @@ async function runQueue($: Engine, ctx: Context, name: string, args: readonly st
   if (verb === 'import' && rest.length > 0 && MARKDOWN_PATH.test(rest.join(' '))) {
     return importFile($, ctx, rest.join(' '), name)
   }
+  if ((verb === 'local' || verb === 'global') && rest.length === 0) {
+    return setScope($, name, verb === 'local')
+  }
   if (verb === 'rename' && rest.length === 1) {
     return renameQueue($, name, rest[0]!.replace(/^@/, ''))
   }
@@ -366,5 +422,5 @@ export async function runNamed($: Engine, ctx: Context, args: readonly string[])
     return 'A queue\'s name has letters, digits, "-" and "_", at most 20 of them: /aside q work'
   }
 
-  return runQueue($, ctx, name.toLowerCase(), rest)
+  return runQueue($, ctx, await resolveQueue($, name.toLowerCase(), ctx.settings.newQueues === 'local'), rest)
 }

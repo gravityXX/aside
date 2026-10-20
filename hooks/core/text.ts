@@ -80,6 +80,10 @@ export const formatDuration = (ms: number): string => {
   return minutes < 60 ? `${minutes} min` : `${Math.floor(minutes / 60)} h${minutes % 60 > 0 ? ` ${minutes % 60} min` : ''}`
 }
 
+// What a line that makes a named queue says of it: whom it is for, and how to make it the other.
+export const newQueueNote = (name: string, isLocal: boolean) =>
+  isLocal ? `a new queue of this project's; /aside q ${name} global shares it with every project` : `a new queue for every project; /aside q ${name} local keeps it for this one`
+
 // How long ago something was, by the clock: "just now", "5 min ago", "3 h ago", "2 days ago".
 // No date, which would need the person's time zone.
 export const formatAge = (ms: number): string => {

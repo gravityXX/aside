@@ -5,7 +5,7 @@ import type { Context } from '../context'
 import { inOrder, KINDS } from '../core/entries'
 import { MARKDOWN_PATH } from '../core/markdown'
 import { describeFailure, formatCount, shortenText } from '../core/text'
-import { countQueues, GLOBAL, loadEntries, loadIdeas, loadPlan, projectKeys, refreshBand } from '../io/store'
+import { countQueues, GLOBAL, isHiddenHere, isLocalQueue, loadEntries, loadIdeas, loadPlan, projectKeys, queueName, refreshBand, resolveQueue } from '../io/store'
 import { addEntries } from './capture'
 import { findEntries } from './find'
 import { showLog } from './history'
@@ -176,13 +176,14 @@ const COMMANDS: readonly Command[] = [
     name: 'q',
     // Anything after it: the queues for no project, a command on one of them, or an idea for it.
     takes: () => true,
-    usage: 'q [NAME [TEXT | here N ... | add N ... | remove N ... | edit N | pop [N] | move N M | clear | undo | import FILE | rename NEW]]',
+    usage: 'q [NAME [TEXT | here N ... | add N ... | remove N ... | edit N | pop [N] | move N M | clear | undo | import FILE | rename NEW | local | global]]',
     help: [
-      '/aside q - show the named queues, which belong to no project, and the global list among them',
+      '/aside q - show the named queues, for every project or for this one alone, and the global list among them',
       '/aside q NAME [TEXT] - show the queue NAME, or put TEXT in it, as "+@NAME TEXT" would; the commands of /aside g work on it too',
       '/aside q NAME clear | undo | rename NEW - empty it, bring back what its last clear took, or move it all to the queue NEW',
+      "/aside q NAME local | global - keep the queue for this project alone, which then hides one of its name for every project here, or share it with every project",
     ],
-    about: 'the named queues: ideas for no project',
+    about: 'the named queues: for every project or for this one',
   },
   {
     name: 'help',
@@ -198,7 +199,7 @@ const TEXT_HELP = '/aside TEXT - queue TEXT, as "+ TEXT" would ("/aside + run 3"
 const HELP = [
   'Queue an idea: start a message with "+". When every line starts with "+", each line is its own entry.',
   'Already typed it? End the message with the mark after a space ("... +", "... +?", "... +g", "... +@work") and it is queued whole.',
-  'For no project: "+g idea" goes to the global list, "+@work idea" to the queue named work, made by its first idea.',
+  'Beside this queue: "+g idea" goes to the global list, "+@work idea" to the queue named work, made by its first idea for every project, or for this one with newQueues on local.',
   'Comment on what the agents wrote: copy a fragment in the preview, then type',
   '  +? question   +! change   +- drop   ++ dig deeper',
   '  pin it yourself with @file, @file:42, @file#heading or #heading after the mark.',
@@ -330,8 +331,8 @@ const GLOBAL_VERBS = [
   { text: 'import', description: 'put the items of a markdown list on it' },
 ]
 
-// What Tab offers after "/aside q NAME ": the same commands on that queue, and its clear, undo
-// and rename.
+// What Tab offers after "/aside q NAME ": the same commands on that queue, and its rename, local
+// and global.
 const NAMED_VERBS = [
   { text: 'here', description: 'move its ideas into this queue' },
   { text: 'add', description: 'move ideas of this queue to it' },
@@ -343,18 +344,27 @@ const NAMED_VERBS = [
   { text: 'undo', description: 'bring back what its last clear took' },
   { text: 'import', description: 'put the items of a markdown list in it' },
   { text: 'rename', description: 'move all of it to a queue of another name' },
+  { text: 'local', description: 'keep it for this project alone' },
+  { text: 'global', description: 'share it with every project' },
 ]
 
 export async function completeAside(ctx: Context, $: Engine, e: Autocomplete[1], next: Autocomplete[2]) {
   const typed = e.text.slice(0, e.cursor)
   // The queues by name after "q", each with how many ideas it holds.
-  const queueName = /^\/aside\s+q\s+@?([A-Za-z0-9_-]*)$/i.exec(typed)
-  if (queueName) {
+  const nameTyped = /^\/aside\s+q\s+@?([A-Za-z0-9_-]*)$/i.exec(typed)
+  if (nameTyped) {
     const own = (await next(e)).suggestions
-    const word = queueName[1]!.toLowerCase()
-    const queues = (await countQueues($)).filter(one => one.name.startsWith(word) && one.name !== word)
+    const word = nameTyped[1]!.toLowerCase()
+    // By the name typed: one of this project's hides one every project sees of its name.
+    const queues = []
+    for (const one of await countQueues($)) {
+      const name = queueName(one.name)
+      if (name.startsWith(word) && name !== word && !(await isHiddenHere($, one.name))) queues.push({ ...one, typed: name, isLocal: isLocalQueue(one.name) })
+    }
 
-    return { suggestions: [...own, ...queues.map(one => ({ text: one.name, description: formatCount(one.count, 'idea') }))] }
+    return {
+      suggestions: [...own, ...queues.map(one => ({ text: one.typed, description: `${formatCount(one.count, 'idea')}${one.isLocal ? ", this project's" : ''}` }))],
+    }
   }
   // On a queue: its commands after "g" or its name, then its numbers, as many as the command takes.
   const queueVerb = /^\/aside\s+(?:g|q\s+@?([A-Za-z0-9_-]{1,20}))\s+(\S*)$/i.exec(typed)
@@ -366,7 +376,7 @@ export async function completeAside(ctx: Context, $: Engine, e: Autocomplete[1],
       const verbs = queueVerb[1] === undefined || queueVerb[1].toLowerCase() === GLOBAL ? GLOBAL_VERBS : NAMED_VERBS
       return { suggestions: [...own, ...verbs.filter(row => row.text.startsWith(word) && row.text !== word)] }
     }
-    const queue = queueLater![1]?.toLowerCase() ?? GLOBAL
+    const queue = await resolveQueue($, queueLater![1]?.toLowerCase() ?? GLOBAL, ctx.settings.newQueues === 'local')
     const verb = queueLater![2]!.toLowerCase()
     const count = queueLater![3]!.split(/\s+/).filter(Boolean).length
     const room = ['here', 'add', 'remove', 'rm'].includes(verb) ? Infinity : verb === 'move' || verb === 'mv' ? 2 : 1

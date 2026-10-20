@@ -56,23 +56,23 @@ export const queueSection = (entries: readonly Entry[], root: string): ListingSe
     : { title: summarizeQueue(entries), rows: entries.map((entry, i) => entryRow(entry, root, String(i + 1))) }
 
 // A queue of no project, as /aside q NAME shows it: the global list (/aside g), or a named
-// queue.
-export const namedSection = (name: string, entries: readonly Entry[]): ListingSection => ({
-  title: `${formatCount(entries.length, 'idea')} ${name === 'global' ? 'on the global list' : `in @${name}`}`,
+// queue, for every project or, with isLocal, for this one.
+export const namedSection = (name: string, entries: readonly Entry[], isLocal = false): ListingSection => ({
+  title: `${formatCount(entries.length, 'idea')} ${name === 'global' ? 'on the global list' : `in @${name}${isLocal ? ", this project's" : ''}`}`,
   rows: entries.map((entry, i) => entryRow(entry, '', String(i + 1))),
 })
 
 // Every queue of no project that holds an idea, as /aside q shows them: its name, how many
-// ideas and the newest one. The names are padded to the longest, as the row numbers they stand
-// in for would line up.
-export const queuesSection = (queues: readonly { name: string; count: number; newest: string }[]): ListingSection => {
+// ideas and the newest one, and whom it is for when that is worth a word. The names are padded to
+// the longest, as the row numbers they stand in for would line up.
+export const queuesSection = (queues: readonly { name: string; count: number; newest: string; note?: string }[]): ListingSection => {
   const labels = queues.map(one => (one.name === 'global' ? 'global' : `@${one.name}`))
   // Three at least, the width of a row number, which a shorter label would be pushed right to.
   const width = Math.max(3, ...labels.map(label => label.length))
 
   return {
-    title: `${formatCount(queues.length, 'queue')} outside this project`,
-    rows: queues.map((one, i) => ({ label: labels[i]!.padEnd(width), word: formatCount(one.count, 'idea'), lines: [shortenText(one.newest, 60)], about: [] })),
+    title: `${formatCount(queues.length, 'queue')} beside this project's queue`,
+    rows: queues.map((one, i) => ({ label: labels[i]!.padEnd(width), word: formatCount(one.count, 'idea'), lines: [shortenText(one.newest, 60)], about: one.note ? [one.note] : [] })),
   }
 }
 
