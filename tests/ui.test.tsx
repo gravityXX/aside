@@ -519,7 +519,7 @@ describe('the plan drawn as a line of steps', () => {
       expect((await ui.find({ type: 'Text', text: 'waiting' }))?.props.color).toBe('suggestion')
       expect((await ui.find({ type: 'Text', text: '↳ waiting for you, 5 min · two asks first.' }))?.props.dimColor).toBe(true)
       expect((await ui.find({ type: 'Text', text: '║' }))?.text).toBe('║')
-      expect((await ui.find({ type: 'Text', text: 'waits for you here: /aside continue ends it' }))?.text).toBe('waits for you here: /aside continue ends it')
+      expect((await ui.find({ type: 'Text', text: 'waits for you here: your answer, or /aside continue, ends it' }))?.text).toBe('waits for you here: your answer, or /aside continue, ends it')
       await ui.unmount()
     })
   }

@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" width="880" height="232" viewBox="0 0 880 232" role="img" aria-label="A step that asks you waits. Step 2 asks for a yes, and the line above the prompt says waits for you. Your answer, yes, build it, goes to that same step, which builds it while the line says step 2 running. continue then ends step 2 and runs step 3.">
+<svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" width="880" height="232" viewBox="0 0 880 232" role="img" aria-label="A step that asks you waits. Step 2 asks for a yes, and the line above the prompt says waits for you. Your answer, yes, build it, goes to that same step, which builds it while the line says step 2 running. Claude's reply to it ends step 2, and step 3 runs by itself.">
   <style>
     .lab { font: 600 13px -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #59636e; }
     .t { font: 500 13px -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #1f2328; }
@@ -19,19 +19,16 @@
   <text x="0" y="215" class="lab">The line above</text><line x1="132" y1="210" x2="880" y2="210" stroke="#d1d9e0" stroke-dasharray="2 4"/>
   <rect x="132" y="56" width="168" height="28" rx="6" fill="#ddf4ff" stroke="#54aeff"/><text x="216.0" y="75" class="t" text-anchor="middle">step 2 asks for a yes</text>
   <rect x="420" y="56" width="200" height="28" rx="6" fill="#ddf4ff" stroke="#54aeff"/><text x="520.0" y="75" class="t" text-anchor="middle">step 2 builds it</text>
-  <rect x="720" y="56" width="160" height="28" rx="6" fill="#ddf4ff" stroke="#54aeff"/><text x="800.0" y="75" class="t" text-anchor="middle">step 3</text>
+  <rect x="640" y="56" width="240" height="28" rx="6" fill="#ddf4ff" stroke="#54aeff"/><text x="760.0" y="75" class="t" text-anchor="middle">step 3, by itself</text>
+  <path d="M620 70 H636" stroke="#818b98" stroke-width="1.5" fill="none" marker-end="url(#a)"/>
   <rect x="304" y="126" width="112" height="28" rx="14" fill="#f6f8fa" stroke="#d1d9e0"/><text x="360.0" text-anchor="middle" y="145" class="m">yes, build it</text>
   <path d="M360 124 V90" stroke="#818b98" stroke-width="1.5" fill="none" marker-end="url(#a)"/>
-  <rect x="626" y="126" width="88" height="28" rx="14" fill="#dafbe1" stroke="#4ac26b"/><text x="670.0" text-anchor="middle" y="145" class="m">continue</text>
-  <path d="M670 124 V90" stroke="#4ac26b" stroke-width="1.5" fill="none" marker-end="url(#a)"/>
   <rect x="132.5" y="196" width="747" height="28" rx="6" fill="#fff8c5" stroke="#d4a72c"/>
   <line x1="300" y1="200" x2="300" y2="220" stroke="#d4a72c"/>
   <line x1="420" y1="200" x2="420" y2="220" stroke="#d4a72c"/>
   <line x1="620" y1="200" x2="620" y2="220" stroke="#d4a72c"/>
-  <line x1="720" y1="200" x2="720" y2="220" stroke="#d4a72c"/>
   <text x="216" y="214" class="ms" text-anchor="middle">step 2 running</text>
   <text x="360" y="214" class="ms" text-anchor="middle">waits for you</text>
   <text x="520" y="214" class="ms" text-anchor="middle">step 2 running</text>
-  <text x="670" y="214" class="ms" text-anchor="middle">waits for you</text>
-  <text x="800" y="214" class="ms" text-anchor="middle">step 3 running</text>
+  <text x="760" y="214" class="ms" text-anchor="middle">step 3 running</text>
 </svg>

@@ -70,13 +70,13 @@ With the `planModel` setting on `sonnet`, `haiku` or `opus`, one call to that mo
 
 ## Answer a step that asks you
 
-A step that needs your answer or decision, such as a yes before a push, makes Claude call the wait tool. The step then waits for you: answer as usual, and Claude goes on with that same step, for as many turns as it takes. <kbd>continue</kbd> ends the step, with the time it took by the clock, the wait for you included, and what its last turn said, and runs the next step of the run, if there is one.
+A step that needs your answer or decision, such as a yes before a push, makes Claude call the wait tool. The step then waits for you: answer as usual, and Claude goes on with that same step. Its reply to your answer ends the step, with the time it took by the clock, the wait for you included, and what that reply said, and the next step of the run starts by itself, unless Claude asks again with the wait tool. <kbd>continue</kbd> ends a step that waits without an answer.
 
-![A step that asks you waits. Step 2 asks for a yes, and the line above the prompt says waits for you. Your answer, yes, build it, goes to that same step, which builds it while the line says step 2 running. continue then ends step 2 and runs step 3.](../assets/use-waiting-light.svg#gh-light-mode-only)
-![A step that asks you waits. Step 2 asks for a yes, and the line above the prompt says waits for you. Your answer, yes, build it, goes to that same step, which builds it while the line says step 2 running. continue then ends step 2 and runs step 3.](../assets/use-waiting-dark.svg#gh-dark-mode-only)
+![A step that asks you waits. Step 2 asks for a yes, and the line above the prompt says waits for you. Your answer, yes, build it, goes to that same step, which builds it while the line says step 2 running. Claude's reply to it ends step 2, and step 3 runs by itself.](../assets/use-waiting-light.svg#gh-light-mode-only)
+![A step that asks you waits. Step 2 asks for a yes, and the line above the prompt says waits for you. Your answer, yes, build it, goes to that same step, which builds it while the line says step 2 running. Claude's reply to it ends step 2, and step 3 runs by itself.](../assets/use-waiting-dark.svg#gh-dark-mode-only)
 
-- **The line above the prompt** says `step 2 running` while Claude works and `step 2 waits for you` in between, with a <kbd>continue</kbd> button.
-- **The last step of a run** sums the run up only once <kbd>continue</kbd> ends it, in one more short turn.
+- **The line above the prompt** says `step 2 running` while Claude works and `step 2 waits for you` in between, with a <kbd>continue</kbd> button that ends the step without an answer.
+- **The last step of a run** sums the run up in the reply to your answer, or, when <kbd>continue</kbd> ends it, in one more short turn.
 - **`/aside stop`** on a step that waits ends it as it stands, and the run stops there.
 - **A turn you interrupt** after the step has asked leaves it waiting, with its time and its last result. A step interrupted before it asks stops the plan and is to do again.
 

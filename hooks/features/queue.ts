@@ -286,7 +286,7 @@ export async function restoreTaken($: Engine): Promise<string> {
   const keys = await projectKeys($)
   const running = (await loadPlan($, keys.plan)).active
   if (running && (isWaiting(running) || running.sessionId === (await $.session.id()))) {
-    const state = isWaiting(running) ? (running.isAnswered ? 'waits for /aside continue' : 'waits for your answer') : 'is running'
+    const state = isWaiting(running) ? (running.isAnswered ? 'waits for your answer again or /aside continue' : 'waits for your answer') : 'is running'
     return `Step ${running.step + 1} of the plan ${state}; /aside stop first, so nothing is done twice.`
   }
   const { entries, tagIds } = await bringBackTake($, keys)

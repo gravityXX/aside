@@ -253,13 +253,14 @@ export const stepPrompt = (steps: readonly Step[], index: number, mode: StepMode
 // plugin's own prompts (isOwnPrompt).
 export const answerContext = (steps: readonly Step[], index: number, isLast: boolean, waitTool: string): string => {
   const step = steps[index]!
-  const summary = isLast ? ' It is the last step of this run, so write no summary of the run: it comes once I press continue.' : ''
+  const summary = isLast
+    ? ` It is the last step of this run: if your reply ends it, write the "Result: " line, then end your reply with "## Summary of the run": one line per step of the plan on what was done, then what is still open, then what to do next.${['', ...resultsSoFar(steps, index)].join('\n')}\nIf you call the ${waitTool} tool, write no summary yet.`
+    : ''
 
   return (
     `(Added by the aside plugin: step ${index + 1} of ${steps.length} of the queue plan, "${step.title}", waits for my answer, and this message most likely gives it. ` +
-    `If it asks for something else, do that, and the step stays open; otherwise go on with that step only. If you need my answer again, call the ${waitTool} tool and stop. ` +
-    `Either way, end your reply with one line that starts "Result: " and says in one sentence what the step has done so far and what is still open. ` +
-    `The step ends when I press continue.${summary})`
+    `The step ends with your reply to it, unless you call the ${waitTool} tool: call it if you need my answer again, or if this message asks for something else, which you then do, so the step keeps waiting for my answer. ` +
+    `Otherwise go on with that step only. Either way, end your reply with one line that starts "Result: " and says in one sentence what the step has done and what is still open.${summary})`
   )
 }
 

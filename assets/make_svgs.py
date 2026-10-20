@@ -581,26 +581,25 @@ def uc_waiting(c: Theme) -> str:
     body = lanes(c, [("Claude", 70), ("You", 140), ("The line above", 210)], start)
     body += bar(c, start, 56, 168, "step 2 asks for a yes")
     body += bar(c, 420, 56, 200, "step 2 builds it")
-    body += bar(c, 720, 56, 160, "step 3")
+    body += bar(c, 640, 56, 240, "step 3, by itself")
+    body += arrow("M620 70 H636", c["faint"])
     body += pill(c, 304, 126, 112, "yes, build it", "idle") + arrow(
         "M360 124 V90", c["faint"]
     )
-    body += pill(c, 626, 126, 88, "continue", "go") + arrow("M670 124 V90", c["gob"])
     body += f'  <rect x="{start + 0.5}" y="196" width="{W - start - 1}" height="28" rx="6" fill="{c["band"]}" stroke="{c["bandb"]}"/>\n'
-    for x in (300, 420, 620, 720):
+    for x in (300, 420, 620):
         body += f'  <line x1="{x}" y1="200" x2="{x}" y2="220" stroke="{c["bandb"]}"/>\n'
     for x, text in (
         (216, "step 2 running"),
         (360, "waits for you"),
         (520, "step 2 running"),
-        (670, "waits for you"),
-        (800, "step 3 running"),
+        (760, "step 3 running"),
     ):
         body += f'  <text x="{x}" y="214" class="ms" text-anchor="middle">{esc(text)}</text>\n'
     label = (
         "A step that asks you waits. Step 2 asks for a yes, and the line above the prompt says waits for you. Your answer, yes, "
-        "build it, goes to that same step, which builds it while the line says step 2 running. continue then ends step 2 and "
-        "runs step 3."
+        "build it, goes to that same step, which builds it while the line says step 2 running. Claude's reply to it ends "
+        "step 2, and step 3 runs by itself."
     )
     return canvas(c, 232, label, body)
 
