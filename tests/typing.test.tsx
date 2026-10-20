@@ -373,6 +373,28 @@ describe('tidying what was typed', () => {
     expect(await shown()).toEqual(['The queue is empty.'])
   })
 
+  test('an entry removed while a tidy reply is on its way to the store stays removed, and the tidied text is kept', async ($, on) => {
+    const { w, clock, type, aside, shown, idle } = world($, on, { tidy: { 'dark mod': '<note>Dark mode.</note>' } })
+    await type('+ fix the login bug')
+    await idle()
+    // The tidied text is a moment on its way to the store while the first entry is removed.
+    let removing: Promise<string> | undefined
+    w.meanwhile = async () => {
+      w.meanwhile = undefined
+      w.beforeWrite = async key => {
+        if (!key.startsWith('queue:')) return
+        w.beforeWrite = undefined
+        removing = aside('rm 1')
+        await clock.sleep(2)
+      }
+    }
+    await type('+ dark mod')
+    await idle()
+
+    expect(await removing).toBe('Removed: fix the login bug')
+    expect(await shown()).toEqual(['1 idea waiting', '1 idea Dark mode.'])
+  })
+
   test('with tidy off, nothing is sent to the model', { options: { tidy: 'off' } }, async ($, on) => {
     const { asked, type, shown, idle } = world($, on, { tidy: { 'dark mode': '<note>Dark mode.</note>' } })
     await type('+ dark mode')
