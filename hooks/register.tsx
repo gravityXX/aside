@@ -7,7 +7,7 @@ import {
   noteBackgroundEnd,
   noteBackgroundWork,
   noteStepAnswer,
-  onTurnEnd,
+  endSessionSteps, onTurnEnd,
   onTurnStart,
   pausePlanFromTool,
   planToolFailed,
@@ -47,6 +47,7 @@ export const register: Register = (on, options) => {
 
   on('turn.start', ($, e, next) => onTurnStart(ctx, $, e, next)).catch(turnStartFailed)
   on('turn.complete', ($, e, next) => onTurnEnd(ctx, $, e, next)).catch(turnEndFailed)
+  on('session.end', ($, e, next) => endSessionSteps(ctx, $, e, next))
 
   on('command.run', { command: 'aside' }, ($, e) => runAside(ctx, $, e)).catch(asideFailed)
 
