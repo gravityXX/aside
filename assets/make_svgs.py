@@ -470,7 +470,7 @@ def uc_capture(c: Theme) -> str:
     body += prompt(y, "+", " dark mode", "Enter: it never reaches Claude")
     y += ROW
     body += line(
-        y, [('queued "dark mode" (1 waiting)', "k")], "a line in the transcript"
+        y, [('queued "dark mode" · 1 waiting', "k")], "a line in the transcript"
     )
     y += ROW * 1.5
     body += line(
@@ -479,7 +479,7 @@ def uc_capture(c: Theme) -> str:
         "a draft ending with + too",
     )
     y += ROW
-    body += line(y, [('queued "make the errors friendlier" (2 waiting)', "k")])
+    body += line(y, [('queued "make the errors friendlier" · 2 waiting', "k")])
     band_y = y + 16
     body += band(c, band_y, "aside: 2 ideas · ", ["list"])
     label = (

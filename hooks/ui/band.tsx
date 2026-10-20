@@ -43,11 +43,10 @@ export async function drawBand(ctx: Context, $: Engine, e: BandRender[1], next: 
   else if (left > 0) parts.push(plan)
   if (now.ideas) parts.push(formatCount(now.ideas, 'idea'))
   if (now.comments + now.tags) parts.push(formatCount(now.comments + now.tags, 'comment'))
-  // A reminder of the ideas that wait for no project, two queues of them at most: /aside q
-  // lists them all.
-  const queues = [...(now.global ? [`${now.global} global`] : []), ...(now.named ?? []).map(one => `${one.count} @${one.name}`)]
-  parts.push(...queues.slice(0, 2))
-  if (queues.length > 2) parts.push(`+${formatCount(queues.length - 2, 'queue')}`)
+  // A reminder of the ideas in the other queues, as one count: /aside q names them.
+  const queues = (now.global ? 1 : 0) + (now.named?.length ?? 0)
+  const elsewhere = (now.global ?? 0) + (now.named ?? []).reduce((sum, one) => sum + one.count, 0)
+  if (elsewhere) parts.push(`${elsewhere} in ${queues === 1 ? 'another queue' : 'other queues'}`)
   const action: Action | undefined =
     now.running !== undefined ? 'stop' : now.waiting !== undefined || now.paused !== undefined ? 'continue' : left > 0 ? 'run plan' : undefined
 
