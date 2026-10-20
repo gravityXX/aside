@@ -7,7 +7,7 @@ import { formatPlace, foundSection, listingText, planSection } from '../core/lis
 import type { ListingSection } from '../core/listing'
 import { TAG_NOTE } from '../core/prompts'
 import { foldText, splitWords } from '../core/text'
-import { countQueues, GLOBAL, loadEntries, loadIdeas, loadPlan, projectKeys } from '../io/store'
+import { countQueues, GLOBAL, isHiddenHere, isLocalQueue, loadEntries, loadIdeas, loadPlan, projectKeys, queueName } from '../io/store'
 import { tagsInFiles } from './queue'
 
 // What a search looks at in an entry: its text, the quote it is about and where it points, as
@@ -42,9 +42,18 @@ export async function findEntries($: Engine, ctx: Context, query: string): Promi
   // With no step left to do, /aside run N runs queue entry N, so a plan done gets no hint of it.
   const planTitle = stored.steps.some(step => !step.isDone) ? 'In the plan (/aside run N)' : 'In the plan, done (/aside)'
   if (plan && found.size > 0) sections.push({ title: planTitle, rows: plan.rows.filter(row => found.has(row.label)) })
-  for (const { name } of await countQueues($)) {
+  const queues = await countQueues($)
+  for (const { name } of queues) {
     const ideas = numbered(shown(await loadIdeas($, name)), idea => searchedText(idea.entry, keys.root))
-    const title = name === GLOBAL ? 'On the global list (/aside g)' : `In @${name} (/aside q ${name})`
+    const typed = queueName(name)
+    // One every project sees that this project's own of its name hides is not under /aside q NAME here.
+    const isHidden = await isHiddenHere($, name)
+    const title =
+      name === GLOBAL
+        ? 'On the global list (/aside g)'
+        : isHidden
+          ? `In @${typed} for every project, hidden here by this project's`
+          : `In @${typed}${isLocalQueue(name) ? ", this project's" : ''} (/aside q ${typed})`
     if (ideas.length > 0) sections.push(foundSection(title, ideas.map(({ item, label }) => ({ entry: item.entry, label })), keys.root))
   }
   if (sections.length === 0) {

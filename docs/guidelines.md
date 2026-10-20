@@ -49,7 +49,7 @@ Each value lives where its lifetime fits:
 - **Atoms** (`band`, `files` in `io/store.ts`) - values a drawing reads. They last the session, survive a reload, and a write redraws every drawing that read them.
 - **`$.store`** - the queue, the plan and what undo brings back. It lasts across sessions and every session on the machine shares it.
 
-5. Store keys are made per project root by `projectKeys`; never a bare key. The one exception is the global list and the named queues, ideas that belong to no project: one key per idea, under `GLOBAL_IDEA` for the global list and `named:<name>:idea:` for any other queue in `io/store.ts`, so sessions in different projects add and take them without writing over each other's, and a session's records for them (`global:editing:`, `cleared:<name>:`), named by the session.
+5. Store keys are made per project root by `projectKeys`; never a bare key. The one exception is the global list and the named queues, ideas outside a project's own queue: one key per idea, under `GLOBAL_IDEA` for the global list and `named:<name>:idea:` for any other queue, or `local:<scope>:<name>:idea:` for one of a single project, its scope a hash of the root, in `io/store.ts`, so sessions in different projects add and take them without writing over each other's, and a session's records for them (`global:editing:`, `cleared:<name>:`, or `cleared:local:<scope>:<name>:` for a local queue), named by the session.
 6. What belongs to one session names it, since the store is shared (`Plan.active.sessionId`).
 7. Stored data from the last release must still load. A new field is optional; renaming or removing one needs code that reads the old shape.
 8. A flag in stored data is `isX?: true`, left out when false.
@@ -109,7 +109,7 @@ The plugin runs on the Claude Code plugin API: hooks `($, e, next)` added with `
 12. A boolean reads as a question: `isRunning`, `isOwnTurn`, `isPinned`, `canPlan`.
 13. A function is named for what it does for the person: `popEntry`, `handOverQueue`, `refreshBand`. `tryX` returns `undefined` when it fails.
 14. A constant that holds fixed data is `UPPER_CASE`: `KINDS`, `STEP_MARKER`, `LIST_PANE`.
-15. The product's words mean one thing everywhere: an **entry** is an **idea** or a **comment**; a **tag** is a `<!-- ? -->` comment in a file; the **queue** holds entries; the **global list** holds ideas that belong to no project, and so does a **named queue** (`@work`), the global list being the one named `global`; a **plan** has **steps**; entries are **handed over** and steps **run**.
+15. The product's words mean one thing everywhere: an **entry** is an **idea** or a **comment**; a **tag** is a `<!-- ? -->` comment in a file; the **queue** holds entries; the **global list** holds ideas that belong to no project, and so does a **named queue** (`@work`) for every project, the global list being the one named `global`, while a named queue may instead be one project's alone (`/aside q work local`); a **plan** has **steps**; entries are **handed over** and steps **run**.
 
 ### Style
 

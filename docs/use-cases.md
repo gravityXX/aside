@@ -95,6 +95,7 @@ Some ideas belong to no project. `+g` puts one on the global list and `+@work` i
 - **`/aside q`** lists the global list and every named queue, with its count and newest idea.
 - **`/aside g`** and **`/aside q work`** show one, and take the commands the queue does: `remove`, `edit`, `pop`, `move` and `clear`. Their `undo` brings back what this session's last `clear` of that list took.
 - **`/aside q work rename office`** moves a queue to another name, merging it with any ideas already there.
+- **`/aside q work local`** keeps a queue for this project alone, so other projects no longer see it, and `global` shares it again; the `newQueues` setting says which a queue made by its first idea is.
 
 ## Work in several sessions at once
 

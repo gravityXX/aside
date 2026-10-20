@@ -8,7 +8,7 @@ import type { Order, TypedEntry } from '../core/entries'
 import { formatPlace, isExportText } from '../core/listing'
 import { findFragment, findHeading, fragmentWords, MARKDOWN_PATH, MIN_FRAGMENT_WORDS } from '../core/markdown'
 import { readTidyReply, TIDY_SYSTEM, tidyPrompt } from '../core/prompts'
-import { describeError, formatCount, relativePath, shortenText } from '../core/text'
+import { describeError, formatCount, newQueueNote, relativePath, shortenText } from '../core/text'
 import { readClipboard, readGitBranch, resolveFile, searchMarkdown, tryReadFile } from '../io/host'
 import {
   addIdeas,
@@ -21,9 +21,12 @@ import {
   loadGlobalEditing,
   loadIdeas,
   GLOBAL,
+  isLocalQueue,
   isOut,
   projectKeys,
+  queueName,
   queueOf,
+  resolveQueue,
   refreshBand,
   restoreIdea,
   readTrackedFiles,
@@ -202,7 +205,7 @@ async function storeListed($: Engine, ideas: readonly Listed[], isSingle: boolea
     return []
   }
   const editing = isSingle ? await loadGlobalEditing($) : undefined
-  if (editing && queueOf(editing) === ideas[0]!.list) {
+  if (editing && (await queueOf($, editing)) === ideas[0]!.list) {
     const idea = await restoreIdea($, { key: editing.key, entry: { ...editing.entry, text: ideas[0]!.entry.text, raw: ideas[0]!.entry.raw } }, editing.entry)
     await forgetGlobalEditing($)
 
@@ -223,7 +226,8 @@ async function storeListed($: Engine, ideas: readonly Listed[], isSingle: boolea
 }
 
 // What a message queued for queues of no project says, one part per queue, in the order typed:
-// the global list by its count, any other queue by its name, and a queue the message made as new.
+// the global list by its count, any other queue by its name, and a queue the message made as
+// new, with whom it is for and how to make it the other.
 const reportListed = (ideas: readonly Listed[], band: Band, isNew: (list: string) => boolean): string[] =>
   [...new Set(ideas.map(one => one.list))].map(list => {
     const own = ideas.filter(one => one.list === list)
@@ -231,9 +235,10 @@ const reportListed = (ideas: readonly Listed[], band: Band, isNew: (list: string
     if (list === GLOBAL) {
       return `queued ${what} to the global list (${band.global ?? 0} global)`
     }
-    const count = band.named?.find(one => one.name === list)?.count ?? own.length
+    const name = queueName(list)
+    const count = band.named?.find(one => one.name === name)?.count ?? own.length
 
-    return isNew(list) ? `queued ${what} to @${list}, a new queue` : `queued ${what} to @${list} (${count} in @${list})`
+    return isNew(list) ? `queued ${what} to @${name}, ${newQueueNote(name, isLocalQueue(list))}` : `queued ${what} to @${name} (${count} in @${name})`
   })
 
 // A tidied text from the small model, or undefined when none comes in time.
@@ -254,7 +259,7 @@ async function tidyGlobalIdea($: Engine, idea: GlobalIdea): Promise<void> {
   if (fixed === undefined) {
     return
   }
-  const now = (await loadIdeas($, queueOf(idea))).find(one => one.key === idea.key)
+  const now = (await loadIdeas($, (await queueOf($, idea)) ?? GLOBAL)).find(one => one.key === idea.key)
   if (now === undefined || now.entry.text !== idea.entry.text) {
     return
   }
@@ -328,11 +333,17 @@ export async function addEntries(
 
   const added: Entry[] = []
   const notes: string[] = []
-  const listed = typed.flatMap(one => (one.list === undefined ? [] : [{ list: one.list, entry: { text: one.text, raw: one.raw, at: now, kind: 'idea' as const } }]))
+  // Each "+@name" to the queue that name means here, or a new one of the scope the setting gives.
+  const listed: Listed[] = []
+  for (const one of typed) {
+    if (one.list === undefined) continue
+    const list = await resolveQueue($, one.list, ctx.settings.newQueues === 'local')
+    listed.push({ list, entry: { text: one.text, raw: one.raw, at: now, kind: 'idea' as const } })
+  }
   // The queues there before, so a message that makes one says so; the queue of an idea out for
   // editing is there still, even when that idea was its only one.
   const out = listed.length > 0 ? await loadGlobalEditing($) : undefined
-  const queues = listed.length > 0 ? new Set([...(await countQueues($)).map(one => one.name), ...(out ? [queueOf(out)] : [])]) : new Set<string>()
+  const queues = listed.length > 0 ? new Set([...(await countQueues($)).map(one => one.name), ...(out ? [(await queueOf($, out)) ?? GLOBAL] : [])]) : new Set<string>()
   for (const one of typed.filter(entry => entry.list === undefined)) {
     if (isRework) {
       const { text: _text, raw: _raw, ...kept } = editing!.idea

@@ -46,6 +46,16 @@
         "opus"
       ]
     },
+    "newQueues": {
+      "type": "string",
+      "title": "New named queues",
+      "description": "Whom a named queue made by its first idea, as in +@work, is for. global: every project sees it. local: only the project it was made in. /aside q NAME local or global changes one later.",
+      "default": "global",
+      "options": [
+        "global",
+        "local"
+      ]
+    },
     "order": {
       "type": "string",
       "title": "Which entry comes first",

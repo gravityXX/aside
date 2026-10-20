@@ -18,6 +18,9 @@ export type Settings = {
   // queue over at once, as /aside plan or /aside run all would.
   readonly afterAnswer: 'wait' | 'plan' | 'send'
   readonly planModel: PlanModel
+  // Whom a named queue made by its first idea ("+@name", /aside q NAME TEXT, add or import) is
+  // for: every project, or this one alone.
+  readonly newQueues: 'global' | 'local'
 }
 
 export type ToolOutput = { text: string; turnId: string | undefined; isError: boolean }
@@ -70,6 +73,7 @@ export const createContext = (options: Parameters<Register>[1]): Context => ({
     tidy: options.tidy !== 'off',
     afterAnswer: options.afterClaudeAnswers === 'plan' ? 'plan' : options.afterClaudeAnswers === 'run all' ? 'send' : 'wait',
     planModel: PLAN_MODELS.find(model => model === options.planModel) ?? 'session',
+    newQueues: options.newQueues === 'local' ? 'local' : 'global',
   },
   session: {
     planTool: 'mcp__aside__plan',

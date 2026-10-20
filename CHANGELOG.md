@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- A named queue can belong to one project. `/aside q work local` keeps it for this project, so `+@work` here goes to it and other projects no longer see it, and `/aside q work global` shares it again, joining a queue of its name for every project. The `newQueues` setting, `global` by default or `local`, says whom a queue made by its first idea is for, and the line that makes one says which it is and how to change it. `/aside q` and `/aside find` mark a queue of this project's, and one for every project that it hides here; Tab offers this project's. `/aside q work local` and `global` no longer queue that word as an idea, and `/aside q` heads its list "beside this project's queue".
+
 ## 0.26.0 - 2026-10-19
 
 - `/aside log` lists the plans run to their end, the last 5 with what each step did and how long it took, newest first, and `/aside log N` shows any of the 20 it keeps. A plan comes there once another takes its place, so `/aside` keeps showing the one just run.

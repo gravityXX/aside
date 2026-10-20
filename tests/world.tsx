@@ -57,6 +57,8 @@ export type Machine = {
   refuseWrite?: number
   // The store refuses the next write to a key that starts with this, once.
   refuseWriteTo?: string
+  // The store refuses the n-th delete from now, once.
+  refuseDelete?: number
   // Runs before the store takes a write, with its key: what else happens while a write is
   // on its way.
   beforeWrite?: (key: string) => Promise<unknown>
@@ -122,6 +124,10 @@ export const world = ($: Engine, on: On, given: Partial<Machine> = {}) => {
     return { value: undefined }
   })
   on('store.delete', ($e, e) => {
+    if (w.refuseDelete !== undefined && --w.refuseDelete === 0) {
+      w.refuseDelete = undefined
+      return { deny: 'the store is busy' }
+    }
     store.delete(e.key)
     return { value: undefined }
   })
