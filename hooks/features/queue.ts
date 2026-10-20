@@ -8,9 +8,9 @@ import type { Listed, ListingSection } from '../core/listing'
 import { popPrompt } from '../core/prompts'
 import { canonicalPath, formatCount, isAbsolutePath, isWindowsPath, relativePath, shortenText } from '../core/text'
 import { resolveFile, tryReadFile, writeExport } from '../io/host'
-import { bringBackTake, takeCleared } from '../io/queue'
-import { loadEntries, loadHanded, loadPlan, projectKeys, readTrackedFiles, refreshBand, saveEditing, saveEntries, tagId, trackFile } from '../io/store'
-import type { Keys } from '../io/store'
+import { bringBackTake, changeQueue, takeCleared } from '../io/queue'
+import type { QueueChange } from '../io/queue'
+import { loadEntries, loadHanded, loadPlan, projectKeys, readTrackedFiles, refreshBand, saveEditing, tagId, trackFile } from '../io/store'
 
 // The <!-- ? --> tags in the session's markdown files, as entries of their own; `onlyNew`
 // leaves out those an earlier /aside already handed over.
@@ -168,91 +168,108 @@ export async function showWhileWorking($: Engine, ctx: Context, view: PaneView, 
   return `Wrote ${what} above while Claude was working.`
 }
 
-// The queue as /aside shows it: every number a command takes is a place in this list.
-async function shownQueue($: Engine, ctx: Context) {
-  const keys = await projectKeys($)
+// Changes the queue as /aside shows it, in its turn on the queue's chain (2.9): `change` gets
+// the list as it is stored by then, numbered as /aside numbers it, so a tidy reply or an entry
+// typed meanwhile is neither stored over nor taken for the one shown. What it makes of the list
+// goes back in the order the store keeps, oldest first.
+function changeShownQueue<T>($: Engine, ctx: Context, change: (list: Entry[]) => QueueChange<T> | Promise<QueueChange<T>>): Promise<T> {
+  return changeQueue($, async stored => {
+    const made = await change(inOrder(stored, ctx.settings.order))
 
-  return { keys, list: inOrder(await loadEntries($, keys.queue), ctx.settings.order) }
-}
-
-// Stores a list taken from shownQueue back in the order the store keeps, oldest first.
-async function saveShownQueue($: Engine, ctx: Context, keys: Keys, list: readonly Entry[]) {
-  await saveEntries($, keys.queue, inOrder(list, ctx.settings.order))
+    return made.list === undefined ? made : { ...made, list: inOrder(made.list, ctx.settings.order) }
+  })
 }
 
 const isPlace = (n: number, length: number) => Number.isInteger(n) && n >= 1 && n <= length
 
+// The entry goes into the prompt box in the change that takes it out, so what the box gets is
+// what leaves the queue, and the record of where it stood is there before a message sent next.
 export async function editEntry($: Engine, ctx: Context, n: number): Promise<string> {
-  const { keys, list } = await shownQueue($, ctx)
-  if (list.length === 0) {
-    return 'The queue is empty.'
-  }
-  if (!isPlace(n, list.length)) {
-    return `Give a number from 1 to ${list.length}, as /aside list shows them.`
-  }
-  const entry = list[n - 1]!
-  const filled = await $.prompt.fill({ text: entry.raw ?? `+ ${entry.text}`, mode: 'insert' })
-  if (!filled.isFilled) {
-    return 'The prompt box cannot take it now; the entry stays in the queue.'
-  }
-  list.splice(n - 1, 1)
-  await saveShownQueue($, ctx, keys, list)
-  await saveEditing($, keys.editing, { index: n - 1, idea: entry })
-  await refreshBand($)
+  const keys = await projectKeys($)
+  const { text, isTaken } = await changeShownQueue($, ctx, async list => {
+    if (list.length === 0) {
+      return { value: { text: 'The queue is empty.', isTaken: false } }
+    }
+    if (!isPlace(n, list.length)) {
+      return { value: { text: `Give a number from 1 to ${list.length}, as /aside list shows them.`, isTaken: false } }
+    }
+    const entry = list[n - 1]!
+    const filled = await $.prompt.fill({ text: entry.raw ?? `+ ${entry.text}`, mode: 'insert' })
+    if (!filled.isFilled) {
+      return { value: { text: 'The prompt box cannot take it now; the entry stays in the queue.', isTaken: false } }
+    }
+    const text = `Entry ${n} is in the prompt box: change it and press Enter; it goes back to place ${n}, still pointing where it did.`
 
-  return `Entry ${n} is in the prompt box: change it and press Enter; it goes back to place ${n}, still pointing where it did.`
+    return {
+      list: list.filter((_entry, i) => i !== n - 1),
+      value: { text, isTaken: true },
+      afterSave: () => saveEditing($, keys.editing, { index: n - 1, idea: entry }),
+    }
+  })
+  if (isTaken) await refreshBand($)
+
+  return text
 }
 
 export async function moveEntry($: Engine, ctx: Context, from: number, to: number): Promise<string> {
-  const { keys, list } = await shownQueue($, ctx)
-  if (list.length < 2) {
-    return 'Nothing to move.'
-  }
-  if (!isPlace(from, list.length) || !isPlace(to, list.length)) {
-    return `Give two places from 1 to ${list.length}: /aside move 3 1`
-  }
-  const [entry] = list.splice(from - 1, 1)
-  list.splice(to - 1, 0, entry!)
-  await saveShownQueue($, ctx, keys, list)
+  const { root } = await projectKeys($)
 
-  return listingText([queueSection(list, keys.root)])
+  return changeShownQueue($, ctx, list => {
+    if (list.length < 2) {
+      return { value: 'Nothing to move.' }
+    }
+    if (!isPlace(from, list.length) || !isPlace(to, list.length)) {
+      return { value: `Give two places from 1 to ${list.length}: /aside move 3 1` }
+    }
+    const [entry] = list.splice(from - 1, 1)
+    list.splice(to - 1, 0, entry!)
+
+    return { list, value: listingText([queueSection(list, root)]) }
+  })
 }
 
 // The first entry, or entry `n`, taken out of the queue into the box, ready to send: no
-// "+" in front, a comment with what it is about.
+// "+" in front, a comment with what it is about. Into the box in the change that takes it out,
+// as /aside edit does.
 export async function popEntry($: Engine, ctx: Context, n?: number): Promise<string> {
-  const { keys, list } = await shownQueue($, ctx)
-  if (list.length === 0) {
-    return 'The queue is empty.'
-  }
-  const at = n ?? 1
-  if (!isPlace(at, list.length)) {
-    return `Give a number from 1 to ${list.length}, as /aside shows them.`
-  }
-  const entry = list[at - 1]!
-  const filled = await $.prompt.fill({ text: popPrompt(entry, keys.root), mode: 'insert' })
-  if (!filled.isFilled) {
-    return 'The prompt box cannot take it now; the entry stays in the queue.'
-  }
-  list.splice(at - 1, 1)
-  await saveShownQueue($, ctx, keys, list)
-  await refreshBand($)
+  const { root } = await projectKeys($)
+  const { text, isTaken } = await changeShownQueue($, ctx, async list => {
+    if (list.length === 0) {
+      return { value: { text: 'The queue is empty.', isTaken: false } }
+    }
+    const at = n ?? 1
+    if (!isPlace(at, list.length)) {
+      return { value: { text: `Give a number from 1 to ${list.length}, as /aside shows them.`, isTaken: false } }
+    }
+    const entry = list[at - 1]!
+    const filled = await $.prompt.fill({ text: popPrompt(entry, root), mode: 'insert' })
+    if (!filled.isFilled) {
+      return { value: { text: 'The prompt box cannot take it now; the entry stays in the queue.', isTaken: false } }
+    }
 
-  return `In the prompt box, ready to send: ${shortenText(entry.text, 60)}`
+    return { list: list.filter((_entry, i) => i !== at - 1), value: { text: `In the prompt box, ready to send: ${shortenText(entry.text, 60)}`, isTaken: true } }
+  })
+  if (isTaken) await refreshBand($)
+
+  return text
 }
 
 // Removes the entries at places `numbers`, all of them or none when one is out of range.
 export async function removeEntries($: Engine, ctx: Context, numbers: readonly number[]): Promise<string> {
-  const { keys, list } = await shownQueue($, ctx)
-  if (list.length === 0) {
-    return 'The queue is empty.'
+  const gone = await changeShownQueue<string | Entry[]>($, ctx, list => {
+    if (list.length === 0) {
+      return { value: 'The queue is empty.' }
+    }
+    if (!numbers.every(n => isPlace(n, list.length))) {
+      return { value: `Give ${numbers.length === 1 ? 'a number' : 'numbers'} from 1 to ${list.length}, as /aside list shows them.` }
+    }
+    const places = new Set(numbers)
+
+    return { list: list.filter((_entry, i) => !places.has(i + 1)), value: list.filter((_entry, i) => places.has(i + 1)) }
+  })
+  if (typeof gone === 'string') {
+    return gone
   }
-  if (!numbers.every(n => isPlace(n, list.length))) {
-    return `Give ${numbers.length === 1 ? 'a number' : 'numbers'} from 1 to ${list.length}, as /aside list shows them.`
-  }
-  const places = new Set(numbers)
-  const gone = list.filter((_entry, i) => places.has(i + 1))
-  await saveShownQueue($, ctx, keys, list.filter((_entry, i) => !places.has(i + 1)))
   await refreshBand($)
 
   return gone.length === 1 ? `Removed: ${gone[0]!.text}` : `Removed ${formatCount(gone.length, 'entry')}: ${gone.map(entry => shortenText(entry.text, 40)).join('; ')}`
