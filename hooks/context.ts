@@ -70,6 +70,10 @@ export type Session = {
   // Changes to the plan, one after another for the same reason: a step that ends and a
   // planner adding steps meanwhile each read the plan and save it back.
   planWrites: Promise<unknown>
+  // The turns of the main loop this process saw start and has not yet seen end, and the work
+  // in the background calls here started: what a step's turn or work can be known dead by.
+  openTurns: Set<string>
+  ownWork: Set<string>
   // What the list pane shows: the queue, as /aside and the band's list button open it, or what
   // /aside g, q, find or log asked for while Claude worked. None is the queue.
   paneView?: PaneView
@@ -96,6 +100,8 @@ export const createContext = (options: Parameters<Register>[1]): Context => ({
     isRunning: false,
     writes: Promise.resolve(),
     planWrites: Promise.resolve(),
+    openTurns: new Set(),
+    ownWork: new Set(),
     tidies: new Set(),
     clipboard: {},
   },

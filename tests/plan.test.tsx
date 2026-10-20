@@ -3020,19 +3020,19 @@ describe('the log of plans run to their end', () => {
   })
 })
 
-describe('a step with work in the background', () => {
-  // A workflow, or an agent in the background, that a call starts: the engine answers with its
-  // task's id.
-  const launched = (on: Parameters<typeof world>[1]) => {
-    on('tool.call', { tool: 'Workflow' }, () => ({ result: { status: 'async_launched', taskId: 'w1', workflowName: 'review' } as never }))
-    on('tool.call', { tool: 'Agent' }, () => ({ result: { status: 'async_launched', agentId: 'a7', description: 'find the docs' } as never }))
-    on('tool.call', { tool: 'Bash' }, () => ({ result: { stdout: '', backgroundTaskId: 'b3' } as never }))
-  }
-  const notice = (taskId: string, callId: string) =>
-    `<task-notification>\n<task-id>${taskId}</task-id>\n<tool-use-id>${callId}</tool-use-id>\n<status>completed</status>\n<summary>done</summary>\n</task-notification>`
-  const notify = ($: Parameters<typeof world>[0], text: string) =>
-    $.prompt.submit({ text, origin: { kind: 'task-notification' } as never, wait: false })
+// A workflow, or an agent in the background, that a call starts: the engine answers with its
+// task's id.
+const launched = (on: Parameters<typeof world>[1]) => {
+  on('tool.call', { tool: 'Workflow' }, () => ({ result: { status: 'async_launched', taskId: 'w1', workflowName: 'review' } as never }))
+  on('tool.call', { tool: 'Agent' }, () => ({ result: { status: 'async_launched', agentId: 'a7', description: 'find the docs' } as never }))
+  on('tool.call', { tool: 'Bash' }, () => ({ result: { stdout: '', backgroundTaskId: 'b3' } as never }))
+}
+const notice = (taskId: string, callId: string) =>
+  `<task-notification>\n<task-id>${taskId}</task-id>\n<tool-use-id>${callId}</tool-use-id>\n<status>completed</status>\n<summary>done</summary>\n</task-notification>`
+const notify = ($: Parameters<typeof world>[0], text: string) =>
+  $.prompt.submit({ text, origin: { kind: 'task-notification' } as never, wait: false })
 
+describe('a step with work in the background', () => {
   test('a step whose turn leaves a workflow going goes on in the background, and the turn its end brings ends it', async ($, on) => {
     const { sent, contexts, toasts, aside, shown, savePlan, startTurn, endTurn, idle, band } = world($, on)
     launched(on)
@@ -3335,4 +3335,187 @@ describe('a step with work in the background', () => {
     expect((await shown()).slice(1, 3)).toEqual(['1 done One', '↳ review started.'])
   })
 
+})
+
+describe('a step whose turn never ends', () => {
+  // The session `sessionId` ends; this one is session-1.
+  const endSession = ($: Parameters<typeof world>[0], sessionId: string) => $.session.end({ reason: 'other', sessionId, resume: { id: sessionId } } as never)
+
+  test('the next turn of the session leaves the step waiting, and /aside continue ends it and goes on', async ($, on) => {
+    const { sent, toasts, aside, shown, savePlan, startTurn, endTurn, idle, band } = world($, on)
+    await savePlan(STEPS)
+    await aside('run all')
+    await idle()
+    await startTurn(sent[0]!, 's1')
+    // The session closed in the middle of s1 and was resumed: s1 never ends.
+    await startTurn('is it done?', 'h1')
+    expect(toasts.at(-1)).toBe("Step 1's turn never ended; it waits, and /aside continue ends it and goes on.")
+    await endTurn('h1', 'answer', 'Yes.')
+    await idle()
+    const ui = await band()
+    expect((await ui.find({ type: 'Text', text: /^aside: / }))?.text).toBe('aside: plan ▱▱▱ 0/3 · step 1 waits for you · ')
+    await ui.unmount()
+
+    expect((await shown()).slice(0, 2)).toEqual([
+      'Plan waits at step 1 (its turn ended without an answer), 3 of 3 steps to do (/aside continue)',
+      '1 waiting One',
+    ])
+    expect(await aside('continue')).toContain('step 2')
+    await idle()
+    expect(sent.at(-1)).toContain('(Step 2 of 3 of the queue plan, "Two", sent by the aside plugin.')
+    expect((await shown())[1]).toBe('1 done One')
+  })
+
+  test('the end of its session leaves the step waiting, its work in the background let go, for any session to end', async ($, on) => {
+    const { sent, aside, shown, savePlan, startTurn, endTurn, idle, band } = world($, on)
+    launched(on)
+    await savePlan([STEPS[0]])
+    await aside('run all')
+    await idle()
+    await startTurn(sent[0]!, 's1')
+    await $.tool.call({ tool: 'Workflow', script: 'x', tool_use_id: 'toolu_1' } as never)
+    await endTurn('s1', 'answer', 'Result: review started.')
+    await notify($, notice('w1', 'toolu_1'))
+    await startTurn(notice('w1', 'toolu_1'), 'n1')
+    await endSession($, 'session-1')
+    const ui = await band()
+    expect((await ui.find({ type: 'Text', text: /^aside: / }))?.text).toBe('aside: plan ▱ 0/1 · step 1 waits for you · ')
+    await ui.unmount()
+    // An end heard after all changes nothing.
+    await endTurn('n1', 'aborted')
+    await idle()
+
+    expect((await shown()).slice(0, 2)).toEqual([
+      'Plan waits at step 1 (its turn ended without an answer), 1 of 1 step to do (/aside continue)',
+      '1 waiting One',
+    ])
+    expect(await aside('stop')).toBe('Step 1 is done as it stands, and the plan stops there.')
+  })
+
+  test('a step that waits keeps what it waits for when the turn of its answer never ends', async ($, on) => {
+    const { sent, aside, shown, savePlan, startTurn, endTurn, wait, idle } = world($, on)
+    await savePlan(STEPS)
+    await aside('run all')
+    await idle()
+    await startTurn(sent[0]!, 's1')
+    await wait('needs a yes')
+    await endTurn('s1', 'answer', 'Shall I?')
+    await startTurn('yes', 'a1')
+    await startTurn('and now?', 'h1')
+    await endTurn('h1', 'answer', 'Now.')
+    await idle()
+
+    expect((await shown())[0]).toBe('Plan waits at step 1 (needs a yes), 3 of 3 steps to do (/aside continue)')
+  })
+
+  test('a step away keeps the work still going when the turn of a notification never ends', async ($, on) => {
+    const { sent, aside, shown, savePlan, startTurn, endTurn, idle } = world($, on)
+    launched(on)
+    await savePlan([STEPS[0]])
+    await aside('run all')
+    await idle()
+    await startTurn(sent[0]!, 's1')
+    await $.tool.call({ tool: 'Workflow', script: 'x', tool_use_id: 'toolu_1' } as never)
+    await $.tool.call({ tool: 'Agent', prompt: 'x', description: 'find the docs', run_in_background: true, tool_use_id: 'toolu_a' } as never)
+    await endTurn('s1', 'answer', 'Result: started both.')
+    await notify($, notice('w1', 'toolu_1'))
+    await startTurn(notice('w1', 'toolu_1'), 'n1')
+    await startTurn('meanwhile', 'h1')
+    await endTurn('h1', 'answer', 'Sure.')
+    await idle()
+
+    expect((await shown()).slice(1, 3)).toEqual(['1 running One', '↳ working in the background: find the docs'])
+  })
+
+  test('a step that /aside stop ended is done as it stands when the turn it left never ends', async ($, on) => {
+    const { sent, toasts, aside, shown, savePlan, startTurn, endTurn, wait, idle } = world($, on)
+    await savePlan(STEPS)
+    await aside('run all')
+    await idle()
+    await startTurn(sent[0]!, 's1')
+    await wait('needs a yes')
+    await endTurn('s1', 'answer', 'Shall I?')
+    await startTurn('yes', 'a1')
+    expect(await aside('stop')).toBe('The plan stops after step 1.')
+    await startTurn('later', 'h1')
+    expect(toasts.filter(text => text.includes('never ended'))).toEqual([])
+    await endTurn('h1', 'answer', 'Ok.')
+    await idle()
+
+    expect((await shown()).slice(-5, -2)).toEqual(['Plan: 2 of 3 steps to do (/aside run)', '1 done One', '↳ Shall I?'])
+  })
+
+  test('a turn of another process on the same session, and an end being handled as the next turn starts, are not dead', async ($, on) => {
+    const { w, sent, aside, shown, savePlan, startTurn, endTurn, idle, fromAnotherSession } = world($, on)
+    await savePlan(STEPS)
+    await aside('run')
+    await idle()
+    await startTurn(sent[0]!, 's1')
+    let release = () => {}
+    w.turnEndHeld = new Promise<void>(resolve => (release = resolve))
+    const ending = endTurn('s1', 'answer', 'Result: one done.')
+    await startTurn('next', 'h1')
+    release()
+    await ending
+    delete w.turnEndHeld
+    await endTurn('h1', 'answer', 'Ok.')
+    await idle()
+    expect((await shown()).slice(1, 3)).toEqual(['Plan: 2 of 3 steps to do (/aside run)', '1 done One'])
+
+    await fromAnotherSession('plan:/proj', { steps: STEPS, active: { step: 1, isChain: false, sessionId: 'session-1', turnId: 'elsewhere' } })
+    await startTurn('here', 'h2')
+    await endTurn('h2', 'answer', 'Ok.')
+    await idle()
+    expect((await shown())[0]).toBe('Plan: 3 of 3 steps to do (/aside run)')
+    expect((await shown())[1]).toBe('1 to do One')
+  })
+
+  test('the end of its session lets go of a step away whose work started here, and leaves one whose work did not', async ($, on) => {
+    const { sent, aside, shown, savePlan, startTurn, endTurn, idle, fromAnotherSession } = world($, on)
+    launched(on)
+    await savePlan([STEPS[0]])
+    await aside('run all')
+    await idle()
+    await startTurn(sent[0]!, 's1')
+    await $.tool.call({ tool: 'Workflow', script: 'x', tool_use_id: 'toolu_1' } as never)
+    await endTurn('s1', 'answer', 'Result: review started.')
+    await endSession($, 'session-1')
+    await idle()
+    expect((await shown())[0]).toBe('Plan waits at step 1 (its turn ended without an answer), 1 of 1 step to do (/aside continue)')
+
+    const away = { step: 0, isChain: true, sessionId: 'session-1', isAway: true, background: [{ callId: 'toolu_9', taskId: 'w9', what: 'review' }] }
+    await fromAnotherSession('plan:/proj', { steps: [STEPS[0]], active: away })
+    await endSession($, 'session-1')
+    expect((await shown())[1]).toBe('1 running One')
+  })
+
+  test('/aside plan asked while the step ran is dropped with its turn, and the toast says /aside plan organizes the queue', async ($, on) => {
+    const { sent, toasts, type, aside, savePlan, startTurn, endTurn, idle } = world($, on)
+    await savePlan(STEPS)
+    await aside('run all')
+    await idle()
+    await startTurn(sent[0]!, 's1')
+    await type('+ dark mode', 's1')
+    await aside('plan')
+    await startTurn('is it done?', 'h1')
+    expect(toasts.at(-1)).toBe("Step 1's turn never ended; it waits, and /aside continue ends it and goes on; /aside plan organizes the queue.")
+    const before = sent.length
+    await endTurn('h1', 'answer', 'Yes.')
+    await idle()
+    expect(sent).toHaveLength(before)
+  })
+
+  test('a turn that ends as it should leaves the step to it, and a session that ends with none running changes nothing', async ($, on) => {
+    const { sent, aside, shown, savePlan, startTurn, endTurn, idle } = world($, on)
+    await savePlan(STEPS)
+    await aside('run')
+    await idle()
+    await startTurn(sent[0]!, 's1')
+    await endSession($, 'another')
+    await endTurn('s1', 'answer', 'Result: one done.')
+    await idle()
+    await endSession($, 'session-1')
+
+    expect((await shown()).slice(0, 4)).toEqual(['The queue is empty.', 'Plan: 2 of 3 steps to do (/aside run)', '1 done One', '↳ one done.'])
+  })
 })

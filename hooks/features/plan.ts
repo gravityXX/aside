@@ -1026,6 +1026,7 @@ export async function noteBackgroundWork(ctx: Context, $: Engine, e: WorkCall[1]
     const active = plan.active
     if (!active || active.sessionId !== me || active.turnId === undefined || active.turnId !== ctx.session.turnId) return
     active.background = [...(active.background ?? []), { ...(callId ? { callId } : {}), ...work }]
+    if (callId) ctx.session.ownWork.add(callId)
   }).catch(() => undefined)
 
   return done
@@ -1094,9 +1095,14 @@ async function bindAddingTurn($: Engine, ctx: Context, turnId: string) {
 }
 
 type TurnStart = Parameters<Hook<'turn.start'>>
+type SessionEnd = Parameters<Hook<'session.end'>>
 
 export async function onTurnStart(ctx: Context, $: Engine, e: TurnStart[1], next: TurnStart[2]) {
   if (e.agentId === undefined) {
+    // A process runs one turn at a time: a step's turn it started, still open as a new one
+    // starts here, never ended.
+    await dropDeadTurn($, ctx, await $.session.id(), e.turnId, false)
+    ctx.session.openTurns.add(e.turnId)
     ctx.session.turnId = e.turnId
     ctx.session.isRunning = true
     ctx.session.isOwnTurn = isOwnPrompt(e.text)
@@ -1111,6 +1117,52 @@ export async function onTurnStart(ctx: Context, $: Engine, e: TurnStart[1], next
 }
 
 type TurnEndReason = Args<'turn.complete'>['reason']
+
+// What a step waits for whose turn ended with no end the plugin heard.
+const CUT_OFF = 'its turn ended without an answer'
+
+// The step of session `sessionId` whose turn will never end: one this process started, still
+// open, other than `turnId`; with isGone, the session itself ended, so also its work in the
+// background that calls here started, and a step whose turn never started. Turns and work of
+// another process, on the same session resumed elsewhere, are left to it. One that continue or
+// stop ended is done, as it stands; any other has no turn running and waits for the person, as
+// after a step's question, so /aside continue ends it and goes on and /aside stop ends it there.
+async function dropDeadTurn($: Engine, ctx: Context, sessionId: string, turnId: string | undefined, isGone: boolean) {
+  const { openTurns, ownWork } = ctx.session
+  const now = await $.clock.now()
+  const dropped = await changePlan($, ctx, async plan => {
+    const active = plan.active
+    if (!active || active.sessionId !== sessionId) return undefined
+    if (active.turnId !== undefined) {
+      if (active.turnId === turnId || !openTurns.has(active.turnId)) return undefined
+    } else if (!isGone || isWaiting(active) || (isAway(active) && !(active.background ?? []).every(work => work.callId !== undefined && ownWork.has(work.callId)))) {
+      return undefined
+    }
+    if (active.isEnding) {
+      completeStep(plan, active, sessionId, false, now)
+      return { n: active.step + 1, waits: false, hint: '' }
+    }
+    const hint = await organizeHint($, active)
+    delete active.turnId
+    delete active.isPlanningAfter
+    if (isGone) {
+      delete active.background
+      delete active.isAway
+    }
+    if (!active.isAway) active.pausedFor ??= CUT_OFF
+    return { n: active.step + 1, waits: !active.isAway, hint }
+  })
+  if (dropped === undefined) return
+  await refreshBand($)
+  if (!isGone && dropped.waits) $.ui.toast(`Step ${dropped.n}'s turn never ended; it waits, and /aside continue ends it and goes on${dropped.hint}.`)
+}
+
+// The session ends: a turn of a step it runs never ends now.
+export async function endSessionSteps(ctx: Context, $: Engine, e: SessionEnd[1], next: SessionEnd[2]) {
+  await dropDeadTurn($, ctx, e.sessionId, undefined, true)
+
+  return next(e)
+}
 
 // Why a run waits after a step that /aside plan asked to organize the queue after.
 const PLANNING_PAUSE = 'to organize the queue'
@@ -1253,6 +1305,8 @@ async function handOverAfterAnswer($: Engine, ctx: Context, plan: Plan, reason: 
 type TurnComplete = Parameters<Hook<'turn.complete'>>
 
 export async function onTurnEnd(ctx: Context, $: Engine, e: TurnComplete[1], next: TurnComplete[2]) {
+  // Before anything awaits: a turn that starts while this end is handled finds this one ended.
+  if (e.agentId === undefined) ctx.session.openTurns.delete(e.turnId)
   const done = await next(e)
   if (e.agentId !== undefined) {
     return done

@@ -78,6 +78,8 @@ export type Machine = {
   // Runs while a model call is out: the small model tidying a note, or a planner organizing
   // the queue.
   meanwhile?: () => Promise<unknown>
+  // Holds the engine's own end of a turn until it settles, as a slow hook beneath would.
+  turnEndHeld?: Promise<unknown>
 }
 
 const SCREEN = { isFullscreen: true, columns: 120 }
@@ -137,6 +139,7 @@ export const world = ($: Engine, on: On, given: Partial<Machine> = {}) => {
   mock.env(on, w.env ?? homes[w.system])
   on('session.root', () => ({ value: w.root ?? (w.system === 'windows' ? 'C:\\proj' : '/proj') }))
   on('session.id', () => ({ value: 'session-1' }))
+  on('session.end', ($e, e) => ({ sessionId: e.sessionId }))
   on('command.register', ($e, e) => ({ value: { command: e.name } }))
   on('tool.register', ($e, e) => ({ value: { tool: `mcp__aside__${e.name}` } }))
 
@@ -250,7 +253,10 @@ export const world = ($: Engine, on: On, given: Partial<Machine> = {}) => {
 
   on('tool.call', { tool: 'Write' }, () => ({ result: { type: 'create' } as never }))
   on('turn.start', ($e, e) => ({ turnId: e.turnId }))
-  on('turn.complete', () => ({ text: '' }))
+  on('turn.complete', async () => {
+    await w.turnEndHeld
+    return { text: '' }
+  })
 
   // Lets every timer the plugin set run: a prompt it submits, a step it starts.
   const idle = async () => {
