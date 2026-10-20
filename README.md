@@ -136,7 +136,7 @@ Change these in `/config`:
 - `planModel`: `session` (default), `sonnet`, `haiku` or `opus`. Who organizes the queue on `/aside plan`: Claude in this conversation, knowing the work so far, or one call to that model outside it, which adds nothing to the conversation and runs while Claude works, but sees only the queue.
 - `newQueues`: `global` (default) or `local`. Whom a named queue made by its first idea, as in `+@work`, is for: every project, or the one it was made in.
 - `order`: `oldest` (default) or `newest`. Which entry comes first in the list and in a run.
-- `tidy`: `on` (default) or `off`. Whether a small model fixes the spelling and wording of what you type.
+- `tidy`: `on` (default) or `off`. Whether a small model fixes the spelling and wording of what you type, and names a step made of a long entry.
 
 ## More
 

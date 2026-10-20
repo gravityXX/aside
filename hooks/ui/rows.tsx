@@ -60,7 +60,7 @@ const planRows = ({ Box, Text }: Drawing, section: ListingSection) => {
           <Box width={4} flexShrink={0}>
             <Text dimColor>{row.label}</Text>
           </Box>
-          <Box flexShrink={1}>
+          <Box flexGrow={1} flexShrink={1}>
             <Text dimColor={row.word === 'done'}>{row.lines[0]?.trim() ?? ''}</Text>
           </Box>
           {/* The state in a box of its own, so a long title wraps and the word stays whole. */}

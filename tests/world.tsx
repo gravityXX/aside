@@ -80,6 +80,8 @@ export type Machine = {
   meanwhile?: () => Promise<unknown>
   // Holds the engine's own end of a turn until it settles, as a slow hook beneath would.
   turnEndHeld?: Promise<unknown>
+  // What the small model answers when it names a step; no answer when left out.
+  titleReply?: string
 }
 
 const SCREEN = { isFullscreen: true, columns: 120 }
@@ -182,7 +184,8 @@ export const world = ($: Engine, on: On, given: Partial<Machine> = {}) => {
     if (isPlanning) planned.push({ model: e.model, system: e.system, prompt: e.prompt })
     else asked.push(e.prompt)
     await w.meanwhile?.()
-    const reply = isPlanning ? w.planReply : w.tidy?.[/<note>\n([\s\S]*)\n<\/note>/.exec(e.prompt)?.[1] ?? '']
+    const isTitle = e.system?.startsWith('You name a task') === true
+    const reply = isPlanning ? w.planReply : isTitle ? w.titleReply : w.tidy?.[/<note>\n([\s\S]*)\n<\/note>/.exec(e.prompt)?.[1] ?? '']
     return {
       value: (reply === undefined
         ? { isAnswered: false, reason: 'api-error', status: null, kind: 'unknown' }

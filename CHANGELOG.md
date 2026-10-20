@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- The `/aside` frame and the saved plan take the whole width of the terminal, with the state of a step at its right edge. An entry run as a step keeps up to 120 characters of its text as its title, and while `tidy` is on, a small model names a step made of a long entry once the run has started.
+
 ## 0.35.1 - 2026-10-20
 
 - A step whose turn never ended, as when the session closed in the middle of it, no longer shows as running for ever. The next turn of that process, or the end of the session, leaves it waiting (`its turn ended without an answer`), so `/aside continue` ends it and goes on and `/aside stop` ends it there; a step away in the background whose work started in a session that ended waits too. A turn or work of another process on the same session is left to that process.
