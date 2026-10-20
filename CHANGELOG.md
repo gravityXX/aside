@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- An entry typed with "+" just as `/aside plan`, `/aside run`, `/aside clear` or `/aside undo` starts is no longer lost: it stays in the queue, and `/aside undo` brings back exactly what was taken. A hand-over that fails puts its entries back once each.
+- With `planModel` on a model of its own, `/aside plan` right after typing no longer gives up because the queue changed: the planner reads every entry as tidied. Removing, moving, editing or popping an entry, or moving one to or from another queue, while its tidied text comes back keeps both changes.
+
 ## 0.37.0 - 2026-10-20
 
 - Each step of the plan is its title and one line: its time, then what it did, waits for or does now. The step running shows the last tool of its turn, `now: Bash, run the tests`, a step in the background `in the background: review`, and a step `/aside stop` ended with nothing it said `stopped`. A step whose title is its text cut short, as earlier releases cut it at 50 characters, is named by the small model when `/aside` shows it, once, from the idea's text alone.
