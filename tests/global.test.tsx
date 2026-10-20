@@ -216,6 +216,21 @@ describe('the global list', () => {
     expect(await shown()).toEqual(['1 idea waiting', '1 idea Dark mode.'])
     expect(await aside('g')).toBe(['1 idea on the global list', '', '  1  idea  read it later'].join('\n'))
   })
+
+  test('a move the store refuses on the side it goes to leaves the idea where it was, here or on the global list', async ($, on) => {
+    const { w, type, aside, shown } = world($, on)
+    await type('+g read the RFC')
+    w.refuseWriteTo = 'queue:'
+    expect(await aside('g here 1')).toBe('/aside g here 1 did not finish (the store is full). /aside shows where the queue and the plan stand.')
+    expect(await shown()).toEqual(['The queue is empty.'])
+    expect(await aside('g')).toBe(['1 idea on the global list', '', '  1  idea  read the RFC'].join('\n'))
+
+    await type('+ dark mode')
+    w.refuseWriteTo = 'global:idea:'
+    expect(await aside('g add 1')).toBe('/aside g add 1 did not finish (the store is full). /aside shows where the queue and the plan stand.')
+    expect(await shown()).toEqual(['1 idea waiting', '1 idea dark mode'])
+    expect(await aside('g')).toBe(['1 idea on the global list', '', '  1  idea  read the RFC'].join('\n'))
+  })
 })
 
 describe('named queues', () => {
