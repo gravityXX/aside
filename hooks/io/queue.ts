@@ -12,37 +12,61 @@ import type { Keys } from './store'
 export type QueueChange<T> = { list?: readonly Entry[]; value: T; afterSave?: () => Promise<unknown> }
 
 // The changes to this project's queue, one after another, so two that overlap never store over
-// each other (2.9): typed entries, their tidied text, imports. A module variable lives as long as
-// `ctx` does, and a reload starts both over (3.7), as it does the work that asked for them.
+// each other (2.9): typed entries, their tidied text, imports, and the takes undo brings back.
+// A module variable lives as long as `ctx` does, and a reload starts both over (3.7), as it does
+// the work that asked for them.
 let changes: Promise<unknown> = Promise.resolve()
+
+// The slow first steps of changeQueueAfter, one after another, beside the chain rather than on
+// it: each change joins the chain once its first step is done, in the order they were asked
+// for, and a change asked for meanwhile without one, such as a hand-over, never waits on them.
+let preparing: Promise<unknown> = Promise.resolve()
 
 // Changes the queue as it is stored once every change asked for before has landed, and
 // resolves once this one has too, so what is read next holds it. A failure reaches the caller
 // and leaves the changes after it to run. A change never waits for another one, which would
 // wait for it.
 export function changeQueue<T>($: Engine, change: (stored: readonly Entry[]) => QueueChange<T> | Promise<QueueChange<T>>): Promise<T> {
-  return changeQueueAfter($, async () => undefined, stored => change(stored))
+  return inTurn(() => applyChange($, change))
 }
 
-// Changes the queue as changeQueue does, after `prepare`, which takes this change's place in
-// the chain but runs before the queue is read: slow work, such as a process or the clipboard,
-// that must keep the order the changes were asked in. Read before it, the stored list would be
-// held across its waits, and a command that writes the queue outside the chain meanwhile (rm,
-// a hand-over) would be stored over. What it makes is handed to the change.
+// Changes the queue as changeQueue does, after `prepare`: slow work, such as a process or the
+// clipboard, that must keep the order the changes were asked in. It runs before the change
+// joins the chain and before the queue is read. Read before it, the stored list would be held
+// across its waits, and a command that writes the queue outside the chain meanwhile (rm) would
+// be stored over; on the chain, a hand-over would wait on a slow git. What it makes is handed to
+// the change.
 export function changeQueueAfter<P, T>(
   $: Engine,
   prepare: () => Promise<P>,
   change: (stored: readonly Entry[], prepared: P) => QueueChange<T> | Promise<QueueChange<T>>,
 ): Promise<T> {
-  const done = changes.then(async () => {
-    const { queue } = await projectKeys($)
+  const done = preparing.then(async () => {
     const prepared = await prepare()
-    const { list, value, afterSave } = await change(await loadEntries($, queue), prepared)
-    if (list !== undefined) await saveEntries($, queue, list)
-    await afterSave?.()
 
-    return value
+    return inTurn(() => applyChange($, stored => change(stored, prepared)))
   })
+  preparing = done.catch(() => undefined)
+
+  return done
+}
+
+// One change in its turn: the queue read as it is stored, the list it makes stored in its
+// place, then what goes with it.
+async function applyChange<T>($: Engine, change: (stored: readonly Entry[]) => QueueChange<T> | Promise<QueueChange<T>>): Promise<T> {
+  const { queue } = await projectKeys($)
+  const { list, value, afterSave } = await change(await loadEntries($, queue))
+  if (list !== undefined) await saveEntries($, queue, list)
+  await afterSave?.()
+
+  return value
+}
+
+// Runs `work` in its turn on the chain: once every change asked for before has landed, and
+// before any asked for after it. The takes, which write the queue and what undo brings back
+// together, run on it as they are, with their own writes.
+function inTurn<T>(work: () => Promise<T>): Promise<T> {
+  const done = changes.then(work)
   changes = done.catch(() => undefined)
 
   return done
@@ -151,33 +175,49 @@ export async function takeChosen($: Engine, keys: Keys, stored: readonly Entry[]
   return { giveBack }
 }
 
-// Takes the queue (`stored`, oldest first) and the new tags out to hand them over: both go
-// where /aside undo finds them, and the tags are marked so they are not handed over again.
-// `giveBack` undoes all of it when the hand-over fails. A take that fails half-way is undone
+// Takes the queue and the new tags (`tags`, read from their files before) out to hand them
+// over: both go where /aside undo finds them, and the tags are marked so they are not handed
+// over again. The queue is read in the take's turn on the chain, so an entry typed meanwhile is
+// either taken with it or stored after it, never written over. It answers the entries taken,
+// oldest first, and `giveBack`, which undoes all of it when the hand-over fails. With nothing
+// to take, nothing is written, and the take undo had stays. A take that fails half-way is undone
 // at once, before its error goes on: the queue as it was, and the take undo had before, so
 // nothing is left both in the queue and in the take, and nothing undo had is lost.
-export async function takeForHandOver($: Engine, keys: Keys, stored: readonly Entry[], tags: readonly Entry[]) {
-  const before = await loadHanded($, keys.handed)
-  const previous = await loadTake($, keys)
-  let isQueueTaken = false
-  const giveBack = async () => {
-    if (isQueueTaken) await saveEntries($, keys.queue, [...stored, ...(await loadEntries($, keys.queue))])
-    await $.store.set(keys.handed, before)
-    await forgetTake($, keys)
-  }
-  try {
-    await saveTake($, keys, { entries: [...stored], tagIds: tags.map(tagId), by: 'hand-over' })
-    if (stored.length > 0) {
-      await saveEntries($, keys.queue, [])
-      isQueueTaken = true
+export function takeForHandOver($: Engine, tags: readonly Entry[]): Promise<{ stored: readonly Entry[]; giveBack: () => Promise<void> }> {
+  return inTurn(async () => {
+    const keys = await projectKeys($)
+    const stored = await loadEntries($, keys.queue)
+    if (stored.length === 0 && tags.length === 0) {
+      return { stored, giveBack: async () => undefined }
     }
-    await $.store.set(keys.handed, [...new Set([...before, ...tags.map(tagId)])].slice(-500))
-  } catch (error) {
-    // The handed write comes last: when anything failed, it was never made.
-    if (isQueueTaken) await saveEntries($, keys.queue, [...stored, ...(await loadEntries($, keys.queue))]).catch(() => undefined)
-    await saveTake($, keys, previous).catch(() => undefined)
-    throw error
-  }
+    const before = await loadHanded($, keys.handed)
+    const previous = await loadTake($, keys)
+    let isQueueTaken = false
+    // The entries go back at the head of the queue, before what came since, once each.
+    const putBack = async () => {
+      const now = await loadEntries($, keys.queue)
+      await saveEntries($, keys.queue, [...stored, ...withoutEntries(now, stored)])
+    }
+    const giveBack = () =>
+      inTurn(async () => {
+        if (isQueueTaken) await putBack()
+        await $.store.set(keys.handed, before)
+        await forgetTake($, keys)
+      })
+    try {
+      await saveTake($, keys, { entries: [...stored], tagIds: tags.map(tagId), by: 'hand-over' })
+      if (stored.length > 0) {
+        await saveEntries($, keys.queue, [])
+        isQueueTaken = true
+      }
+      await $.store.set(keys.handed, [...new Set([...before, ...tags.map(tagId)])].slice(-500))
+    } catch (error) {
+      // The handed write comes last: when anything failed, it was never made.
+      if (isQueueTaken) await putBack().catch(() => undefined)
+      await saveTake($, keys, previous).catch(() => undefined)
+      throw error
+    }
 
-  return { giveBack }
+    return { stored, giveBack }
+  })
 }
