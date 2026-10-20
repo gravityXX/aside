@@ -1,7 +1,7 @@
 import type { EngineInterface as Engine } from 'claude-code'
 
 import type { Entry } from '../../types'
-import { inOrder, isSameEntry, withoutEntries } from '../core/entries'
+import { inOrder, isSameEntry, onlyEntries, withoutEntries } from '../core/entries'
 import type { Order } from '../core/entries'
 import { loadEntries, loadHanded, loadTagIds, projectKeys, tagId } from './store'
 import type { Keys } from './store'
@@ -207,7 +207,7 @@ export function giveBackItems($: Engine, items: readonly Entry[]): Promise<void>
     const take = await loadTake($, keys)
     const queue = await loadEntries($, keys.queue)
     // A call made again after one that failed half-way finds some already back.
-    const back = take.entries.filter(entry => items.some(item => isSameEntry(item, entry)) && !queue.some(one => isSameEntry(one, entry)))
+    const back = withoutEntries(onlyEntries(take.entries, items), queue)
     await saveEntries($, keys.queue, [...back, ...queue])
     await unhandTags($, keys, tagIds)
     await saveTake($, keys, { ...take, entries: withoutEntries(take.entries, items), tagIds: take.tagIds.filter(id => !tagIds.includes(id)) })
@@ -236,7 +236,7 @@ export function takeChosen(
     const giveBack = () =>
       inTurn(async () => {
         const now = await loadEntries($, keys.queue)
-        const kept = stored.filter(entry => [...chosen, ...now].some(one => isSameEntry(one, entry)))
+        const kept = onlyEntries(stored, [...chosen, ...now])
         await saveEntries($, keys.queue, [...kept, ...withoutEntries(now, kept)])
         await restoreTake($, keys, take, previous)
       })
