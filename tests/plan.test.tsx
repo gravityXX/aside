@@ -2825,6 +2825,20 @@ describe('planning on a model of its own', () => {
     expect(await shown()).toEqual(['Plan: 1 of 1 step to do (/aside run)', '1 running dark mode', 'The queue is empty.'])
   })
 
+  test('an entry removed while the planner thinks and typed again alike makes it save nothing, the new one being another entry', SONNET, async ($, on) => {
+    const { w, type, aside, shown } = world($, on)
+    await type('+ dark mode')
+    w.planReply = '{"steps": [{"title": "Dark mode", "prompt": "Add a dark mode."}]}'
+    w.meanwhile = async () => {
+      w.meanwhile = undefined
+      await aside('remove 1')
+      await type('+ dark mode')
+    }
+
+    expect(await aside('plan')).toBe('The queue or the plan changed while Sonnet planned; nothing was saved. /aside plan tries again.')
+    expect(await shown()).toEqual(['1 idea waiting', '1 idea dark mode'])
+  })
+
   test('a tag handed over while the planner thinks makes it save nothing', SONNET, async ($, on) => {
     const { w, sent, write, aside, idle } = world($, on, { files: { [REPORT_PATH]: REPORT } })
     await write(REPORT_PATH)
