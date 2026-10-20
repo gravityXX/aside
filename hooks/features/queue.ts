@@ -10,13 +10,13 @@ import { canonicalPath, formatCount, isAbsolutePath, isWindowsPath, relativePath
 import { resolveFile, tryReadFile, writeExport } from '../io/host'
 import { bringBackTake, changeQueue, readQueue, takeCleared } from '../io/queue'
 import type { QueueChange } from '../io/queue'
-import { loadHanded, loadPlan, projectKeys, readTrackedFiles, refreshBand, saveEditing, tagId, trackFile } from '../io/store'
+import { loadPlan, loadTagIds, projectKeys, readTrackedFiles, refreshBand, saveEditing, tagId, trackFile } from '../io/store'
 
 // The <!-- ? --> tags in the session's markdown files, as entries of their own; `onlyNew`
 // leaves out those an earlier /aside already handed over.
 export async function tagsInFiles($: Engine, onlyNew = false): Promise<Entry[]> {
   const { handed } = await projectKeys($)
-  const old = new Set(onlyNew ? await loadHanded($, handed) : [])
+  const old = new Set(onlyNew ? await loadTagIds($, handed) : [])
   const found: Entry[] = []
   for (const file of await readTrackedFiles($)) {
     const source = await tryReadFile($, file)
@@ -36,7 +36,7 @@ async function loadListing($: Engine, ctx: Context) {
   const { root, plan: planKey, handed } = await projectKeys($)
   const list = await readQueue($, ctx.settings.order)
   const tags = await tagsInFiles($)
-  const handedOver = new Set(await loadHanded($, handed))
+  const handedOver = new Set(await loadTagIds($, handed))
   const plan = await loadPlan($, planKey)
   const { lastTool } = ctx.session
   // A turn's id names one turn of one process: the step running in it is this session's.

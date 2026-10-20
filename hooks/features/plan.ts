@@ -28,7 +28,7 @@ import {
 import type { StepMode } from '../core/prompts'
 import { describeError, describeFailure, formatCount, formatDuration, shortenText } from '../core/text'
 import { bringBackTake, forgetAnsweredTake, giveBackItems, readQueue, takeChosen, takeForHandOver, takePlanned } from '../io/queue'
-import { loadHanded, loadPlan, projectKeys, refreshBand, savePlan, tagId } from '../io/store'
+import { loadPlan, loadTagIds, projectKeys, refreshBand, savePlan, tagId } from '../io/store'
 import type { Keys } from '../io/store'
 import { archivePlan } from './history'
 import { openListPane, tagsInFiles } from './queue'
@@ -833,7 +833,7 @@ const describeNoPlan = (reply: Awaited<ReturnType<Engine['model']['complete']>> 
 async function isAsGiven($: Engine, keys: Keys, items: readonly Entry[]): Promise<boolean> {
   // In the order the store keeps: only whether each entry is there counts.
   const queue = await readQueue($, 'oldest')
-  const handed = new Set(await loadHanded($, keys.handed))
+  const handed = new Set(await loadTagIds($, keys.handed))
   const isThere = (item: Entry) =>
     item.isTag ? !handed.has(tagId(item)) : queue.some(entry => isSameEntry(entry, item))
 
