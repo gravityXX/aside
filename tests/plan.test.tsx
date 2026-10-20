@@ -3334,7 +3334,6 @@ describe('a step with work in the background', () => {
     await idle()
     expect((await shown()).slice(1, 3)).toEqual(['1 done One', '↳ review started.'])
   })
-
 })
 
 describe('a step whose turn never ends', () => {
@@ -3517,5 +3516,96 @@ describe('a step whose turn never ends', () => {
     await endSession($, 'session-1')
 
     expect((await shown()).slice(0, 4)).toEqual(['The queue is empty.', 'Plan: 2 of 3 steps to do (/aside run)', '1 done One', '↳ one done.'])
+  })
+})
+
+describe('the title of a step made of an entry', () => {
+  const LONG = 'teraz dostałem wiadomość, że praca została skończona, a review w tle nadal działa, i później pewnie jeszcze inne kroki'
+
+  test('a long entry run as a step is named by the small model, and a short one keeps its text', async ($, on) => {
+    const { w, asked, type, aside, shown, idle } = world($, on, { tidy: {} })
+    w.titleReply = '<title>Przedwczesne Plan done przy review w tle</title>'
+    await type(`+ ${LONG}\n+ dark mode`)
+    await idle()
+    const before = asked.length
+    expect(await aside('run all')).toBe('Running 2 entries one by one. /aside stop stops after the current one.')
+    await idle()
+
+    expect(asked).toHaveLength(before + 1)
+    expect((await aside()).split('\n').filter(line => /^ +\d +(running|to do) /.test(line))).toEqual([
+      '  1  running  Przedwczesne Plan done przy review w tle',
+      '  2  to do    dark mode',
+    ])
+    expect((await shown()).length).toBeGreaterThan(0)
+  })
+
+  test('with no title from the model, or with tidy off, a step keeps the first 120 characters', async ($, on) => {
+    const { asked, type, aside, idle } = world($, on, { tidy: {} })
+    await type(`+ ${LONG} ${LONG}`)
+    await idle()
+    await aside('run')
+    await idle()
+
+    expect((await aside()).split('\n')[2]).toBe(`  1  running  ${`${LONG} ${LONG}`.slice(0, 119).trimEnd()}…`)
+    expect(asked.at(-1)).toContain('<note>')
+  })
+
+  test('/aside run N names the entry it runs', async ($, on) => {
+    const { w, type, aside, idle } = world($, on, { tidy: {} })
+    w.titleReply = '<title>Review w tle</title>'
+    await type(`+ dark mode\n+ ${LONG}`)
+    await idle()
+    await aside('run 2')
+    await idle()
+    expect((await aside()).split('\n')[2]).toBe('  1  running  Review w tle')
+  })
+
+  test('a reply too long to be a title is left out', async ($, on) => {
+    const { w, type, aside, idle } = world($, on, { tidy: {} })
+    w.titleReply = `<title>${'a long reply '.repeat(8)}</title>`
+    await type(`+ ${LONG}`)
+    await idle()
+    await aside('run 1')
+    await idle()
+    expect((await aside()).split('\n')[2]).toBe(`  1  running  ${LONG}`)
+  })
+
+  test('the model reads the text typed alone, never the quote it was typed about', async ($, on) => {
+    const { w, asked, write, type, aside, idle } = world($, on, { tidy: {}, files: { [REPORT_PATH]: REPORT }, clip: 'Revenue grew by 12% in the third quarter' })
+    w.titleReply = '<title>Kwartał</title>'
+    await write(REPORT_PATH)
+    await type(`+? ${LONG}`)
+    await idle()
+    await aside('run 1')
+    await idle()
+
+    expect(asked.at(-1)).toContain(LONG)
+    expect(asked.at(-1)).not.toContain('Revenue')
+  })
+
+  test('with tidy off, no model is asked', { options: { tidy: 'off' } }, async ($, on) => {
+    const { w, asked, type, aside, idle } = world($, on)
+    w.titleReply = '<title>X</title>'
+    await type(`+ ${LONG}`)
+    await aside('run')
+    await idle()
+
+    expect(asked).toEqual([])
+  })
+
+  test('a title that comes after the plan has changed is not written over it', async ($, on) => {
+    const { w, type, aside, idle, fromAnotherSession } = world($, on, { tidy: {} })
+    w.titleReply = '<title>Late title</title>'
+    await type(`+ ${LONG}`)
+    await idle()
+    // Another session puts a plan of its own in place while the model thinks.
+    w.meanwhile = async () => {
+      w.meanwhile = undefined
+      await fromAnotherSession('plan:/proj', { steps: [{ title: LONG, prompt: 'Something else.' }] })
+    }
+    await aside('run')
+    await idle()
+
+    expect(await aside()).not.toContain('Late title')
   })
 })

@@ -19,8 +19,11 @@ import {
   planningRequest,
   readPlanReply,
   readStepResult,
+  readTitleReply,
   STEP_MARKER,
   stepPrompt,
+  tidyPrompt,
+  TITLE_SYSTEM,
 } from '../core/prompts'
 import type { StepMode } from '../core/prompts'
 import { describeError, describeFailure, formatCount, formatDuration, shortenText } from '../core/text'
@@ -423,11 +426,41 @@ export async function runPlan($: Engine, ctx: Context): Promise<string | undefin
   return `Running the plan: ${formatCount(left, 'step')}, from step ${first + 1}. /aside stop stops after the current one.${note}`
 }
 
-// An entry as a step of a plan of its own.
+// An entry as a step of a plan of its own, titled with the start of its text until the small
+// model names it.
 const entryStep = (entry: Entry, root: string): Step => ({
-  title: shortenText(entry.text || formatPlace(entry, root) || KINDS[entry.kind].label, 50),
+  title: shortenText(entry.text || formatPlace(entry, root) || KINDS[entry.kind].label, 120),
   prompt: entryPrompt(entry, root),
 })
+
+// A title for each step made of an entry whose text is long, from the small model, once the
+// run has started: it reads the text typed alone, never what was copied, as tidying does. A
+// step keeps the one it has when no reply comes in time, or when the plan no longer holds it,
+// under that title, by then.
+async function nameSteps($: Engine, ctx: Context, steps: readonly Step[], entries: readonly Entry[]): Promise<void> {
+  for (const [i, step] of steps.entries()) {
+    const text = entries[i]?.text ?? ''
+    if (step.title.length <= 60 || text.trim() === '') continue
+    const reply = await $.model
+      .complete({ model: 'haiku', system: TITLE_SYSTEM, prompt: tidyPrompt(text), maxTokens: 100, timeoutMs: 10_000 })
+      .catch(() => undefined)
+    const title = reply?.isAnswered ? readTitleReply(reply.text) : undefined
+    if (title === undefined) continue
+    await changePlan($, ctx, plan => {
+      const now = plan.steps.findIndex(one => one.prompt === step.prompt && one.title === step.title)
+      if (now >= 0) plan.steps[now] = { ...plan.steps[now]!, title }
+    })
+    await refreshBand($)
+  }
+}
+
+// Names the steps in the background, where /aside idle waits for tidying too.
+function nameStepsLater($: Engine, ctx: Context, steps: readonly Step[], entries: readonly Entry[]) {
+  if (!ctx.settings.tidy) return
+  const work = nameSteps($, ctx, steps, entries).catch(() => undefined)
+  ctx.session.tidies.add(work)
+  void work.then(() => ctx.session.tidies.delete(work))
+}
 
 async function runChosenSteps($: Engine, ctx: Context, plan: Plan, chosen: readonly number[]): Promise<string> {
   if (!chosen.every(n => n >= 1 && n <= plan.steps.length)) {
@@ -461,6 +494,7 @@ async function runChosenEntries($: Engine, ctx: Context, keys: Keys, plan: Plan,
   }
   await refreshBand($)
   await startStep($, ctx, 0, true)
+  nameStepsLater($, ctx, steps, entries)
 
   return entries.length === 1
     ? `Running entry ${chosen[0]}: ${steps[0]!.title}${note}`
@@ -546,6 +580,7 @@ export async function runEntries($: Engine, ctx: Context): Promise<string> {
   }
   await refreshBand($, 0)
   await startStep($, ctx, 0, true)
+  nameStepsLater($, ctx, steps, all)
 
   return `Running ${formatCount(steps.length, 'entry')} one by one. /aside stop stops after the current one.${note}`
 }

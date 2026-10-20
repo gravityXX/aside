@@ -11,7 +11,7 @@ const frame = (ui: Drawing, sections: readonly ListingSection[]) => {
   const { Box } = ui
 
   return (
-    <Box flexDirection="column" borderStyle="round" borderColor="promptBorder" paddingX={1}>
+    <Box flexDirection="column" width="100%" borderStyle="round" borderColor="promptBorder" paddingX={1}>
       {listingRows(ui, sections)}
     </Box>
   )

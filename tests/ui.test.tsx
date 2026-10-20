@@ -436,7 +436,7 @@ describe('where aside draws', () => {
       expect((await pane.find({ type: 'Text', text: /^x$/ }))?.text).toBe('x')
       await pane.unmount()
       const frame = await mount('CommandOutput', { command: 'aside', args: '', text: await aside(), isErrored: false }, surface)
-      expect(await frame.drawn()).toMatchObject({ type: 'Box', props: { borderStyle: 'round' } })
+      expect(await frame.drawn()).toMatchObject({ type: 'Box', props: { borderStyle: 'round', width: '100%' } })
       await frame.unmount()
       const row = await mount('ToolUse', { tool_use_id: 'u1', tool: 'mcp__aside__plan', input: {}, isRunning: false, isErrored: false, isInterrupted: false, output: result }, surface)
       expect(await row.drawn()).toMatchObject({ type: 'Box', props: { borderStyle: 'round' } })
@@ -518,6 +518,8 @@ describe('the plan drawn as a line of steps', () => {
       expect((await ui.find({ type: 'Text', text: '↳ running for 4 min' }))?.props.dimColor).toBe(true)
       // The word sits in a box of its own that never shrinks, so a title that wraps leaves it whole.
       expect(boxOf(await ui.drawn(), 'running')?.props?.flexShrink).toBe(0)
+      // The title takes the room left, so the word sits at the right edge.
+      expect(boxOf(await ui.drawn(), 'A title long enough to wrap in a narrow pane, and then some more words')?.props?.flexGrow).toBe(1)
       await ui.unmount()
     })
 
