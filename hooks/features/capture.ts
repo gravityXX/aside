@@ -3,7 +3,7 @@ import type { CatchHandler, EngineInterface as Engine, Hook } from 'claude-code'
 import type { Band, Entry } from '../../types'
 import { currentOutput } from '../context'
 import type { Context } from '../context'
-import { inOrder, isSameEntry, KINDS, parseEntries } from '../core/entries'
+import { inOrder, isSameEntry, KINDS, parseEntries, retypedRaw } from '../core/entries'
 import type { Order, TypedEntry } from '../core/entries'
 import { formatPlace, isExportText } from '../core/listing'
 import { findFragment, findHeading, fragmentWords, MARKDOWN_PATH, MIN_FRAGMENT_WORDS } from '../core/markdown'
@@ -262,7 +262,7 @@ async function tidyGlobalIdea($: Engine, idea: GlobalIdea): Promise<void> {
   if (now === undefined || now.entry.text !== idea.entry.text) {
     return
   }
-  const raw = now.entry.raw?.endsWith(now.entry.text) ? `${now.entry.raw.slice(0, now.entry.raw.length - now.entry.text.length)}${fixed}` : now.entry.raw
+  const raw = retypedRaw(now.entry, fixed)
   await saveGlobalIdea($, { key: now.key, entry: { ...now.entry, text: fixed, ...(raw === undefined ? {} : { raw }) } })
   // Taken out meanwhile with edit or clear, between the read above and that write: the write
   // brought its key back, so it goes again, and the idea comes back only as edit or undo brings it.
@@ -282,7 +282,7 @@ async function tidyEntry($: Engine, entry: Entry): Promise<void> {
     const i = stored.findIndex(one => isSameEntry(one, entry))
     const one = stored[i]
     if (one === undefined) return { value: false }
-    const raw = one.raw?.endsWith(one.text) ? `${one.raw.slice(0, one.raw.length - one.text.length)}${fixed}` : one.raw
+    const raw = retypedRaw(one, fixed)
     const tidied = { ...one, text: fixed, ...(raw === undefined ? {} : { raw }) }
 
     return { list: stored.map((each, j) => (j === i ? tidied : each)), value: true }
