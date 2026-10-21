@@ -144,7 +144,7 @@ The plugin runs on the Claude Code plugin API: hooks `($, e, next)` added with `
 5. The machine beneath the plugin (files, clipboard, branch, system, a narrow terminal, a hook that drops prompts) is set through `Machine`. The plugin's own files are never mocked.
 6. Time moves only through `clock` and `idle()`; no real waits.
 7. A test's name is a sentence about one behaviour, such as "a queued entry never reaches Claude and leaves a line in the transcript, not a toast". It may check several things that make up that behaviour.
-8. A test lives in the file of its area: `typing`, `comments`, `commands`, `plan`, `global`, `ui`, `matching`. A new area gets a new file.
+8. A test lives in the file of its area: `typing`, `comments`, `commands`, `plan`, `planner`, `background`, `log`, `steplines`, `global`, `ui`, `matching`. A new area gets a new file.
 9. Every `feat:` comes with tests of what it adds. Every `fix:` comes with a test that fails without the fix.
 10. **Prefer** exact expectations (`toEqual` on the whole listing) over `toContain`, so a stray line fails the test.
 
