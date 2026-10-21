@@ -1,6 +1,6 @@
 import type { Entry, Plan, Step } from '../../types'
 import { KINDS } from './entries'
-import { isWaiting } from './step'
+import { isWaiting, nextInRun } from './step'
 import { pathKey, relativePath, shortenText } from './text'
 
 // What the last line of every prompt composed from the queue says, and what every step
@@ -215,6 +215,10 @@ const resultsSoFar = (steps: readonly Step[], index: number): string[] => {
 
 // Whether a step in `mode` sums the run up: the last step of a run of several.
 export const isSummingUp = (steps: readonly Step[], mode: StepMode) => mode === 'last' && steps.length > 1
+
+// How step `index` stands in its run: alone, with more to follow, or the last of several.
+export const stepMode = (steps: readonly Step[], index: number, isChain: boolean, then: readonly number[] | undefined): StepMode =>
+  !isChain && then === undefined ? 'alone' : nextInRun(steps, index, isChain, then) >= 0 ? 'more' : 'last'
 
 // A step of the plan as the prompt that runs it: the step's own prompt, then, in a plan of
 // several, where it stands and how to go about it: this step alone, the wait tool when it

@@ -1,11 +1,10 @@
 import type { Register } from 'claude-code'
 
 import { createContext } from './context'
+import { noteBackgroundEnd, noteBackgroundWork } from './features/background'
 import { dropFailedEntry, emptyBoxAfterQueue, queueTyped, rememberMarkdownFile, rememberToolOutput } from './features/capture'
 import { asideFailed, completeAside, runAside, startSession } from './features/commands'
 import {
-  noteBackgroundEnd,
-  noteBackgroundWork,
   noteStepAnswer,
   endSessionSteps, onTurnEnd,
   onTurnStart,
