@@ -8,7 +8,7 @@ How to run, test and release: `CONTRIBUTING.md`.
 
 ### Issue tracker
 
-Local markdown in `/home/gravity/repos/aside/.scratch/`, shared by every worktree. See `docs/agents/issue-tracker.md`.
+Local markdown in `<main-checkout>/.scratch/`, shared by every worktree. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
