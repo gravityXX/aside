@@ -109,8 +109,12 @@ export const listedText = (listed: Listed): string =>
   typeof listed === 'string' ? listed : `${listingText(listed.sections)}${listed.note ? `\n\n${listed.note}` : ''}`
 
 // Whether the step goes on in the background, with no turn of it running: work a turn of it
-// started is still going, and the turn its end brings ends the step.
-export const isAway = (active: NonNullable<Plan['active']>) => active.isAway === true && active.turnId === undefined
+// started is still going, and the turn its end brings ends the step. A step Claude has asked
+// the person something in waits instead, whatever work it left running: dropDeadTurn leaves
+// both marks on a step whose notification turn asked and then died, and the listing has always
+// read that record as waiting, so the band and the commands read it that way too.
+export const isAway = (active: NonNullable<Plan['active']>) =>
+  active.isAway === true && active.turnId === undefined && active.pausedFor === undefined
 
 // What a step that goes on in the background waits for, by name.
 export const awayWork = (active: NonNullable<Plan['active']>) => [...new Set((active.background ?? []).map(one => one.what))].join(', ')

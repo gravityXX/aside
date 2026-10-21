@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- A step that asked you something while its work ran in the background waits for your answer, which is what `/aside` showed for it all along: `/aside run` and `/aside plan` no longer answer that it goes on in the background, and when the turn it asked in never ends, a toast says it waits.
+
 ## 0.37.1 - 2026-10-20
 
 - An entry typed with "+" just as `/aside plan`, `/aside run`, `/aside clear` or `/aside undo` starts is no longer lost: it stays in the queue, and `/aside undo` brings back exactly what was taken. A hand-over that fails puts its entries back once each.

@@ -3673,6 +3673,49 @@ describe('a step whose turn never ends', () => {
 
     expect((await shown()).slice(0, 4)).toEqual(['The queue is empty.', 'Plan: 2 of 3 steps to do (/aside run)', '1 done One', '↳ one done.'])
   })
+
+  test('a step that asked you something while its work ran in the background waits for your answer, not on that work', async ($, on) => {
+    const { sent, toasts, aside, shown, savePlan, wait, startTurn, endTurn, idle } = world($, on)
+    launched(on)
+    await savePlan(STEPS)
+    await aside('run all')
+    await idle()
+    await startTurn(sent[0]!, 's1')
+    await $.tool.call({ tool: 'Workflow', script: 'x', tool_use_id: 'toolu_1' } as never)
+    await endTurn('s1', 'answer', 'Result: review started.')
+    await notify($, notice('w1', 'toolu_1'))
+    await startTurn(notice('w1', 'toolu_1'), 'n1')
+    await wait('which fix')
+    // The turn it asked in never ends: the next one of this session finds it open, and the step
+    // waits for the person, so that turn is the step's as it is for any step that waits.
+    await startTurn('meanwhile', 'h1')
+    expect(toasts.at(-1)).toBe("Step 1's turn never ended; it waits, and /aside continue ends it and goes on.")
+    await endTurn('h1', 'answer', 'Ok.')
+    await idle()
+
+    expect(await aside('run 2')).toBe('Step 1 waits for your answer; /aside continue ends it and goes on, /aside stop ends it there.')
+    expect((await shown()).slice(0, 2)).toEqual(['Plan waits at step 1 (which fix), 3 of 3 steps to do (/aside continue)', '1 waiting One'])
+  })
+
+  test('a step in the background that asked you nothing still goes on there when its turn never ends', async ($, on) => {
+    const { sent, toasts, aside, savePlan, startTurn, endTurn, idle } = world($, on)
+    launched(on)
+    await savePlan(STEPS)
+    await aside('run all')
+    await idle()
+    await startTurn(sent[0]!, 's1')
+    await $.tool.call({ tool: 'Workflow', script: 'x', tool_use_id: 'toolu_1' } as never)
+    await $.tool.call({ tool: 'Agent', prompt: 'x', description: 'find the docs', run_in_background: true, tool_use_id: 'toolu_a' } as never)
+    await endTurn('s1', 'answer', 'Result: started both.')
+    await notify($, notice('w1', 'toolu_1'))
+    await startTurn(notice('w1', 'toolu_1'), 'n1')
+    await startTurn('meanwhile', 'h1')
+
+    expect(toasts.filter(text => text.includes('never ended'))).toEqual([])
+    expect(await aside('run 2')).toBe(
+      'Step 1 goes on in the background (find the docs); /aside continue ends it and goes on, /aside stop ends it there.',
+    )
+  })
 })
 
 describe('the title of a step made of an entry', () => {
