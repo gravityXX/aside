@@ -69,9 +69,6 @@ export type Session = {
   tidies: Set<Promise<void>>
   // The prompts of steps with a title an earlier release cut, sent to be named in this process.
   namedOld: Set<string>
-  // Changes to the plan, one after another, so two never save over each other: a step that
-  // ends and a planner adding steps meanwhile each read the plan and save it back.
-  planWrites: Promise<unknown>
   // The turns of the main loop this process saw start and has not yet seen end, and the work
   // in the background calls here started: what a step's turn or work can be known dead by.
   openTurns: Set<string>
@@ -100,7 +97,6 @@ export const createContext = (options: Parameters<Register>[1]): Context => ({
     waitTool: 'mcp__aside__wait',
     isOwnTurn: false,
     isRunning: false,
-    planWrites: Promise.resolve(),
     openTurns: new Set(),
     ownWork: new Set(),
     tidies: new Set(),
