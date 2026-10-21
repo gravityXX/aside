@@ -3,6 +3,7 @@ import type { EngineInterface as Engine } from 'claude-code'
 import type { Entry } from '../../types'
 import { inOrder, isSameEntry, onlyEntries, withoutEntries } from '../core/entries'
 import type { Order } from '../core/entries'
+import { serial } from '../core/serial'
 import { loadEntries, loadTagIds, projectKeys, tagId } from './store'
 import type { Keys } from './store'
 
@@ -14,14 +15,12 @@ export type QueueChange<T> = { list?: readonly Entry[]; value: T; afterSave?: ()
 
 // The changes to this project's queue, one after another, so two that overlap never store over
 // each other (2.9): typed entries, their tidied text, imports, and the takes undo brings back.
-// A module variable lives as long as `ctx` does, and a reload starts both over (3.7), as it does
-// the work that asked for them.
-let changes: Promise<unknown> = Promise.resolve()
+const inTurn = serial()
 
 // The slow first steps of changeQueueAfter, one after another, beside the chain rather than on
 // it: each change joins the chain once its first step is done, in the order they were asked
 // for, and a change asked for meanwhile without one, such as a hand-over, never waits on them.
-let preparing: Promise<unknown> = Promise.resolve()
+const inPrepared = serial()
 
 // Changes the queue as it is stored once every change asked for before has landed, and
 // resolves once this one has too, so what is read next holds it. A failure reaches the caller
@@ -42,14 +41,11 @@ export function changeQueueAfter<P, T>(
   prepare: () => Promise<P>,
   change: (stored: readonly Entry[], prepared: P) => QueueChange<T> | Promise<QueueChange<T>>,
 ): Promise<T> {
-  const done = preparing.then(async () => {
+  return inPrepared(async () => {
     const prepared = await prepare()
 
     return inTurn(() => applyChange($, stored => change(stored, prepared)))
   })
-  preparing = done.catch(() => undefined)
-
-  return done
 }
 
 // The queue as /aside shows it, in the order setting, read as it is stored now: for what is
@@ -78,16 +74,6 @@ async function applyChange<T>($: Engine, change: (stored: readonly Entry[]) => Q
   await afterSave?.()
 
   return value
-}
-
-// Runs `work` in its turn on the chain: once every change asked for before has landed, and
-// before any asked for after it. The takes, which write the queue and what undo brings back
-// together, run on it as they are, with their own writes.
-function inTurn<T>(work: () => Promise<T>): Promise<T> {
-  const done = changes.then(work)
-  changes = done.catch(() => undefined)
-
-  return done
 }
 
 // What /aside undo brings back: the entries and the tags the last plan, run or clear took.
