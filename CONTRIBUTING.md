@@ -5,6 +5,7 @@ Issues and pull requests are welcome. A pull request needs a passing CI run (`va
 ## Develop
 
 ```sh
+python3 scripts/check_rules.py
 claude plugin validate .
 claude plugin test .
 claude --plugin-dir .

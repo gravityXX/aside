@@ -184,12 +184,12 @@ refuse. `claude plugin test .` is where it shows, as every test failing to load 
 9. CI cannot type-check, since the types are written only when a session loads the plugin (3.13). Run `tsc` before opening a pull request.
 10. The version stays 0.x while commands and stored data still change (`major_version_zero` in `.cz.toml`). 1.0.0 comes from one pull request that sets it to `false` and has a `!` commit.
 
-## 8. The pictures script
+## 8. The Python scripts
 
-`assets/make_svgs.py` draws every picture in the README, the timeline and the steps, and those in `docs/use-cases.md`, light and dark.
+`assets/make_svgs.py` draws every picture in the README, the timeline and the steps, and those in `docs/use-cases.md`, light and dark. `scripts/check_rules.py` checks that the rule numbers in this file hold together: that each section runs 1, 2, 3 with none skipped or used twice, and that every rule the code, the tests and the docs cite exists. CI runs it, since nothing else keeps a citation honest when a rule is inserted.
 
-1. Python 3.12 or newer, the standard library only. It runs from the repository root: `python3 assets/make_svgs.py`.
-2. It is formatted with `uvx ruff@0.17.1 format --line-length 120 assets`, linted with `uvx ruff@0.17.1 check assets` and typed so that `uvx mypy@2.4.0 --strict assets/make_svgs.py` passes.
+1. Python 3.12 or newer, the standard library only. Each runs from the repository root: `python3 assets/make_svgs.py`, `python3 scripts/check_rules.py`.
+2. They are formatted with `uvx ruff@0.17.1 format --line-length 120 assets scripts`, linted with `uvx ruff@0.17.1 check assets scripts` and typed so that `uvx mypy@2.4.0 --strict assets/make_svgs.py scripts/check_rules.py` passes.
 3. Colours live in `THEMES`: a light and a dark set with the same keys. Layout numbers are named constants (`W`, `ROW`, `PAD`).
 4. The SVGs are its output. Change the script, run it and commit both; never edit an SVG by hand.
 5. Every picture comes in light and dark and has an `aria-label` that says what it shows.
@@ -206,15 +206,16 @@ refuse. `claude plugin test .` is where it shows, as every test failing to load 
 8. Do the comments say why, and are they still true? (4.20 to 4.22)
 9. Do the commit types and the CHANGELOG note match the release they make? (7)
 10. Are the README, `/aside help`, the Tab hints and `docs/use-cases.md` updated when a command or what it does changes?
-11. Do the pictures still match the README, `docs/use-cases.md` and the plugin's behaviour? (8)
+11. Do the pictures still match the README, `docs/use-cases.md` and the plugin's behaviour, and do the rule numbers still hold together? (8)
 12. Have the checks run, with their real output?
 
 ```sh
+python3 scripts/check_rules.py
 claude plugin validate .
 claude plugin test .
 npx -p typescript@5.9.3 tsc -p .
-# when assets/make_svgs.py changed
-uvx ruff@0.17.1 format --check --line-length 120 assets && uvx ruff@0.17.1 check assets && uvx mypy@2.4.0 --strict assets/make_svgs.py
+# when a Python script changed
+uvx ruff@0.17.1 format --check --line-length 120 assets scripts && uvx ruff@0.17.1 check assets scripts && uvx mypy@2.4.0 --strict assets/make_svgs.py scripts/check_rules.py
 ```
 
 ## 10. Decisions
