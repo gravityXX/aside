@@ -70,6 +70,22 @@ const PLURALS = { idea: 'ideas', comment: 'comments', tag: 'tags', step: 'steps'
 
 export const formatCount = (n: number, noun: keyof typeof PLURALS): string => `${n} ${n === 1 ? noun : PLURALS[noun]}`
 
+// What the commands call the places of a listing, one and many.
+const PLACES = { number: ['a number', 'numbers'], step: ['a step', 'steps'], entry: ['an entry', 'entries'] } as const
+
+export type Place = keyof typeof PLACES
+
+// Whether `n` is a place a listing of `length` rows shows, counted from 1 as /aside shows them.
+export const isPlace = (n: number, length: number) => Number.isInteger(n) && n >= 1 && n <= length
+
+// What a command answers when a number it was given is not one its listing shows (5.5): how
+// many were given, what they are called there, and the command that numbers them.
+export const askPlaces = (count: number, length: number, of: Place = 'number', shown = '/aside') =>
+  `Give ${PLACES[of][count === 1 ? 0 : 1]} from 1 to ${length}, as ${shown} shows them.`
+
+// The same for the two places a move takes, which `shown` move names in full.
+export const askTwoPlaces = (length: number, shown = '/aside') => `Give two places from 1 to ${length}: ${shown} move 3 1`
+
 // A step's length as the toast at the end of a plan gives it: "40 s", "23 min", "1 h 5 min".
 export const formatDuration = (ms: number): string => {
   const minutes = Math.round(ms / 60_000)

@@ -6,7 +6,7 @@ import { inOrder, isSameEntry, withoutEntries } from '../core/entries'
 import { QUEUE_PEEK, listingText, namedSection, queuesSections } from '../core/listing'
 import type { Listed } from '../core/listing'
 import { MARKDOWN_PATH } from '../core/markdown'
-import { formatCount, newQueueNote, shortenText } from '../core/text'
+import { askPlaces, askTwoPlaces, formatCount, isPlace, newQueueNote, shortenText } from '../core/text'
 import { changeQueue } from '../io/queue'
 import {
   addIdeas,
@@ -43,11 +43,6 @@ const markOf = (name: string) => (name === GLOBAL ? '+g' : `+@${queueName(name)}
 
 const emptyOf = (name: string) =>
   name === GLOBAL ? 'The global list is empty. Start a message with "+g" to add an idea to it.' : `${nameOf(name)} is empty. Start a message with "${markOf(name)}" to add an idea to it.`
-
-const isPlace = (n: number, length: number) => Number.isInteger(n) && n >= 1 && n <= length
-
-const askPlaces = (name: string, length: number, count: number) =>
-  `Give ${count === 1 ? 'a number' : 'numbers'} from 1 to ${length}, as ${commandOf(name)} shows them.`
 
 // A queue as /aside q NAME numbers it, in the order setting.
 async function shownIdeas($: Engine, ctx: Context, name: string): Promise<GlobalIdea[]> {
@@ -112,7 +107,7 @@ async function moveHere($: Engine, ctx: Context, name: string, numbers: readonly
     return emptyOf(name)
   }
   if (!numbers.every(n => isPlace(n, ideas.length))) {
-    return askPlaces(name, ideas.length, numbers.length)
+    return askPlaces(numbers.length, ideas.length, 'number', commandOf(name))
   }
   const chosen = [...new Set(numbers)].map(n => ideas[n - 1]!)
   // Typed as "+g idea" or "+@work idea", it is "+ idea" in the queue, so /aside edit keeps it here.
@@ -139,7 +134,7 @@ async function moveToQueue($: Engine, ctx: Context, name: string, numbers: reado
       return { value: { text: 'The queue is empty.', isMoved: false } }
     }
     if (!numbers.every(n => isPlace(n, list.length))) {
-      return { value: { text: `Give ${numbers.length === 1 ? 'a number' : 'numbers'} from 1 to ${list.length}, as /aside shows them.`, isMoved: false } }
+      return { value: { text: askPlaces(numbers.length, list.length), isMoved: false } }
     }
     const comments = [...new Set(numbers)].filter(n => list[n - 1]!.kind !== 'idea')
     if (comments.length > 0) {
@@ -167,7 +162,7 @@ async function removeIdeas($: Engine, ctx: Context, name: string, numbers: reado
     return emptyOf(name)
   }
   if (!numbers.every(n => isPlace(n, ideas.length))) {
-    return askPlaces(name, ideas.length, numbers.length)
+    return askPlaces(numbers.length, ideas.length, 'number', commandOf(name))
   }
   const chosen = [...new Set(numbers)].map(n => ideas[n - 1]!)
   await forgetGlobalIdeas($, chosen.map(idea => idea.key))
@@ -185,7 +180,7 @@ async function popIdea($: Engine, ctx: Context, name: string, n?: number): Promi
   }
   const at = n ?? 1
   if (!isPlace(at, ideas.length)) {
-    return askPlaces(name, ideas.length, 1)
+    return askPlaces(1, ideas.length, 'number', commandOf(name))
   }
   const idea = ideas[at - 1]!
   const filled = await $.prompt.fill({ text: idea.entry.text, mode: 'insert' })
@@ -208,7 +203,7 @@ async function editIdea($: Engine, ctx: Context, name: string, n: number): Promi
     return emptyOf(name)
   }
   if (!isPlace(n, ideas.length)) {
-    return askPlaces(name, ideas.length, 1)
+    return askPlaces(1, ideas.length, 'number', commandOf(name))
   }
   const idea = ideas[n - 1]!
   const filled = await $.prompt.fill({ text: `${markOf(name)} ${idea.entry.text}`, mode: 'insert' })
@@ -233,7 +228,7 @@ async function moveIdea($: Engine, ctx: Context, name: string, from: number, to:
     return 'Nothing to move.'
   }
   if (!isPlace(from, ideas.length) || !isPlace(to, ideas.length)) {
-    return `Give two places from 1 to ${ideas.length}: ${commandOf(name)} move 3 1`
+    return askTwoPlaces(ideas.length, commandOf(name))
   }
   const [idea] = ideas.splice(from - 1, 1)
   ideas.splice(to - 1, 0, idea!)

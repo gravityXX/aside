@@ -7,7 +7,7 @@ import { describeCount, isExportText, listedText, listingMarkdown, listingText, 
 import { isWaiting, turnOf } from '../core/step'
 import type { Listed, ListingSection } from '../core/listing'
 import { popPrompt } from '../core/prompts'
-import { canonicalPath, formatCount, isAbsolutePath, isWindowsPath, relativePath, shortenText } from '../core/text'
+import { askPlaces, askTwoPlaces, canonicalPath, formatCount, isAbsolutePath, isPlace, isWindowsPath, relativePath, shortenText } from '../core/text'
 import { resolveFile, tryReadFile, writeExport } from '../io/host'
 import { bringBackTake, changeQueue, readQueue, takeCleared } from '../io/queue'
 import type { QueueChange } from '../io/queue'
@@ -183,8 +183,6 @@ function changeShownQueue<T>($: Engine, ctx: Context, change: (list: Entry[]) =>
   })
 }
 
-const isPlace = (n: number, length: number) => Number.isInteger(n) && n >= 1 && n <= length
-
 // The entry goes into the prompt box in the change that takes it out, so what the box gets is
 // what leaves the queue, and the record of where it stood is there before a message sent next.
 export async function editEntry($: Engine, ctx: Context, n: number): Promise<string> {
@@ -194,7 +192,7 @@ export async function editEntry($: Engine, ctx: Context, n: number): Promise<str
       return { value: { text: 'The queue is empty.', isTaken: false } }
     }
     if (!isPlace(n, list.length)) {
-      return { value: { text: `Give a number from 1 to ${list.length}, as /aside list shows them.`, isTaken: false } }
+      return { value: { text: askPlaces(1, list.length, 'number', '/aside list'), isTaken: false } }
     }
     const entry = list[n - 1]!
     const filled = await $.prompt.fill({ text: entry.raw ?? `+ ${entry.text}`, mode: 'insert' })
@@ -222,7 +220,7 @@ export async function moveEntry($: Engine, ctx: Context, from: number, to: numbe
       return { value: 'Nothing to move.' }
     }
     if (!isPlace(from, list.length) || !isPlace(to, list.length)) {
-      return { value: `Give two places from 1 to ${list.length}: /aside move 3 1` }
+      return { value: askTwoPlaces(list.length) }
     }
     const [entry] = list.splice(from - 1, 1)
     list.splice(to - 1, 0, entry!)
@@ -242,7 +240,7 @@ export async function popEntry($: Engine, ctx: Context, n?: number): Promise<str
     }
     const at = n ?? 1
     if (!isPlace(at, list.length)) {
-      return { value: { text: `Give a number from 1 to ${list.length}, as /aside shows them.`, isTaken: false } }
+      return { value: { text: askPlaces(1, list.length), isTaken: false } }
     }
     const entry = list[at - 1]!
     const filled = await $.prompt.fill({ text: popPrompt(entry, root), mode: 'insert' })
@@ -264,7 +262,7 @@ export async function removeEntries($: Engine, ctx: Context, numbers: readonly n
       return { value: 'The queue is empty.' }
     }
     if (!numbers.every(n => isPlace(n, list.length))) {
-      return { value: `Give ${numbers.length === 1 ? 'a number' : 'numbers'} from 1 to ${list.length}, as /aside list shows them.` }
+      return { value: askPlaces(numbers.length, list.length, 'number', '/aside list') }
     }
     const places = new Set(numbers)
 

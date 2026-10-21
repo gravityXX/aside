@@ -27,7 +27,7 @@ import {
 } from '../core/prompts'
 import type { StepMode } from '../core/prompts'
 import { askedOf, awayWork, isAway, isWaiting, nextInRun, runOf, stepState, turnOf } from '../core/step'
-import { describeError, describeFailure, formatCount, formatDuration, shortenText } from '../core/text'
+import { askPlaces, describeError, describeFailure, formatCount, formatDuration, isPlace, shortenText } from '../core/text'
 import { changePlan } from '../io/plan'
 import { bringBackTake, forgetAnsweredTake, giveBackItems, readQueue, takeChosen, takeForHandOver, takePlanned } from '../io/queue'
 import { loadPlan, loadTagIds, projectKeys, refreshBand, tagId } from '../io/store'
@@ -451,8 +451,8 @@ export async function nameOldSteps($: Engine, ctx: Context): Promise<void> {
 }
 
 async function runChosenSteps($: Engine, ctx: Context, plan: Plan, chosen: readonly number[]): Promise<string> {
-  if (!chosen.every(n => n >= 1 && n <= plan.steps.length)) {
-    return `Give ${chosen.length === 1 ? 'a step' : 'steps'} from 1 to ${plan.steps.length}, as /aside shows them.`
+  if (!chosen.every(n => isPlace(n, plan.steps.length))) {
+    return askPlaces(chosen.length, plan.steps.length, 'step')
   }
   const note = takeOverNote(plan)
   const [first, ...rest] = chosen.map(n => n - 1)
@@ -469,8 +469,8 @@ async function runChosenEntries($: Engine, ctx: Context, keys: Keys, plan: Plan,
   const taken = await takeChosen($, stored => {
     const list = inOrder(stored, ctx.settings.order)
     if (list.length === 0) return 'The queue is empty.'
-    if (!chosen.every(n => n >= 1 && n <= list.length)) {
-      return `Give ${chosen.length === 1 ? 'an entry' : 'entries'} from 1 to ${list.length}, as /aside shows them.`
+    if (!chosen.every(n => isPlace(n, list.length))) {
+      return askPlaces(chosen.length, list.length, 'entry')
     }
     return chosen.map(n => list[n - 1]!)
   })
