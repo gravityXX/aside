@@ -392,3 +392,57 @@ export const world = ($: Engine, on: On, given: Partial<Machine> = {}) => {
     pressBand,
   }
 }
+
+// What Claude reads under a step of a plan, and what the person reads of one: the text the
+// tests of the plan check against in full (5.7). Shared, so no two files spell it apart (6.4).
+export const MARKER = '(Composed by the aside plugin from my queued notes, not typed by me as a message.)'
+
+// The lines under each step of a plan of several, as Claude reads them.
+export const RESULT = 'End your reply with one line that starts "Result: " and says in one sentence what you did and what is still open.'
+export const WAIT = 'If you need my answer first, or something blocks this step, call the mcp__aside__wait tool and stop.'
+export const NEXT = [
+  'Do this step only, not the work of the steps after it; the next one is sent when you answer. If it is done already, say so.',
+  WAIT,
+  RESULT,
+].join('\n')
+export const ALONE = `Do this step only, not the work of the other steps. If it is done already, say so.\n${WAIT}\n${RESULT}`
+export const SUMMARY =
+  'Write the "Result: " line for this step, then end your reply with "## Summary of the run": one line per step of the plan on what was done, then what is still open (questions, anything paused, skipped or blocked), then what to do next.'
+// The last step of a run, with what the steps done said.
+export const last = (...said: string[]) =>
+  [
+    'Do this step only; it is the last one of this run. If it is done already, say so.',
+    ...(said.length > 0 ? ['What the steps done said:', ...said] : []),
+    SUMMARY,
+    `${WAIT} Then end your reply with the "Result: " line and no summary yet: the summary comes once the step is done.`,
+    'If you leave work running in the background, write no summary yet either: it comes once that work is done.',
+  ].join('\n')
+// What Claude reads beside the person's message to step `n` of 3 that waits for it.
+// With `said`, what the steps done said, for the last step of the run.
+export const answering = (n: number, title: string, said?: string[]) =>
+  `(Added by the aside plugin: step ${n} of 3 of the queue plan, "${title}", waits for my answer, and this message most likely gives it. ` +
+  'The step ends with your reply to it, unless you call the mcp__aside__wait tool: call it if you need my answer again, or if this message asks for something else, which you then do, so the step keeps waiting for my answer. ' +
+  'Otherwise go on with that step only. Either way, end your reply with one line that starts "Result: " and says in one sentence what the step has done and what is still open.' +
+  (said
+    ? ' It is the last step of this run: if your reply ends it, write the "Result: " line, then end your reply with "## Summary of the run": one line per step of the plan on what was done, then what is still open, then what to do next.' +
+      `${['', ...(said.length > 0 ? ['What the steps done said:', ...said] : [])].join('\n')}\nIf you call the mcp__aside__wait tool, write no summary yet.`
+    : '') +
+  ')'
+export const WAITS =
+  'The step waits for the user\'s answer. Ask your question, then end your reply with the "Result: " line; their answer comes to this step, which ends with your reply to it unless you call this tool again.'
+// What the person reads once a step asks.
+export const asks = (n: number, why: string) => `Step ${n} waits for your answer: ${why}. Answer as usual, and the step ends with Claude's reply; /aside continue ends it now.`
+
+// A workflow, or an agent in the background, that a call starts: the engine answers with its
+// task's id.
+export const launched = (on: On) => {
+  on('tool.call', { tool: 'Workflow' }, () => ({ result: { status: 'async_launched', taskId: 'w1', workflowName: 'review' } as never }))
+  on('tool.call', { tool: 'Agent' }, () => ({ result: { status: 'async_launched', agentId: 'a7', description: 'find the docs' } as never }))
+  on('tool.call', { tool: 'Bash' }, () => ({ result: { stdout: '', backgroundTaskId: 'b3' } as never }))
+}
+export const notice = (taskId: string, callId: string) =>
+  `<task-notification>\n<task-id>${taskId}</task-id>\n<tool-use-id>${callId}</tool-use-id>\n<status>completed</status>\n<summary>done</summary>\n</task-notification>`
+export const notify = ($: Engine, text: string) =>
+  $.prompt.submit({ text, origin: { kind: 'task-notification' } as never, wait: false })
+
+export const endSession = ($: Engine, sessionId: string) => $.session.end({ reason: 'other', sessionId, resume: { id: sessionId } } as never)
