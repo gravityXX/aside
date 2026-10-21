@@ -4,6 +4,7 @@ import type { PastRun, Plan } from '../../types'
 import type { Context } from '../context'
 import { runSection } from '../core/listing'
 import type { Listed } from '../core/listing'
+import { askPlaces, isPlace } from '../core/text'
 import { loadPlan, loadRuns, projectKeys, saveRun } from '../io/store'
 import { showWhileWorking } from './queue'
 
@@ -52,8 +53,8 @@ export async function logListed($: Engine, n?: number): Promise<Listed> {
   if (runs.length === 0) {
     return (await loadPlan($, keys.plan)).steps.length > 0 ? `${EMPTY_LOG} /aside shows the plan now.` : EMPTY_LOG
   }
-  if (n !== undefined && !(Number.isInteger(n) && n >= 1 && n <= runs.length)) {
-    return `Give a number from 1 to ${runs.length}, as /aside log shows them.`
+  if (n !== undefined && !isPlace(n, runs.length)) {
+    return askPlaces(1, runs.length, 'number', '/aside log')
   }
   const now = await $.clock.now()
   const chosen = n === undefined ? runs.slice(0, RUNS_SHOWN).map((run, i) => ({ run, i })) : [{ run: runs[n - 1]!, i: n - 1 }]
