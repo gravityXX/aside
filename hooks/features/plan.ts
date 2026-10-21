@@ -1205,8 +1205,10 @@ async function dropDeadTurn($: Engine, ctx: Context, sessionId: string, turnId: 
       delete active.background
       delete active.isAway
     }
-    if (!active.isAway) active.pausedFor ??= CUT_OFF
-    return { n: active.step + 1, waits: !active.isAway, hint }
+    // Read through isAway, so a step that had asked the person something waits here too: its
+    // question stands, and the work it left behind stays on the record for /aside continue.
+    if (!isAway(active)) active.pausedFor ??= CUT_OFF
+    return { n: active.step + 1, waits: !isAway(active), hint }
   })
   if (dropped === undefined) return
   await refreshBand($)
