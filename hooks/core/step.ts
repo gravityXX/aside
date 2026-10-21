@@ -1,4 +1,4 @@
-import type { StepRun, StepState, StoredActive } from '../../types'
+import type { Step, StepRun, StepState, StoredActive } from '../../types'
 
 // The step's own fields, in the one order every state keeps them in, so a state built by a
 // writer and the same state read back from the store stringify alike: changePlan writes only
@@ -138,3 +138,13 @@ export const isAway = (active: StepState) => active.is === 'away'
 
 // What a step that goes on in the background waits for, by name.
 export const awayWork = (active: StepState) => [...new Set((active.background ?? []).map(one => one.what))].join(', ')
+
+// The step that follows `index` in its run: the first of `then` when /aside run named the
+// steps, the next one not done in a chain, none for a step run on its own.
+export function nextInRun(steps: readonly Step[], index: number, isChain: boolean, then: readonly number[] | undefined): number {
+  if (then !== undefined) {
+    return then[0] ?? -1
+  }
+
+  return isChain ? steps.findIndex((step, i) => i > index && !step.isDone) : -1
+}

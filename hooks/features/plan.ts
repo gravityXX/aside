@@ -6,7 +6,6 @@ import { inOrder, isSameEntry, KINDS } from '../core/entries'
 import { describeCount, formatPlace, leftOutSection, listingText, planSection } from '../core/listing'
 import {
   answerContext,
-  backgroundContext,
   closingPrompt,
   entryPrompt,
   isAddingPrompt,
@@ -21,12 +20,13 @@ import {
   readStepResult,
   readTitleReply,
   STEP_MARKER,
+  stepMode,
   stepPrompt,
   tidyPrompt,
   TITLE_SYSTEM,
 } from '../core/prompts'
 import type { StepMode } from '../core/prompts'
-import { askedOf, awayWork, isAway, isWaiting, runOf, stepState, turnOf } from '../core/step'
+import { askedOf, awayWork, isAway, isWaiting, nextInRun, runOf, stepState, turnOf } from '../core/step'
 import { describeError, describeFailure, formatCount, formatDuration, shortenText } from '../core/text'
 import { changePlan } from '../io/plan'
 import { bringBackTake, forgetAnsweredTake, giveBackItems, readQueue, takeChosen, takeForHandOver, takePlanned } from '../io/queue'
@@ -34,6 +34,15 @@ import { loadPlan, loadTagIds, projectKeys, refreshBand, tagId } from '../io/sto
 import type { Keys } from '../io/store'
 import { archivePlan } from './history'
 import { openListPane, tagsInFiles } from './queue'
+
+// Handing the queue over and running the plan. This file is far past the 400 lines 2.4
+// prefers and stays one on purpose (1.2): the step's own lifecycle calls the hand-over, where
+// finishStep organizes a queue /aside plan asked about mid-step, and the hand-over calls the
+// lifecycle, where handOver starts the step it has just planned; the commands and the
+// hand-over call each other the same way (handOverAfterAnswer runs the queue, runPlan hands it
+// over). Cutting along those lines would import in a circle, which 2.1 forbids, and breaking
+// the circles means inverting those calls, which is a change of its own. What could leave has:
+// `features/background`, `core/step`, `core/prompts` and `io/plan`.
 
 // Submits the prompt `compose` gives as the person's own, or nothing when it gives none. It
 // goes out from a timer, since neither a command's hook nor a turn's end may submit one while
@@ -184,24 +193,6 @@ async function releaseStep($: Engine, ctx: Context, index: number, why: string) 
 // organize the queue once it ended: that /aside plan does it now, if there is anything to.
 async function organizeHint($: Engine, active: Plan['active'] | undefined): Promise<string> {
   return active?.isPlanningAfter && (await hasItems($)) ? '; /aside plan organizes the queue' : ''
-}
-
-// The step that follows `index` in its run: the first of `then` when /aside run named the
-// steps, the next one not done in a chain, none for a step run on its own.
-function nextInRun(steps: readonly Step[], index: number, isChain: boolean, then: readonly number[] | undefined): number {
-  if (then !== undefined) {
-    return then[0] ?? -1
-  }
-
-  return isChain ? steps.findIndex((step, i) => i > index && !step.isDone) : -1
-}
-
-function stepMode(steps: readonly Step[], index: number, isChain: boolean, then: readonly number[] | undefined): StepMode {
-  if (!isChain && then === undefined) {
-    return 'alone'
-  }
-
-  return nextInRun(steps, index, isChain, then) >= 0 ? 'more' : 'last'
 }
 
 // Runs step `index` of the plan; with `isChain`, the next one not done follows when it ends,
@@ -1067,109 +1058,6 @@ export async function noteStepAnswer(ctx: Context, $: Engine, e: Submit[1], next
   ctx.session.isAnswerTold = true
 
   return next({ ...e, context: [...(e.context ?? []), answerContext(plan.steps, active.step, isLast, ctx.session.waitTool)] })
-}
-
-// What a call left going in the background, by its result: a workflow or an agent in the
-// background, or a command; none for any other call.
-const startedWork = (e: Record<string, unknown>, result: unknown): { taskId: string; what: string } | undefined => {
-  const done = (typeof result === 'object' && result !== null ? result : {}) as Record<string, unknown>
-  if (e.tool === 'Workflow' && done.status === 'async_launched' && typeof done.taskId === 'string') {
-    return { taskId: done.taskId, what: typeof done.workflowName === 'string' ? done.workflowName : 'a workflow' }
-  }
-  if (e.tool === 'Agent' && done.status === 'async_launched' && typeof done.agentId === 'string') {
-    return { taskId: done.agentId, what: typeof done.description === 'string' ? done.description : 'an agent' }
-  }
-  if (e.tool === 'Bash' && typeof done.backgroundTaskId === 'string') {
-    return { taskId: done.backgroundTaskId, what: typeof e.description === 'string' ? e.description : 'a command' }
-  }
-
-  return undefined
-}
-
-type WorkCall = Parameters<MatchedHook<'tool.call', { readonly tool: RegExp }>>
-
-// A call of the step's own turn that leaves work going in the background makes that work the
-// step's: the step does not end before it does.
-export async function noteBackgroundWork(ctx: Context, $: Engine, e: WorkCall[1], next: WorkCall[2]) {
-  const done = await next(e)
-  if (e.tool === 'TaskStop') {
-    await dropStoppedWork(ctx, $, (done.result as { task_id?: unknown } | undefined)?.task_id)
-    return done
-  }
-  const work = e.agentId === undefined ? startedWork(e as unknown as Record<string, unknown>, done.result) : undefined
-  if (work === undefined) {
-    return done
-  }
-  const me = await $.session.id()
-  const callId = e.tool_use_id
-  // The call has run: a store that fails here costs the step its wait, never the call's result.
-  await changePlan($, plan => {
-    const active = plan.active
-    const turnId = active === undefined ? undefined : turnOf(active)
-    if (!active || turnId === undefined || active.sessionId !== me || turnId !== ctx.session.turnId) return
-    active.background = [...(active.background ?? []), { ...(callId ? { callId } : {}), ...work }]
-    if (callId) ctx.session.ownWork.add(callId)
-  }).catch(() => undefined)
-
-  return done
-}
-
-// Work Claude stopped sends no notification: it leaves the step at once. A step in the
-// background left with none takes the turn that stopped it, whose end ends the step.
-async function dropStoppedWork(ctx: Context, $: Engine, taskId: unknown) {
-  if (typeof taskId !== 'string') {
-    return
-  }
-  const me = await $.session.id()
-  await changePlan($, plan => {
-    const active = plan.active
-    const left = active?.background?.filter(one => one.taskId !== taskId)
-    if (!active?.background || left === undefined || left.length === active.background.length) return
-    if (left.length > 0) active.background = left
-    else delete active.background
-    const turnId = ctx.session.turnId
-    if (left.length === 0 && active.sessionId === me && isAway(active) && turnId !== undefined) {
-      plan.active = stepState({ ...runOf(active), is: 'noticing', turnId })
-    }
-  }).catch(() => undefined)
-  await refreshBand($)
-}
-
-// A background task's notification: the work it names is done, whatever its status, and
-// leaves the step it was part of.
-export async function noteBackgroundEnd(ctx: Context, $: Engine, e: Submit[1], next: Submit[2]) {
-  const taskId = /<task-id>([^<]+)<\/task-id>/.exec(e.text)?.[1]?.trim()
-  const callId = /<tool-use-id>([^<]+)<\/tool-use-id>/.exec(e.text)?.[1]?.trim()
-  if (taskId === undefined && callId === undefined) {
-    return next(e)
-  }
-  const me = await $.session.id()
-  const gone = await changePlan($, plan => {
-    const active = plan.active
-    const left = active?.background?.filter(one => one.taskId !== taskId && (callId === undefined || one.callId !== callId))
-    if (!active?.background || left === undefined || left.length === active.background.length) return undefined
-    if (left.length > 0) active.background = left
-    else delete active.background
-    const isTold = active.sessionId === me && isAway(active)
-    // Delivered into a turn already running, that turn takes it up, so it is the step's.
-    const now = isTold && e.turnId !== undefined ? stepState({ ...runOf(active), is: 'noticing', turnId: e.turnId }) : active
-    plan.active = now
-
-    return { active: structuredClone(now), steps: structuredClone(plan.steps), isTold }
-  })
-  if (gone === undefined) {
-    return next(e)
-  }
-  await refreshBand($)
-  const { active, steps, isTold } = gone
-  if (!isTold) {
-    return next(e)
-  }
-  if (e.turnId === undefined) ctx.session.notice = e.text
-  const isLast = isSummingUp(steps, stepMode(steps, active.step, active.isChain, active.then))
-  const context = backgroundContext(steps, active.step, awayWork(active), isLast)
-
-  return next({ ...e, context: [...(e.context ?? []), context] })
 }
 
 // The turn of this session's prompt that adds to the plan, known by its text, so a reload
