@@ -145,12 +145,12 @@ refuse. `claude plugin test .` is where it shows, as every test failing to load 
 
 1. Tests run with `claude plugin test .` and the engine's kit, `claude-code/testing`. No other runner or library.
 2. A test checks what the person or Claude can see: what `/aside` shows (`shown()`), the prompts sent (`sent`), the toasts, the transcript lines (`logged`), the prompt box (`filled`), the panes. Never internal functions or store keys.
-3. The exception is `matching.test.ts`: the rules in `core/` that find a fragment, a heading or a tag have many cases and are tested directly.
+3. The exceptions are `matching.test.ts` and `step.test.ts`: the rules in `core/` that find a fragment, a heading or a tag, and those that read the step running from the marks the store keeps and write them back, hold over every case the store can hold rather than over something the person sees, so they are tested directly and over the whole table of them.
 4. A test acts through the helpers of `world()`: `type`, `queue`, `aside`, `startTurn`, `answer`, `pressBand`. A helper two files need belongs in `tests/world.tsx`.
 5. The machine beneath the plugin (files, clipboard, branch, system, a narrow terminal, a hook that drops prompts) is set through `Machine`. The plugin's own files are never mocked.
 6. Time moves only through `clock` and `idle()`; no real waits.
 7. A test's name is a sentence about one behaviour, such as "a queued entry never reaches Claude and leaves a line in the transcript, not a toast". It may check several things that make up that behaviour.
-8. A test lives in the file of its area: `typing`, `comments`, `commands`, `plan`, `planner`, `background`, `log`, `steplines`, `global`, `ui`, `matching`. A new area gets a new file.
+8. A test lives in the file of its area: `typing`, `comments`, `commands`, `plan`, `planner`, `background`, `log`, `steplines`, `global`, `ui`, `matching`, `step`. A new area gets a new file.
 9. Every `feat:` comes with tests of what it adds. Every `fix:` comes with a test that fails without the fix.
 10. **Prefer** exact expectations (`toEqual` on the whole listing) over `toContain`, so a stray line fails the test.
 
