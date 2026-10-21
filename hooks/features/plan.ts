@@ -1,9 +1,9 @@
 import type { Args, CatchHandler, EngineInterface as Engine, Hook, MatchedHook } from 'claude-code'
 
-import type { Entry, Plan, Step } from '../../types'
+import type { Entry, Plan, Step, StepState } from '../../types'
 import type { Context, PlanModel } from '../context'
 import { inOrder, isSameEntry, KINDS } from '../core/entries'
-import { awayWork, describeCount, formatPlace, isAway, isWaiting, leftOutSection, listingText, planSection } from '../core/listing'
+import { describeCount, formatPlace, leftOutSection, listingText, planSection } from '../core/listing'
 import {
   answerContext,
   backgroundContext,
@@ -26,6 +26,7 @@ import {
   TITLE_SYSTEM,
 } from '../core/prompts'
 import type { StepMode } from '../core/prompts'
+import { askedOf, awayWork, isAway, isWaiting, runOf, stepState, turnOf } from '../core/step'
 import { describeError, describeFailure, formatCount, formatDuration, shortenText } from '../core/text'
 import { bringBackTake, forgetAnsweredTake, giveBackItems, readQueue, takeChosen, takeForHandOver, takePlanned } from '../io/queue'
 import { loadPlan, loadTagIds, projectKeys, refreshBand, savePlan, tagId } from '../io/store'
@@ -127,7 +128,7 @@ async function planAfterStep($: Engine, ctx: Context, asker: Asker): Promise<str
   const step = await changePlan($, ctx, plan => {
     if (plan.active?.sessionId !== me || isWaiting(plan.active)) return undefined
     plan.active.isPlanningAfter = true
-    return { n: plan.active.step + 1, isAnswer: isAnswerTurn(plan.active) }
+    return { n: plan.active.step + 1, isAnswer: plan.active.is === 'answering' }
   })
   if (step === undefined) {
     return handOverQueue($, ctx, asker)
@@ -183,14 +184,15 @@ async function releaseStep($: Engine, ctx: Context, index: number, why: string) 
   const now = await $.clock.now()
   const gone = await changePlan($, ctx, plan => {
     const active = plan.active
-    if (active?.step !== index || active.turnId !== undefined) return undefined
-    if (active.isEnding) completeStep(plan, active, active.sessionId, false, now)
+    if (active?.step !== index || turnOf(active) !== undefined) return undefined
+    // With no turn, the step continue or stop ended is the one that shows as ending.
+    if (active.is === 'ending') completeStep(plan, active, active.sessionId, false, now)
     else delete plan.active
     return active
   })
   if (gone) await refreshBand($)
   $.ui.toast(
-    gone?.isEnding
+    gone?.is === 'ending'
       ? `Could not ask Claude to sum the run up (${why}); step ${index + 1} is done as it stands.`
       : `Could not send step ${index + 1} of the plan: ${why}${await organizeHint($, gone)}`,
   )
@@ -230,7 +232,7 @@ async function startStep($: Engine, ctx: Context, index: number, isChain: boolea
     // A step that starts, the run going on or a new one, ends any pause but its own.
     if (paused) plan.paused = paused
     else delete plan.paused
-    plan.active = { step: index, isChain, sessionId, ...(then ? { then: [...then] } : {}) }
+    plan.active = stepState({ step: index, isChain, sessionId, ...(then ? { then: [...then] } : {}), is: 'due' })
     return structuredClone(plan.steps)
   })
   await refreshBand($)
@@ -245,7 +247,9 @@ function sendStep($: Engine, ctx: Context, steps: readonly Step[], index: number
     $,
     async () => {
       const now = await loadPlan($, (await projectKeys($)).plan)
-      const isStillDue = now.active?.step === index && now.active.turnId === undefined
+      // Any step with no turn of its own running is still due its prompt, the one a stop left
+      // ending, whose prompt only sums the run up, included.
+      const isStillDue = now.active?.step === index && turnOf(now.active) === undefined
       if (!isStillDue) {
         return undefined
       }
@@ -261,10 +265,6 @@ function sendStep($: Engine, ctx: Context, steps: readonly Step[], index: number
 const takeOverNote = (plan: Plan) =>
   plan.active ? ` (another session had step ${plan.active.step + 1} ${isWaiting(plan.active) ? 'waiting for an answer' : 'running'}; this one takes over)` : ''
 
-// Whether the turn of the step running now took up the person's answer after it waited, and
-// ends the step as it ends.
-const isAnswerTurn = (active: NonNullable<Plan['active']>) => active.pausedFor !== undefined && active.turnId !== undefined && active.answerTurnId === active.turnId
-
 // Why nothing new starts while a step of the plan runs in this session, or waits for the
 // person in any session, if one does: a step that waits runs nowhere, so any session ends it,
 // as /clear moves on to a new session.
@@ -279,7 +279,7 @@ async function runningHere($: Engine, plan: Plan): Promise<string | undefined> {
     return `Step ${n} goes on in the background${work && ` (${work})`}; /aside continue ends it and goes on, /aside stop ends it there.`
   }
   if (isWaiting(active)) {
-    return active.isAnswered
+    return active.is === 'answered'
       ? `Step ${n} waits: answer again, and Claude's reply ends it, or /aside continue ends it and goes on; /aside stop ends it there.`
       : `Step ${n} waits for your answer; /aside continue ends it and goes on, /aside stop ends it there.`
   }
@@ -287,7 +287,7 @@ async function runningHere($: Engine, plan: Plan): Promise<string | undefined> {
     return undefined
   }
 
-  return isAnswerTurn(active)
+  return active.is === 'answering'
     ? `Step ${n} is running on your answer, and ends once Claude has answered. /aside stop stops after it.`
     : `Step ${n} is running. /aside stop stops after it.`
 }
@@ -295,7 +295,7 @@ async function runningHere($: Engine, plan: Plan): Promise<string | undefined> {
 // Marks the step `active` runs done at `now`, with the time it took and what its last turn
 // said, and with isGoingOn, the next step of its run running in that same change, so nothing
 // in between finds the run with no step. Answers that step, or -1 with none.
-function completeStep(plan: Plan, active: NonNullable<Plan['active']>, me: string, isGoingOn: boolean, now: number): number {
+function completeStep(plan: Plan, active: StepState, me: string, isGoingOn: boolean, now: number): number {
   const step = plan.steps[active.step]!
   // The time by the clock, waits for the person included; never less than its turns took.
   const ms = Math.max(active.ms ?? 0, active.startedAt === undefined ? 0 : now - active.startedAt)
@@ -305,7 +305,7 @@ function completeStep(plan: Plan, active: NonNullable<Plan['active']>, me: strin
   if (after >= 0) {
     const then = active.then?.slice(1)
     delete plan.paused
-    plan.active = { step: after, isChain: active.isChain, sessionId: me, ...(then ? { then } : {}) }
+    plan.active = stepState({ step: after, isChain: active.isChain, sessionId: me, ...(then ? { then } : {}), is: 'due' })
   }
 
   return after
@@ -314,8 +314,11 @@ function completeStep(plan: Plan, active: NonNullable<Plan['active']>, me: strin
 // A step running in this session on a turn this process never saw start, or saw start and
 // never end: one an earlier process left when it closed in the middle of it. /aside continue
 // and /aside stop end it, as one that waits; a turn of this process still running is its own.
-const isLeftHere = (ctx: Context, active: NonNullable<Plan['active']>, me: string) =>
-  active.sessionId === me && active.turnId !== undefined && !ctx.session.openTurns.has(active.turnId)
+const isLeftHere = (ctx: Context, active: StepState, me: string) => {
+  const turnId = turnOf(active)
+
+  return active.sessionId === me && turnId !== undefined && !ctx.session.openTurns.has(turnId)
+}
 
 // /aside continue on a step that waits for the person, in this session or one before it: it
 // is done, and its run goes on here. The last step of a run of several takes one more turn
@@ -328,18 +331,16 @@ async function goOnFromWaiting($: Engine, ctx: Context): Promise<string | undefi
     const active = plan.active
     if (!active || !(isWaiting(active) || isAway(active) || isLeftHere(ctx, active, me))) return undefined
     const note = active.sessionId === me ? '' : takeOverNote(plan)
-    delete active.turnId
-    // What it was still to wait for in the background is let go, as continue ends it.
-    delete active.background
-    delete active.isAway
     if (isSummingUp(plan.steps, stepMode(plan.steps, active.step, active.isChain, active.then))) {
-      delete active.pausedFor
-      delete active.isAnswered
-      active.isEnding = true
-      // The turn that sums up is this session's, so its start binds to the step here.
-      active.sessionId = me
-      return { active: structuredClone(active), after: -1, isClosing: true, steps: structuredClone(plan.steps), note }
+      // The turn it had, the question it asked and what it was still to wait for in the
+      // background are all let go, as continue ends the step; the turn that sums up is this
+      // session's, so its start binds to the step here.
+      const { background, ...kept } = runOf(active)
+      const ending = stepState({ ...kept, sessionId: me, is: 'ending' })
+      plan.active = ending
+      return { active: ending, after: -1, isClosing: true, steps: structuredClone(plan.steps), note }
     }
+    // completeStep reads only how the run goes on, so the step's own marks need no clearing.
     const after = completeStep(plan, active, me, true, now)
     return { active, after, isClosing: false, steps: structuredClone(plan.steps), note }
   })
@@ -620,19 +621,25 @@ export async function stopPlan($: Engine, ctx: Context): Promise<string> {
       return undefined
     }
     const n = active.step + 1
-    if (isWaiting(active) || isAway(active) || (active.isEnding && active.turnId === undefined) || isLeftHere(ctx, active, me)) {
+    // A step with no turn of its own left: one that waits, one in the background, one continue
+    // or stop already ended, or one an earlier process left running here.
+    if (isWaiting(active) || isAway(active) || active.is === 'ending' || isLeftHere(ctx, active, me)) {
       // With nothing it said it did, the step shows that stop ended it.
       active.result ??= 'stopped'
       completeStep(plan, active, me, false, now)
       return `Step ${n} is done as it stands, and the plan stops there.`
     }
-    if (active.turnId === undefined || active.sessionId !== me) {
+    const turnId = turnOf(active)
+    if (turnId === undefined || active.sessionId !== me) {
       delete plan.active
-      return `The plan stopped ${active.pausedFor === undefined ? 'before' : 'at'} step ${n}${await organizeHint($, active)}.`
+      return `The plan stopped ${askedOf(active) === undefined ? 'before' : 'at'} step ${n}${await organizeHint($, active)}.`
     }
     active.isChain = false
     delete active.then
-    if (active.pausedFor !== undefined) active.isEnding = true
+    // A step that had asked the person something is done once the turn it has left ends.
+    const asked = askedOf(active)
+    if (asked !== undefined) plan.active = stepState({ ...runOf(active), is: 'closing', turnId, pausedFor: asked })
+
     return `The plan stops after step ${n}.`
   })
   if (text === undefined) {
@@ -950,11 +957,15 @@ export async function pausePlanFromTool(ctx: Context, $: Engine, e: PlanToolCall
   const reason = (e as unknown as { reason?: unknown }).reason
   const said = await changePlan($, ctx, plan => {
     const active = plan.active
-    if (!active || active.turnId === undefined || active.sessionId !== me) return undefined
-    if (active.isEnding) return 'ending'
-    active.pausedFor = typeof reason === 'string' && reason.trim() !== '' ? shortenText(reason, 120) : 'it needs your answer'
-    delete active.isAnswered
-    delete active.answerTurnId
+    if (!active) return undefined
+    const turnId = turnOf(active)
+    if (turnId === undefined || active.sessionId !== me) return undefined
+    if (active.is === 'closing') return 'ending'
+    const pausedFor = typeof reason === 'string' && reason.trim() !== '' ? shortenText(reason, 120) : 'it needs your answer'
+    // The question is new, so an answer a turn took before it no longer ends the step. A step
+    // that was in the background waits from here, keeping the work on its record.
+    plan.active = stepState({ ...runOf(active), is: 'asking', turnId, pausedFor })
+
     return isSummingUp(plan.steps, stepMode(plan.steps, active.step, active.isChain, active.then)) ? 'last' : 'waits'
   })
   if (said === undefined) {
@@ -976,10 +987,36 @@ async function bindStepTurn($: Engine, ctx: Context, turnId: string) {
   const now = await $.clock.now()
   await changePlan($, ctx, plan => {
     const active = plan.active
-    if (!active || active.turnId !== undefined || active.sessionId !== me) return
-    active.turnId = turnId
+    if (!active || turnOf(active) !== undefined || active.sessionId !== me) return
     active.startedAt ??= now
+    plan.active = withStepTurn(active, turnId)
   })
+}
+
+// The step with the turn of its own prompt running. Only the states with no turn are reachable
+// here, the step bindStepTurn guards for; the rest are written out so a new state cannot be
+// added without saying what its turn does (4.6).
+function withStepTurn(active: StepState, turnId: string): StepState {
+  const run = runOf(active)
+  switch (active.is) {
+    case 'due':
+    case 'running':
+      return stepState({ ...run, is: 'running', turnId })
+    // A step that waits takes the turn as any other of this session's: its question stands,
+    // and only an answer told about the step ends it (bindAnswerTurn).
+    case 'waiting':
+    case 'answered':
+    case 'asking':
+    case 'answering':
+      return stepState({ ...run, is: 'asking', turnId, pausedFor: active.pausedFor })
+    case 'away':
+    case 'noticing':
+      return stepState({ ...run, is: 'noticing', turnId })
+    // The prompt that sums the run up: the step is done when its turn ends.
+    case 'ending':
+    case 'closing':
+      return stepState({ ...run, is: 'closing', turnId, ...(active.pausedFor === undefined ? {} : { pausedFor: active.pausedFor }) })
+  }
 }
 
 // A turn of this session while its step waits for the person belongs to the step: their
@@ -1004,14 +1041,20 @@ async function bindAnswerTurn($: Engine, ctx: Context, turnId: string, text: str
     // A step in the background takes only the turn of its work's notification, never one
     // of the person's own.
     if (isAway(active)) {
-      if (isNotice) active.turnId = turnId
+      if (isNotice) plan.active = stepState({ ...runOf(active), is: 'noticing', turnId })
       return isNotice
     }
     if (!isWaiting(active)) return false
-    active.turnId = turnId
-    if (isAnswer) active.isAnswered = true
-    if (isTold) active.answerTurnId = turnId
-    else delete active.answerTurnId
+    const { pausedFor } = active
+    // An answer taken before this turn still counts: the step says "answer again" until Claude
+    // asks something new (pausePlanFromTool), which is the one place that mark is let go.
+    const isAnswerTaken = isAnswer || active.is === 'answered'
+    // Only an answer sent with the step's own words makes this turn the one whose reply ends
+    // the step; any other turn of this session leaves it waiting for the next answer.
+    plan.active = isTold
+      ? stepState({ ...runOf(active), is: 'answering', turnId, pausedFor })
+      : stepState({ ...runOf(active), is: 'asking', turnId, pausedFor, ...(isAnswerTaken ? { isAnswered: true as const } : {}) })
+
     return true
   })
   if (isBound) await refreshBand($)
@@ -1030,7 +1073,7 @@ export async function noteStepAnswer(ctx: Context, $: Engine, e: Submit[1], next
   }
   const plan = await loadPlan($, (await projectKeys($)).plan)
   const active = plan.active
-  if (!active || active.sessionId !== (await $.session.id()) || active.pausedFor === undefined) {
+  if (!active || active.sessionId !== (await $.session.id()) || askedOf(active) === undefined) {
     return next(e)
   }
   ctx.session.answer = e.text
@@ -1080,7 +1123,8 @@ export async function noteBackgroundWork(ctx: Context, $: Engine, e: WorkCall[1]
   // The call has run: a store that fails here costs the step its wait, never the call's result.
   await changePlan($, ctx, plan => {
     const active = plan.active
-    if (!active || active.sessionId !== me || active.turnId === undefined || active.turnId !== ctx.session.turnId) return
+    const turnId = active === undefined ? undefined : turnOf(active)
+    if (!active || turnId === undefined || active.sessionId !== me || turnId !== ctx.session.turnId) return
     active.background = [...(active.background ?? []), { ...(callId ? { callId } : {}), ...work }]
     if (callId) ctx.session.ownWork.add(callId)
   }).catch(() => undefined)
@@ -1101,7 +1145,10 @@ async function dropStoppedWork(ctx: Context, $: Engine, taskId: unknown) {
     if (!active?.background || left === undefined || left.length === active.background.length) return
     if (left.length > 0) active.background = left
     else delete active.background
-    if (left.length === 0 && active.sessionId === me && isAway(active) && ctx.session.turnId !== undefined) active.turnId = ctx.session.turnId
+    const turnId = ctx.session.turnId
+    if (left.length === 0 && active.sessionId === me && isAway(active) && turnId !== undefined) {
+      plan.active = stepState({ ...runOf(active), is: 'noticing', turnId })
+    }
   }).catch(() => undefined)
   await refreshBand($)
 }
@@ -1123,8 +1170,10 @@ export async function noteBackgroundEnd(ctx: Context, $: Engine, e: Submit[1], n
     else delete active.background
     const isTold = active.sessionId === me && isAway(active)
     // Delivered into a turn already running, that turn takes it up, so it is the step's.
-    if (isTold && e.turnId !== undefined) active.turnId = e.turnId
-    return { active: structuredClone(active), steps: structuredClone(plan.steps), isTold }
+    const now = isTold && e.turnId !== undefined ? stepState({ ...runOf(active), is: 'noticing', turnId: e.turnId }) : active
+    plan.active = now
+
+    return { active: structuredClone(now), steps: structuredClone(plan.steps), isTold }
   })
   if (gone === undefined) {
     return next(e)
@@ -1189,26 +1238,32 @@ async function dropDeadTurn($: Engine, ctx: Context, sessionId: string, turnId: 
   const dropped = await changePlan($, ctx, async plan => {
     const active = plan.active
     if (!active || active.sessionId !== sessionId) return undefined
-    if (active.turnId !== undefined) {
-      if (active.turnId === turnId || !openTurns.has(active.turnId)) return undefined
+    const turn = turnOf(active)
+    if (turn !== undefined) {
+      if (turn === turnId || !openTurns.has(turn)) return undefined
     } else if (!isGone || isWaiting(active) || (isAway(active) && !(active.background ?? []).every(work => work.callId !== undefined && ownWork.has(work.callId)))) {
       return undefined
     }
-    if (active.isEnding) {
+    if (active.is === 'ending' || active.is === 'closing') {
       completeStep(plan, active, sessionId, false, now)
       return { n: active.step + 1, waits: false, hint: '' }
     }
+    // Read before the request to organize the queue is let go with the turn it was asked in.
     const hint = await organizeHint($, active)
-    delete active.turnId
-    delete active.isPlanningAfter
-    if (isGone) {
-      delete active.background
-      delete active.isAway
+    const { isPlanningAfter, background, ...rest } = runOf(active)
+    // With the session itself gone, so is the work it had going and the step's wait on it.
+    const run = isGone || background === undefined ? rest : { ...rest, background }
+    if (!isGone && active.is === 'noticing') {
+      // Its work is still going: the step goes back to waiting on that, not on the person.
+      plan.active = stepState({ ...run, is: 'away' })
+      return { n: active.step + 1, waits: false, hint }
     }
-    // Read through isAway, so a step that had asked the person something waits here too: its
-    // question stands, and the work it left behind stays on the record for /aside continue.
-    if (!isAway(active)) active.pausedFor ??= CUT_OFF
-    return { n: active.step + 1, waits: !isAway(active), hint }
+    // Any other step waits for the person: what Claude asked it to wait for if it asked, else
+    // that its turn ended with no answer. The work it left behind stays on for /aside continue.
+    const pausedFor = askedOf(active) ?? CUT_OFF
+    plan.active = stepState(active.is === 'answering' ? { ...run, is: 'answered', pausedFor } : { ...run, is: 'waiting', pausedFor })
+
+    return { n: active.step + 1, waits: true, hint }
   })
   if (dropped === undefined) return
   await refreshBand($)
@@ -1241,7 +1296,7 @@ async function finishStep($: Engine, ctx: Context, e: TurnComplete[1]) {
   const now = await $.clock.now()
   const end = await changePlan($, ctx, async plan => {
     const active = plan.active
-    if (active?.turnId !== e.turnId || active.sessionId !== me) {
+    if (!active || turnOf(active) !== e.turnId || active.sessionId !== me) {
       return undefined
     }
     const isAnswer = e.reason === 'answer'
@@ -1251,22 +1306,28 @@ async function finishStep($: Engine, ctx: Context, e: TurnComplete[1]) {
     active.ms = (active.ms ?? 0) + e.durationMs
     const result = isAnswer ? readStepResult(e.answer) : undefined
     if (result !== undefined) active.result = result
-    if (active.isEnding) {
+    // continue or stop ended the step: it is done when this turn ends, whatever ends it.
+    if (active.is === 'closing') {
       completeStep(plan, active, me, false, now)
       return { active, waits: false, after: -1, isPausing: false, isPlanning: isPlanning && isAnswer, hint, steps: structuredClone(plan.steps) }
     }
     // The turn that took the person's answer ends the step, unless Claude asked again in it.
-    const isAnswered = isAnswer && active.isAnswered === true && active.answerTurnId === e.turnId
-    if (active.pausedFor !== undefined && !isAnswered) {
-      delete active.turnId
-      delete active.isAway
-      delete active.isPlanningAfter
-      return { active: structuredClone(active), waits: true, after: -1, isPausing: false, isPlanning: isPlanning && isAnswer, hint, steps: structuredClone(plan.steps) }
+    const isAnswered = isAnswer && active.is === 'answering'
+    const asked = askedOf(active)
+    if (asked !== undefined && !isAnswered) {
+      // The request to organize the queue goes with the turn it was asked in; a turn that took
+      // an answer before this one leaves the step asking for another.
+      const { isPlanningAfter, ...run } = runOf(active)
+      const isAgain = active.is === 'answering' || (active.is === 'asking' && active.isAnswered === true)
+      const back = stepState(isAgain ? { ...run, is: 'answered', pausedFor: asked } : { ...run, is: 'waiting', pausedFor: asked })
+      plan.active = back
+      return { active: back, waits: true, after: -1, isPausing: false, isPlanning: isPlanning && isAnswer, hint, steps: structuredClone(plan.steps) }
     }
     // A turn of a step in the background cut short leaves it there, as one that waits.
-    if (!isAnswer && active.isAway) {
-      delete active.turnId
-      return { active: structuredClone(active), waits: false, after: -1, isPausing: false, isPlanning: false, hint, steps: structuredClone(plan.steps) }
+    if (!isAnswer && active.is === 'noticing') {
+      const away = stepState({ ...runOf(active), is: 'away' })
+      plan.active = away
+      return { active: away, waits: false, after: -1, isPausing: false, isPlanning: false, hint, steps: structuredClone(plan.steps) }
     }
     if (!isAnswer) {
       delete plan.active
@@ -1275,12 +1336,9 @@ async function finishStep($: Engine, ctx: Context, e: TurnComplete[1]) {
     // Work in the background a turn of it started is still going: the step goes on there, and
     // the turn that work's end brings ends it.
     if ((active.background?.length ?? 0) > 0) {
-      active.isAway = true
-      delete active.turnId
-      delete active.pausedFor
-      delete active.isAnswered
-      delete active.answerTurnId
-      return { active: structuredClone(active), waits: false, after: -1, isPausing: false, isPlanning: false, hint: '', steps: structuredClone(plan.steps) }
+      const away = stepState({ ...runOf(active), is: 'away' })
+      plan.active = away
+      return { active: away, waits: false, after: -1, isPausing: false, isPlanning: false, hint: '', steps: structuredClone(plan.steps) }
     }
     const after = nextInRun(plan.steps, active.step, active.isChain, active.then)
     const isPausing = after >= 0 && isPlanning
@@ -1302,11 +1360,11 @@ async function finishStep($: Engine, ctx: Context, e: TurnComplete[1]) {
     )
   } else if (waits) {
     $.ui.toast(
-      active.isAnswered
+      active.is === 'answered'
         ? `Step ${n} waits: answer again, and Claude's reply ends it, or /aside continue ends it now${hint}.`
-        : `Step ${n} waits for your answer: ${active.pausedFor}. Answer as usual, and the step ends with Claude's reply; /aside continue ends it now${hint}.`,
+        : `Step ${n} waits for your answer: ${askedOf(active)}. Answer as usual, and the step ends with Claude's reply; /aside continue ends it now${hint}.`,
     )
-  } else if (e.reason !== 'answer' && !active.isEnding) {
+  } else if (e.reason !== 'answer' && active.is !== 'closing') {
     $.ui.toast(`Plan stopped: step ${n} ${e.reason === 'aborted' ? 'was interrupted' : 'did not finish'}${hint}`)
   } else if (isPausing) {
     $.ui.toast(`Plan paused after step ${n}: ${PLANNING_PAUSE}. /aside continue goes on.`)

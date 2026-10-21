@@ -1,5 +1,6 @@
 import type { Entry, PastRun, Plan } from '../../types'
 import { KINDS } from './entries'
+import { askedOf, awayWork, isAway, isWaiting } from './step'
 import { formatAge, formatCount, formatDuration, relativePath, shortenText } from './text'
 
 // The /aside listing as data: sections of a title and rows, each row a number (or a
@@ -108,22 +109,6 @@ export type Listed = { sections: ListingSection[]; note?: string } | string
 export const listedText = (listed: Listed): string =>
   typeof listed === 'string' ? listed : `${listingText(listed.sections)}${listed.note ? `\n\n${listed.note}` : ''}`
 
-// Whether the step goes on in the background, with no turn of it running: work a turn of it
-// started is still going, and the turn its end brings ends the step. A step Claude has asked
-// the person something in waits instead, whatever work it left running: dropDeadTurn leaves
-// both marks on a step whose notification turn asked and then died, and the listing has always
-// read that record as waiting, so the band and the commands read it that way too.
-export const isAway = (active: NonNullable<Plan['active']>) =>
-  active.isAway === true && active.turnId === undefined && active.pausedFor === undefined
-
-// What a step that goes on in the background waits for, by name.
-export const awayWork = (active: NonNullable<Plan['active']>) => [...new Set((active.background ?? []).map(one => one.what))].join(', ')
-
-// Whether the step running is waiting for the person's answer, with no turn of it running:
-// Claude asked with the wait tool, and the turn of the person's answer, /aside continue or
-// /aside stop ends it.
-export const isWaiting = (active: NonNullable<Plan['active']>) => active.pausedFor !== undefined && active.turnId === undefined
-
 // The plan, with what each step done took and said under it, and how long the step running
 // or waiting has gone on by `now`, with what the one running does now (`doing`, its turn's
 // last tool) or waits for; null with no plan. A plan run to its end stays in the listing until
@@ -146,7 +131,7 @@ export const planSection = (plan: Plan, now: number, doing?: string): ListingSec
   const ms = plan.steps.reduce((sum, step) => sum + (step.isDone && step.ms ? step.ms : 0), sinceStart)
   const soFar = timeOf(ms) && ` · ${timeOf(ms)} so far`
   // What the step waits for: Claude's question, until a turn took the person's answer to it.
-  const waitsFor = waiting && (waiting.isAnswered ? 'answered' : waiting.pausedFor)
+  const waitsFor = waiting && (waiting.is === 'answered' ? 'answered' : askedOf(waiting))
 
   return {
     title:

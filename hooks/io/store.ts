@@ -1,8 +1,8 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface as Engine } from 'claude-code'
 
-import type { Band, Entry, PastRun, Plan } from '../../types'
-import { isAway, isWaiting } from '../core/listing'
+import type { Band, Entry, PastRun, Plan, StoredPlan } from '../../types'
+import { isAway, isWaiting, readActive, storedActive } from '../core/step'
 import { canonicalPath, pathKey } from '../core/text'
 
 const EMPTY_BAND: Band = { ideas: 0, comments: 0, tags: 0, steps: 0, done: 0 }
@@ -76,17 +76,25 @@ export async function loadEntries($: Engine, key: string): Promise<Entry[]> {
   return Array.isArray(value) ? (value as Entry[]).map(entry => ({ ...entry, kind: entry.kind ?? 'idea' })) : []
 }
 
+// The plan as the features read it: the step running as a state (readActive), not as the flags
+// the store holds. The record itself is left as it is, so a session of an earlier release on
+// this machine reads it unchanged (2.7).
 export async function loadPlan($: Engine, key: string): Promise<Plan> {
-  const value = (await $.store.get(key)) as Plan | undefined
+  const value = (await $.store.get(key)) as StoredPlan | undefined
+  if (!value || !Array.isArray(value.steps)) {
+    return { steps: [] }
+  }
+  const { active, ...rest } = value
 
-  return value && Array.isArray(value.steps) ? value : { steps: [] }
+  return active ? { ...rest, active: readActive(active) } : rest
 }
 
 export async function savePlan($: Engine, key: string, plan: Plan) {
   if (plan.steps.length === 0) {
     await $.store.delete(key)
   } else {
-    await $.store.set(key, plan)
+    const { active, ...rest } = plan
+    await $.store.set(key, active ? { ...rest, active: storedActive(active) } : rest)
   }
 }
 
