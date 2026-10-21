@@ -145,6 +145,12 @@ export const findTags = (source: string): FileTag[] => {
 // Whether two entries are the same one: queued at the same moment, of the same kind, with the
 // same text. Entries hold no id, and one tidied or edited since counts as another, so work that
 // waited on a long call finds nothing under the text it was given (3.16).
+// The line as typed with the entry's text tidied in its place: the mark and where it pointed
+// stay, only the words change. The line is left as it is when it no longer ends with the text
+// being replaced, as it does not when the quote was copied after it.
+export const retypedRaw = (entry: Pick<Entry, 'raw' | 'text'>, text: string): string | undefined =>
+  entry.raw?.endsWith(entry.text) ? `${entry.raw.slice(0, entry.raw.length - entry.text.length)}${text}` : entry.raw
+
 export const isSameEntry = (one: Entry, other: Entry): boolean => one.at === other.at && one.kind === other.kind && one.text === other.text
 
 // `list` without `gone`, one same entry for each of `gone`: two entries typed alike in one
