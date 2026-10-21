@@ -1318,7 +1318,7 @@ export async function onTurnEnd(ctx: Context, $: Engine, e: TurnComplete[1], nex
     await forgetAnsweredTake($)
   }
   const plan = await loadPlan($, keys.plan)
-  const isThisStep = plan.active?.turnId === e.turnId && plan.active.sessionId === (await $.session.id())
+  const isThisStep = plan.active !== undefined && turnOf(plan.active) === e.turnId && plan.active.sessionId === (await $.session.id())
   if (isThisStep) {
     await finishStep($, ctx, e)
   } else {
