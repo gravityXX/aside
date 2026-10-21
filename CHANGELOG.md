@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Nothing changes in use: inside, the step of a plan that is running is kept as one state rather than a set of flags, and the plan is stored exactly as before.
+- Nothing changes in use: inside, the step of a plan that is running is kept as one state rather than a set of flags and the plan is stored exactly as before, and the code that chains changes which must not overlap, asks for a number a listing does not show and takes an entry into the prompt box is written once.
 - A step that asked you something while its work ran in the background waits for your answer, which is what `/aside` showed for it all along: `/aside run` and `/aside plan` no longer answer that it goes on in the background, and when the turn it asked in never ends, a toast says it waits.
 
 ## 0.37.1 - 2026-10-20
