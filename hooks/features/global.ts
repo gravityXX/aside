@@ -69,10 +69,6 @@ async function showQueue($: Engine, ctx: Context, name: string): Promise<string>
   return showWhileWorking($, ctx, { kind: 'named', typed: queueName(name) }, await queueListed($, ctx, name), nameOf(name))
 }
 
-export async function showGlobal($: Engine, ctx: Context): Promise<string> {
-  return showQueue($, ctx, GLOBAL)
-}
-
 // /aside q: every queue of no project that holds an idea, in the order countQueues gives.
 async function showQueues($: Engine, ctx: Context): Promise<string> {
   return showWhileWorking($, ctx, { kind: 'queues' }, await queuesListed($), 'the queues')

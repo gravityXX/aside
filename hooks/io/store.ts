@@ -346,10 +346,6 @@ export async function loadIdeas($: Engine, name: string): Promise<GlobalIdea[]> 
   return ideas.sort((a, b) => rankOf(a) - rankOf(b) || a.key.localeCompare(b.key, undefined, { numeric: true }))
 }
 
-export async function loadGlobalIdeas($: Engine): Promise<GlobalIdea[]> {
-  return loadIdeas($, GLOBAL)
-}
-
 // Each idea under a key of its own in queue `name`, stamped with the time it is added. All of
 // them or none: should a write fail, those already written are taken back before the error goes on.
 export async function addIdeas($: Engine, name: string, entries: readonly GlobalIdea['entry'][]): Promise<GlobalIdea[]> {
@@ -373,10 +369,6 @@ export async function addIdeas($: Engine, name: string, entries: readonly Global
   }
 
   return added
-}
-
-export async function addGlobalIdeas($: Engine, entries: readonly GlobalIdea['entry'][]): Promise<GlobalIdea[]> {
-  return addIdeas($, GLOBAL, entries)
 }
 
 export async function saveGlobalIdea($: Engine, idea: GlobalIdea) {
