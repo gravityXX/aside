@@ -85,7 +85,7 @@ refuse. `claude plugin test .` is where it shows, as every test failing to load 
 10. A tool's full name depends on where the plugin was loaded from. Use the name `$.tool.register` returns, never a hard-coded `mcp__aside__...`.
 11. A `ui.render` hook draws only the surfaces aside supports (`isDrawnOn(e.surface)` in `hooks/ui/rows.tsx`: the terminal and Desktop) and returns `next(e)` for the rest. A drawing test loops over those surfaces, and checks one the engine keeps.
 12. Handlers outside `register.tsx` take their types from the engine's: `type Submit = Parameters<Hook<'prompt.submit'>>`, then `e: Submit[1]` and `next: Submit[2]`; `MatchedHook<...>` for a matched hook, `CatchHandler<...>` for `.catch`.
-13. Claude Code writes the types to `.claude-plugin/types/` when a session loads the plugin. Load it once after a Claude Code update before type-checking.
+13. Claude Code writes the types to `.claude-plugin/types/` when a session loads the plugin, and only then: `claude plugin validate`, `claude plugin test`, `claude -p` and `claude -p --plugin-dir` all leave the folder empty, with or without a terminal. `timeout 45 script -qec "claude --plugin-dir ." /dev/null </dev/null` writes them and ends by itself, which is how CONTRIBUTING.md spells the type check. They stay out of the repository, as the folder's own `.gitignore` says, and are written again after a Claude Code update.
 14. `<>` draws a column Box around its children, so a fragment inside a row starts a new line. Elements that stand side by side go into the row directly, each one conditional on its own.
 15. A pane opens at any width only while the person's press, command or prompt that asked for it lasts. A button that opens a pane returns its promise from `onPress` rather than voiding it, or the open comes after the press has ended and waits undrawn below 144 columns (seen on a 125-column terminal).
 16. Work that waits on a long call (a model, a timer) while the person keeps typing reads what it was given first and saves only if that is still there, unchanged; otherwise it saves nothing and says so. What may move on meanwhile by design, as the steps of a running plan a planner adds to, is checked for what it is (the same steps), not for where it stands. One such call runs at a time (`planOutside`).
@@ -181,7 +181,7 @@ refuse. `claude plugin test .` is where it shows, as every test failing to load 
 
 7. CI runs `cz check`, the bump, `claude plugin validate .` and `claude plugin test .`. After the merge, the Release workflow tags `vX.Y.Z` and publishes a GitHub release with that section.
 8. Tool versions in CI are pinned (Commitizen, Claude Code, actions by major). Raising one is a `ci:` commit of its own.
-9. CI cannot type-check, since the types are written only when a session loads the plugin (3.13). Run `tsc` before opening a pull request.
+9. CI cannot type-check, since the types are written only by a session that loads the plugin (3.13), and a session needs an account where `claude plugin test` does not. Run `tsc` before opening a pull request, with the two commands in CONTRIBUTING.md; nothing else catches a type error, so skipping it ships one.
 10. The version stays 0.x while commands and stored data still change (`major_version_zero` in `.cz.toml`). 1.0.0 comes from one pull request that sets it to `false` and has a `!` commit.
 
 ## 8. The Python scripts

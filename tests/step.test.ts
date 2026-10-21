@@ -127,7 +127,8 @@ describe('the step running, read from the marks the store keeps', () => {
         if (!(mark === 'isAnswered' && state.is === 'asking')) expect(mark in state).toBe(false)
       }
       // A question is kept only where the state has one to keep.
-      expect(askedOf(state)).toBe(['asking', 'answering', 'waiting', 'answered', 'ending', 'closing'].includes(state.is) ? state.pausedFor : undefined)
+      const asks = ['asking', 'answering', 'waiting', 'answered', 'ending', 'closing'].includes(state.is)
+      expect(askedOf(state)).toBe(asks ? one.pausedFor : undefined)
     }
   })
 })

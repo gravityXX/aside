@@ -127,7 +127,9 @@ export const askedOf = (active: StepState): string | undefined => ('pausedFor' i
 // Whether the step waits for the person's answer with no turn of it running, so the turn of
 // their answer, /aside continue or /aside stop ends it. An ending step that still holds its
 // question counts, as the flags it is read from have always counted it (readActive).
-export const isWaiting = (active: StepState): active is StepState & { pausedFor: string } =>
+export type Waiting = StepRun & ({ is: 'waiting' | 'answered'; pausedFor: string } | { is: 'ending'; pausedFor: string })
+
+export const isWaiting = (active: StepState): active is Waiting =>
   active.is === 'waiting' || active.is === 'answered' || (active.is === 'ending' && active.pausedFor !== undefined)
 
 // Whether the step goes on in the background with no turn of it running: work a turn of it
