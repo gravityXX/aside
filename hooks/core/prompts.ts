@@ -1,6 +1,6 @@
 import type { Entry, Plan, Step } from '../../types'
 import { KINDS } from './entries'
-import { isWaiting } from './listing'
+import { isWaiting } from './step'
 import { pathKey, relativePath, shortenText } from './text'
 
 // What the last line of every prompt composed from the queue says, and what every step

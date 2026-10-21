@@ -3,7 +3,8 @@ import type { EngineInterface as Engine } from 'claude-code'
 import type { Entry } from '../../types'
 import type { Context, PaneView } from '../context'
 import { findTags, inOrder } from '../core/entries'
-import { describeCount, isExportText, isWaiting, listedText, listingMarkdown, listingText, planSection, queueSection, tagsSection } from '../core/listing'
+import { describeCount, isExportText, listedText, listingMarkdown, listingText, planSection, queueSection, tagsSection } from '../core/listing'
+import { isWaiting, turnOf } from '../core/step'
 import type { Listed, ListingSection } from '../core/listing'
 import { popPrompt } from '../core/prompts'
 import { canonicalPath, formatCount, isAbsolutePath, isWindowsPath, relativePath, shortenText } from '../core/text'
@@ -39,8 +40,10 @@ async function loadListing($: Engine, ctx: Context) {
   const handedOver = new Set(await loadTagIds($, handed))
   const plan = await loadPlan($, planKey)
   const { lastTool } = ctx.session
-  // A turn's id names one turn of one process: the step running in it is this session's.
-  const isDoing = lastTool !== undefined && plan.active?.turnId !== undefined && plan.active.turnId === lastTool.turnId
+  // A turn's id names one turn of one process: the step running in it is this session's. A step
+  // with no turn of its own running matches no tool, whatever the last one's turn was.
+  const doingTurn = plan.active === undefined ? undefined : turnOf(plan.active)
+  const isDoing = doingTurn !== undefined && doingTurn === lastTool?.turnId
   const steps = planSection(plan, await $.clock.now(), isDoing ? lastTool.text : undefined)
   const queued = [queueSection(list, root), ...(tags.length > 0 ? [tagsSection(tags, root, tag => handedOver.has(tagId(tag)))] : [])]
   const isRunGoing = plan.active !== undefined || plan.paused !== undefined
@@ -291,7 +294,7 @@ export async function restoreTaken($: Engine): Promise<string> {
   const keys = await projectKeys($)
   const running = (await loadPlan($, keys.plan)).active
   if (running && (isWaiting(running) || running.sessionId === (await $.session.id()))) {
-    const state = isWaiting(running) ? (running.isAnswered ? 'waits for your answer again or /aside continue' : 'waits for your answer') : 'is running'
+    const state = isWaiting(running) ? (running.is === 'answered' ? 'waits for your answer again or /aside continue' : 'waits for your answer') : 'is running'
     return `Step ${running.step + 1} of the plan ${state}; /aside stop first, so nothing is done twice.`
   }
   const { entries, tagIds } = await bringBackTake($)

@@ -20,7 +20,7 @@ How the code in this repository is designed, written, tested and released. Read 
 - **`hooks/features/`** - what the plugin does: `capture` (a typed `+` to a stored entry), `queue` (the listing and the commands on entries), `plan` (handing the queue over, the steps), `global` (the global list and the named queues: ideas for no project), `history` (the log of plans run to their end), `find` (`/aside find`), `importing` (`/aside import`) and `commands` (`/aside`, its help and Tab). Within the layer `commands` imports the others, `plan` imports `queue` and `history`, `find` and `history` import `queue`, and `global` imports `capture`, `importing` and `queue`. The list pane (`ui/pane.tsx`) lists what `queue`, `global`, `find` and `history` give it.
 - **`hooks/context.ts`** - the settings and the session's state, made once per load and passed to the hooks.
 - **`hooks/io/`** - the only files that reach the engine's store and the machine: `store`, `queue` (the project queue's changes, one after another, and the take undo brings back) and `host`.
-- **`hooks/core/`** - plain functions on text, with no `$`: `text`, `markdown`, `entries`, `listing` and `prompts`.
+- **`hooks/core/`** - plain functions with no `$`: `text`, `markdown`, `entries`, `listing`, `prompts` and `step`, which reads the step running from the flags the store keeps and writes it back, and is the only file that knows both shapes.
 - **`types/index.d.ts`** - the shapes of the stored data and the `PluginState` contract. Any layer imports types from it.
 
 1. No files import each other in a circle, within a layer or across layers.
@@ -54,6 +54,7 @@ Each value lives where its lifetime fits:
 7. Stored data from the last release must still load. A new field is optional; renaming or removing one needs code that reads the old shape.
 8. A flag in stored data is `isX?: true`, left out when false.
 9. Changes that may overlap go one after another. The project queue is changed through `changeQueue` in `io/queue.ts`, which reads the stored list inside its chain and resolves once the change is written, so two quick entries never overwrite each other and what is read next holds the change. The takes undo brings back (hand-over, run, clear, plan) and the give-backs run on the same chain and read the queue inside it, and so do remove, move, edit, pop and the moves to and from another queue. Features never hold the queue's key: they read the queue through `readQueue`, only to list, count or check it, and only `io/queue.ts` stores it. Slow work that must keep that order, such as git or the clipboard for a typed entry, goes into `changeQueueAfter`'s first step, which runs before the change joins the chain, so the list is never held across it and a hand-over never waits on it. The plan is changed the same way through `changePlan`, so a step that ends and a planner that adds steps never save over each other. A change never waits for another one, on either chain, which would wait for it.
+10. The step running is one state, not a set of marks: `StepState` in `types/index.d.ts`, a union of string literals (4.5), each state carrying only the fields it can have. `hooks/core/step.ts` holds both it and `StoredActive`, the flags the store keeps; `loadPlan` reads one into the other and `savePlan` writes it back, so the record itself does not change (2.7). Every writer builds its next state through `stepState`, which lays the keys out in one order: two plans that differ only in key order would make `changePlan` write when nothing moved and `savePlanSteps` drop a planner's whole save.
 
 ## 3. The engine
 
@@ -193,7 +194,7 @@ The plugin runs on the Claude Code plugin API: hooks `($, e, next)` added with `
 2. Does `claude plugin validate .` pass, and is `$` passed as 3.1 to 3.6 allow?
 3. Are the types tight: no `any`, no unguarded `!`, unions for closed sets? (4.1 to 4.6)
 4. Is every promise awaited or voided on purpose, and every engine failure caught? (4.9, 4.10)
-5. Is new state in the place its lifetime needs, and does stored data from the last release still load? (2.5 to 2.9)
+5. Is new state in the place its lifetime needs, and does stored data from the last release still load? (2.5 to 2.10)
 6. Does the person get a short, true sentence for every outcome, failures included? (5)
 7. Do the tests check visible behaviour, and does each fix have a test that fails without it? (6)
 8. Do the comments say why, and are they still true? (4.20 to 4.22)
@@ -220,3 +221,4 @@ Settled choices, with their reason, so they are not reopened by accident:
 4. **Tests of behaviour** (0.10.1) - they survive a refactor, where the earlier tests of internals broke with it.
 5. **Commitizen in CI** - the version follows from the commits, and the bot bumps it in the pull request, never on `main`.
 6. **0.x** - commands and stored data still change; 1.0.0 waits until they settle (7.10).
+7. **The step's state as a union, read at the store's edge** (0.37.2) - the marks a release stores stay as they are, so a session of an earlier one on the same machine reads the record unchanged (2.6, 3.17), while the features switch over one closed set and TypeScript flags a state nobody handled (4.6). Deriving the state on load, rather than storing it, keeps that out of 2.7's way for good.

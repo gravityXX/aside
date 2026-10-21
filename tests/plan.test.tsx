@@ -3853,3 +3853,49 @@ describe('a step an earlier process left running', () => {
     expect(await aside('continue')).not.toContain('Step 1 done')
   })
 })
+
+// The step running as every release up to 0.37.1 stored it: flags whose combination is the
+// state the plugin now reads (readActive in hooks/core/step.ts). Each is planted as the store
+// holds it and read back through what the person sees (6.2).
+describe('the step running as an earlier release stored it', () => {
+  const planted = (active: unknown) => ({ 'plan:/proj': { steps: [...STEPS], active } })
+  const run = { step: 0, isChain: true, sessionId: 'session-1' }
+
+  test('pausedFor alone is a step waiting for your answer', async ($, on) => {
+    const { aside, shown } = world($, on, { stored: planted({ ...run, pausedFor: 'which design' }) })
+
+    expect((await shown())[0]).toBe('Plan waits at step 1 (which design), 3 of 3 steps to do (/aside continue)')
+    expect(await aside('run 2')).toBe('Step 1 waits for your answer; /aside continue ends it and goes on, /aside stop ends it there.')
+  })
+
+  test('pausedFor with isAnswered is a step that has had an answer and asks for another', async ($, on) => {
+    const { aside, shown } = world($, on, { stored: planted({ ...run, pausedFor: 'which design', isAnswered: true }) })
+
+    expect((await shown())[0]).toBe('Plan waits at step 1 (answered), 3 of 3 steps to do (/aside continue)')
+    expect(await aside('run 2')).toBe(
+      "Step 1 waits: answer again, and Claude's reply ends it, or /aside continue ends it and goes on; /aside stop ends it there.",
+    )
+  })
+
+  test('isAway with work left is a step going on in the background', async ($, on) => {
+    const { aside, shown } = world($, on, { stored: planted({ ...run, isAway: true, background: [{ taskId: 'w1', what: 'review' }] }) })
+
+    expect((await shown()).slice(0, 3)).toEqual(['Plan: 3 of 3 steps to do (/aside run)', '1 running One', '↳ in the background: review'])
+    expect(await aside('run 2')).toBe('Step 1 goes on in the background (review); /aside continue ends it and goes on, /aside stop ends it there.')
+  })
+
+  test('isAway beside pausedFor is a step waiting for your answer, not on its work', async ($, on) => {
+    const stored = planted({ ...run, isAway: true, pausedFor: 'which fix', background: [{ taskId: 'w1', what: 'review' }] })
+    const { aside, shown } = world($, on, { stored })
+
+    expect((await shown())[0]).toBe('Plan waits at step 1 (which fix), 3 of 3 steps to do (/aside continue)')
+    expect(await aside('run 2')).toBe('Step 1 waits for your answer; /aside continue ends it and goes on, /aside stop ends it there.')
+  })
+
+  test('isEnding with no turn is a step continue or stop already ended, done as it stands', async ($, on) => {
+    const { aside, shown } = world($, on, { stored: planted({ ...run, isEnding: true, result: 'half done' }) })
+
+    expect(await aside('stop')).toBe('Step 1 is done as it stands, and the plan stops there.')
+    expect((await shown()).slice(1, 4)).toEqual(['Plan: 2 of 3 steps to do (/aside run)', '1 done One', '↳ half done'])
+  })
+})
