@@ -183,33 +183,48 @@ function changeShownQueue<T>($: Engine, ctx: Context, change: (list: Entry[]) =>
   })
 }
 
-// The entry goes into the prompt box in the change that takes it out, so what the box gets is
-// what leaves the queue, and the record of where it stood is there before a message sent next.
-export async function editEntry($: Engine, ctx: Context, n: number): Promise<string> {
-  const keys = await projectKeys($)
+// Takes entry `n` out of the queue and into the prompt box, in the change that takes it out, so
+// what the box gets is what left the queue. `into` says what goes in the box, what the person
+// reads of it, and what goes with the queue once it is stored, such as the record of where an
+// entry out for /aside edit stood, which is there before a message sent right after.
+async function takeIntoBox(
+  $: Engine,
+  ctx: Context,
+  n: number,
+  shown: string,
+  into: (entry: Entry) => { typed: string; said: string; afterSave?: () => Promise<unknown> },
+): Promise<string> {
   const { text, isTaken } = await changeShownQueue($, ctx, async list => {
     if (list.length === 0) {
       return { value: { text: 'The queue is empty.', isTaken: false } }
     }
     if (!isPlace(n, list.length)) {
-      return { value: { text: askPlaces(1, list.length, 'number', '/aside list'), isTaken: false } }
+      return { value: { text: askPlaces(1, list.length, 'number', shown), isTaken: false } }
     }
     const entry = list[n - 1]!
-    const filled = await $.prompt.fill({ text: entry.raw ?? `+ ${entry.text}`, mode: 'insert' })
+    const { typed, said, afterSave } = into(entry)
+    const filled = await $.prompt.fill({ text: typed, mode: 'insert' })
     if (!filled.isFilled) {
       return { value: { text: 'The prompt box cannot take it now; the entry stays in the queue.', isTaken: false } }
     }
-    const text = `Entry ${n} is in the prompt box: change it and press Enter; it goes back to place ${n}, still pointing where it did.`
 
-    return {
-      list: list.filter((_entry, i) => i !== n - 1),
-      value: { text, isTaken: true },
-      afterSave: () => saveEditing($, keys.editing, { index: n - 1, idea: entry }),
-    }
+    return { list: list.filter((_entry, i) => i !== n - 1), value: { text: said, isTaken: true }, ...(afterSave ? { afterSave } : {}) }
   })
   if (isTaken) await refreshBand($)
 
   return text
+}
+
+// The entry back in the box as it was typed, to change and send again: it goes back to the
+// place it had, still pointing where it did.
+export async function editEntry($: Engine, ctx: Context, n: number): Promise<string> {
+  const keys = await projectKeys($)
+
+  return takeIntoBox($, ctx, n, '/aside list', entry => ({
+    typed: entry.raw ?? `+ ${entry.text}`,
+    said: `Entry ${n} is in the prompt box: change it and press Enter; it goes back to place ${n}, still pointing where it did.`,
+    afterSave: () => saveEditing($, keys.editing, { index: n - 1, idea: entry }),
+  }))
 }
 
 export async function moveEntry($: Engine, ctx: Context, from: number, to: number): Promise<string> {
@@ -230,29 +245,14 @@ export async function moveEntry($: Engine, ctx: Context, from: number, to: numbe
 }
 
 // The first entry, or entry `n`, taken out of the queue into the box, ready to send: no
-// "+" in front, a comment with what it is about. Into the box in the change that takes it out,
-// as /aside edit does.
+// "+" in front, a comment with what it is about.
 export async function popEntry($: Engine, ctx: Context, n?: number): Promise<string> {
   const { root } = await projectKeys($)
-  const { text, isTaken } = await changeShownQueue($, ctx, async list => {
-    if (list.length === 0) {
-      return { value: { text: 'The queue is empty.', isTaken: false } }
-    }
-    const at = n ?? 1
-    if (!isPlace(at, list.length)) {
-      return { value: { text: askPlaces(1, list.length), isTaken: false } }
-    }
-    const entry = list[at - 1]!
-    const filled = await $.prompt.fill({ text: popPrompt(entry, root), mode: 'insert' })
-    if (!filled.isFilled) {
-      return { value: { text: 'The prompt box cannot take it now; the entry stays in the queue.', isTaken: false } }
-    }
 
-    return { list: list.filter((_entry, i) => i !== at - 1), value: { text: `In the prompt box, ready to send: ${shortenText(entry.text, 60)}`, isTaken: true } }
-  })
-  if (isTaken) await refreshBand($)
-
-  return text
+  return takeIntoBox($, ctx, n ?? 1, '/aside', entry => ({
+    typed: popPrompt(entry, root),
+    said: `In the prompt box, ready to send: ${shortenText(entry.text, 60)}`,
+  }))
 }
 
 // Removes the entries at places `numbers`, all of them or none when one is out of range.
