@@ -60,9 +60,15 @@ Each value lives where its lifetime fits:
 
 The plugin runs on the Claude Code plugin API: hooks `($, e, next)` added with `on()`, and `$` as the only way out of the module (no DOM, no Node).
 
-### Rules the validator enforces
+### Rules the engine enforces when it loads the module
 
-`claude plugin validate .` refuses the module when one of these is broken:
+The engine bundles the hooks module and follows `$` statically from each hook into the functions
+it calls, so it refuses to load the module at all when one of these is broken. Its words for it
+are `$ itself is passed as an argument (bound, passed, spread, returned or read)` and `$ is
+passed to "f", a name bound to a function expression`.
+
+`claude plugin validate .` does **not** catch any of these: it passes a module the engine will
+refuse. `claude plugin test .` is where it shows, as every test failing to load the module.
 
 1. Outside `register.tsx`, a function that takes `$` is a `function` declaration called by name. An arrow function or a function expression is refused, even when the caller is in the same file.
 2. `$` is never passed to a method or property call (`rows[0].run($)`, `obj.read($)`). A table holds data only, and a `switch` calls the functions.
@@ -191,7 +197,7 @@ The plugin runs on the Claude Code plugin API: hooks `($, e, next)` added with `
 ## 9. Review checklist
 
 1. Is each change in its layer, with imports only downwards and no circle? (2.1 to 2.3)
-2. Does `claude plugin validate .` pass, and is `$` passed as 3.1 to 3.6 allow?
+2. Do `claude plugin validate .` and `claude plugin test .` both pass, and is `$` passed as 3.1 to 3.6 allow? Only the tests catch a `$` the engine will not follow.
 3. Are the types tight: no `any`, no unguarded `!`, unions for closed sets? (4.1 to 4.6)
 4. Is every promise awaited or voided on purpose, and every engine failure caught? (4.9, 4.10)
 5. Is new state in the place its lifetime needs, and does stored data from the last release still load? (2.5 to 2.10)
