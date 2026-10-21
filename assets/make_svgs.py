@@ -65,12 +65,7 @@ GLOSS = 380  # where the grey explanations start
 
 
 def esc(text: str) -> str:
-    return (
-        text.replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace('"', "&quot;")
-    )
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
 
 
 def window(c: Theme, height: int, title: str, body: str, label: str) -> str:
@@ -100,10 +95,7 @@ def window(c: Theme, height: int, title: str, body: str, label: str) -> str:
 
 def line(y: float, spans: list[tuple[str, str]], gloss: str = "") -> str:
     """One terminal line: spans of (text, class) in a row, and a grey note in its own column."""
-    parts = "".join(
-        f'<tspan class="{cls}">{esc(text)}</tspan>' if cls else esc(text)
-        for text, cls in spans
-    )
+    parts = "".join(f'<tspan class="{cls}">{esc(text)}</tspan>' if cls else esc(text) for text, cls in spans)
     note = f'<text x="{GLOSS}" y="{y}" class="m d">{esc(gloss)}</text>' if gloss else ""
     return f'  <text x="{PAD}" y="{y}" class="m">{parts}</text>{note}\n'
 
@@ -352,9 +344,7 @@ def step4(c: Theme) -> str:
         ("3", "to do", "a shorter results section", "", ""),
     ]
     y: float = TOP
-    body = line(
-        y, [("❯ ", "f"), ("/aside plan", "a")], "Claude saves the queue as steps"
-    )
+    body = line(y, [("❯ ", "f"), ("/aside plan", "a")], "Claude saves the queue as steps")
     y += ROW
     body += line(y, [("❯ ", "f"), ("/aside run all", "a")], "they go one after another")
     band_y = y + 14
@@ -442,11 +432,7 @@ def pill(
         "idle": ("panel", "line"),
     }[look]
     lead = f'<tspan class="a">{esc(mark)}</tspan>' if mark else ""
-    at = (
-        f'x="{x + 16}" text-anchor="start"'
-        if is_left
-        else f'x="{x + w / 2}" text-anchor="middle"'
-    )
+    at = f'x="{x + 16}" text-anchor="start"' if is_left else f'x="{x + w / 2}" text-anchor="middle"'
     return (
         f'  <rect x="{x}" y="{y}" width="{w}" height="28" rx="14" fill="{c[fill]}" stroke="{c[stroke]}"/>'
         f'<text {at} y="{y + 19}" class="m">{lead}{esc(text)}</text>\n'
@@ -476,9 +462,7 @@ def uc_capture(c: Theme) -> str:
     y += ROW * 1.5
     body += prompt(y, "+", " dark mode", "Enter: it never reaches Claude")
     y += ROW
-    body += line(
-        y, [('queued "dark mode" · 1 waiting', "k")], "a line in the transcript"
-    )
+    body += line(y, [('queued "dark mode" · 1 waiting', "k")], "a line in the transcript")
     y += ROW * 1.5
     body += line(
         y,
@@ -571,10 +555,10 @@ def uc_run(c: Theme) -> str:
         body += bar(c, x, 56, w, name)
         body += f'  <text x="{x + w / 2}" y="106" class="ms" text-anchor="middle">{esc(result)}</text>\n'
     body += arrow("M392 70 H400", c["faint"]) + arrow("M556 70 H564", c["faint"])
-    body += pill(c, 88, 146, 136, "/aside run all", "go") + arrow(
-        "M156 144 V70 H236", c["gob"]
+    body += pill(c, 88, 146, 136, "/aside run all", "go") + arrow("M156 144 V70 H236", c["gob"])
+    body += (
+        '  <text x="240" y="165" class="s">one step at a time; each reply ends with a result the plan keeps</text>\n'
     )
-    body += '  <text x="240" y="165" class="s">one step at a time; each reply ends with a result the plan keeps</text>\n'
     label = (
         "/aside run all sends the steps to Claude one after another: step 1, step 2 and step 3, each reply ending with a Result "
         "line, such as config cached, which the plan keeps. The last step's reply ends with a summary of the run: what was "
@@ -590,9 +574,7 @@ def uc_waiting(c: Theme) -> str:
     body += bar(c, 420, 56, 200, "step 2 builds it")
     body += bar(c, 640, 56, 240, "step 3, by itself")
     body += arrow("M620 70 H636", c["faint"])
-    body += pill(c, 304, 126, 112, "yes, build it", "idle") + arrow(
-        "M360 124 V90", c["faint"]
-    )
+    body += pill(c, 304, 126, 112, "yes, build it", "idle") + arrow("M360 124 V90", c["faint"])
     body += f'  <rect x="{start + 0.5}" y="196" width="{W - start - 1}" height="28" rx="6" fill="{c["band"]}" stroke="{c["bandb"]}"/>\n'
     for x in (300, 420, 620):
         body += f'  <line x1="{x}" y1="200" x2="{x}" y2="220" stroke="{c["bandb"]}"/>\n'
@@ -620,7 +602,9 @@ def uc_queues(c: Theme) -> str:
     body = ""
     for x, title, ideas in panels:
         body += f'  <text x="{x}" y="40" class="lab">{esc(title)}</text>\n'
-        body += f'  <rect x="{x + 0.5}" y="52" width="193" height="118" rx="8" fill="{c["panel"]}" stroke="{c["line"]}"/>\n'
+        body += (
+            f'  <rect x="{x + 0.5}" y="52" width="193" height="118" rx="8" fill="{c["panel"]}" stroke="{c["line"]}"/>\n'
+        )
         for n, idea in enumerate(ideas):
             body += pill(c, x + 14, 68 + n * 44, 166, idea, "queue")
     body += arrow("M200 92 H337", c["faint"]) + arrow("M337 132 H200", c["faint"])
@@ -682,17 +666,11 @@ USE_CASES = {
 def main() -> None:
     out = Path(__file__).parent
     for name, colours in THEMES.items():
-        (out / f"how-it-works-{name}.svg").write_text(
-            how_it_works(colours), encoding="utf-8"
-        )
+        (out / f"how-it-works-{name}.svg").write_text(how_it_works(colours), encoding="utf-8")
         for number, draw in ((1, step1), (2, step2), (3, step3), (4, step4)):
-            (out / f"step-{number}-{name}.svg").write_text(
-                draw(colours), encoding="utf-8"
-            )
+            (out / f"step-{number}-{name}.svg").write_text(draw(colours), encoding="utf-8")
         for case, picture in USE_CASES.items():
-            (out / f"use-{case}-{name}.svg").write_text(
-                picture(colours), encoding="utf-8"
-            )
+            (out / f"use-{case}-{name}.svg").write_text(picture(colours), encoding="utf-8")
 
 
 if __name__ == "__main__":
