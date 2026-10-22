@@ -428,7 +428,7 @@ export async function finishStep($: Engine, ctx: Context, e: TurnComplete[1]): P
     // continue or stop ended the step: it is done when this turn ends, whatever ends it.
     if (active.is === 'closing') {
       completeStep(plan, active, me, false, now)
-      return { active, waits: false, after: -1, isPausing: false, isPlanning: isPlanning && isAnswer, hint, steps: structuredClone(plan.steps) }
+      return { active, after: -1, isPausing: false, isPlanning: isPlanning && isAnswer, hint, steps: structuredClone(plan.steps) }
     }
     // The turn that took the person's answer ends the step, unless Claude asked again in it.
     const isAnswered = isAnswer && active.is === 'answering'
@@ -440,36 +440,36 @@ export async function finishStep($: Engine, ctx: Context, e: TurnComplete[1]): P
       const isAgain = active.is === 'answering' || (active.is === 'asking' && active.isAnswered === true)
       const back = stepState(isAgain ? { ...run, is: 'answered', pausedFor: asked } : { ...run, is: 'waiting', pausedFor: asked })
       plan.active = back
-      return { active: back, waits: true, after: -1, isPausing: false, isPlanning: isPlanning && isAnswer, hint, steps: structuredClone(plan.steps) }
+      return { active: back, after: -1, isPausing: false, isPlanning: isPlanning && isAnswer, hint, steps: structuredClone(plan.steps) }
     }
     // A turn of a step in the background cut short leaves it there, as one that waits.
     if (!isAnswer && active.is === 'noticing') {
       const away = stepState({ ...runOf(active), is: 'away' })
       plan.active = away
-      return { active: away, waits: false, after: -1, isPausing: false, isPlanning: false, hint, steps: structuredClone(plan.steps) }
+      return { active: away, after: -1, isPausing: false, isPlanning: false, hint, steps: structuredClone(plan.steps) }
     }
     if (!isAnswer) {
       delete plan.active
-      return { active, waits: false, after: -1, isPausing: false, isPlanning: false, hint, steps: plan.steps }
+      return { active, after: -1, isPausing: false, isPlanning: false, hint, steps: plan.steps }
     }
     // Work in the background a turn of it started is still going: the step goes on there, and
     // the turn that work's end brings ends it.
     if ((active.background?.length ?? 0) > 0) {
       const away = stepState({ ...runOf(active), is: 'away' })
       plan.active = away
-      return { active: away, waits: false, after: -1, isPausing: false, isPlanning: false, hint: '', steps: structuredClone(plan.steps) }
+      return { active: away, after: -1, isPausing: false, isPlanning: false, hint: '', steps: structuredClone(plan.steps) }
     }
     const after = nextInRun(plan.steps, active.step, active.isChain, active.then)
     const isPausing = after >= 0 && isPlanning
     completeStep(plan, active, me, !isPausing, now)
     if (isPausing) plan.paused = { step: active.step, reason: PLANNING_PAUSE, isChain: active.isChain, ...(active.then ? { then: active.then } : {}) }
 
-    return { active, waits: false, after, isPausing, isPlanning, hint: '', steps: structuredClone(plan.steps) }
+    return { active, after, isPausing, isPlanning, hint: '', steps: structuredClone(plan.steps) }
   })
   if (end === undefined) {
     return undefined
   }
-  const { active, waits, after, isPausing, isPlanning, hint, steps } = end
+  const { active, after, isPausing, isPlanning, hint, steps } = end
   const n = active.step + 1
   if (isAway(active)) {
     $.ui.toast(
@@ -477,11 +477,13 @@ export async function finishStep($: Engine, ctx: Context, e: TurnComplete[1]): P
         ? `Step ${n} goes on in the background (${awayWork(active)}); it ends once that work is done and Claude has answered it, or /aside continue ends it now.`
         : `Step ${n} waits for /aside continue, which ends it: its work in the background is done.`,
     )
-  } else if (waits) {
+  } else if (isWaiting(active)) {
+    // Asked of the state, not of a flag carried beside it: only a state that holds a question
+    // can be read for one, so it can never come out as "undefined".
     $.ui.toast(
       active.is === 'answered'
         ? `Step ${n} waits: answer again, and Claude's reply ends it, or /aside continue ends it now${hint}.`
-        : `Step ${n} waits for your answer: ${askedOf(active)}. Answer as usual, and the step ends with Claude's reply; /aside continue ends it now${hint}.`,
+        : `Step ${n} waits for your answer: ${active.pausedFor}. Answer as usual, and the step ends with Claude's reply; /aside continue ends it now${hint}.`,
     )
   } else if (e.reason !== 'answer' && active.is !== 'closing') {
     $.ui.toast(`Plan stopped: step ${n} ${e.reason === 'aborted' ? 'was interrupted' : 'did not finish'}${hint}`)
