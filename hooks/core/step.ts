@@ -1,4 +1,4 @@
-import type { Step, StepRun, StepState, StoredActive } from '../../types'
+import type { Plan, Step, StepRun, StepState, StoredActive } from '../../types'
 
 // The step's own fields, in the one order every state keeps them in, so a state built by a
 // writer and the same state read back from the store stringify alike: changePlan writes only
@@ -150,3 +150,7 @@ export function nextInRun(steps: readonly Step[], index: number, isChain: boolea
 
   return isChain ? steps.findIndex((step, i) => i > index && !step.isDone) : -1
 }
+
+// Whether `turnId` is the turn of this session's prompt that adds to the plan.
+export const isAddingTurn = (plan: Plan, me: string, turnId: string | undefined) =>
+  plan.adding?.sessionId === me && plan.adding.turnId !== undefined && plan.adding.turnId === turnId
