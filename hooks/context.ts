@@ -23,6 +23,10 @@ export type Settings = {
   readonly newQueues: 'global' | 'local'
 }
 
+// Who asked for a hand-over: a command answers with the whole text, while the pane's button
+// and the end of Claude's answer say one line in a toast.
+export type Asker = 'command' | 'pane' | 'answer'
+
 export type ToolOutput = { text: string; turnId: string | undefined; isError: boolean }
 
 // A view of the list pane, by what it lists, so it is listed anew each time it is drawn.

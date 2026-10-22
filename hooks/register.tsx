@@ -4,18 +4,9 @@ import { createContext } from './context'
 import { noteBackgroundEnd, noteBackgroundWork } from './features/background'
 import { dropFailedEntry, emptyBoxAfterQueue, queueTyped, rememberMarkdownFile, rememberToolOutput } from './features/capture'
 import { asideFailed, completeAside, runAside, startSession } from './features/commands'
-import {
-  noteStepAnswer,
-  endSessionSteps, onTurnEnd,
-  onTurnStart,
-  pausePlanFromTool,
-  planToolFailed,
-  savePlanFromTool,
-  stepAnswerFailed,
-  turnEndFailed,
-  turnStartFailed,
-  waitToolFailed,
-} from './features/plan'
+import { onTurnEnd, onTurnStart, turnEndFailed, turnStartFailed } from './features/plan'
+import { pausePlanFromTool, planToolFailed, savePlanFromTool, waitToolFailed } from './features/plantool'
+import { endSessionSteps, noteStepAnswer, stepAnswerFailed } from './features/steps'
 import { drawBand } from './ui/band'
 import { drawListingFrame, drawPlanTool, hidePlanToolResult } from './ui/output'
 import { drawPane } from './ui/pane'
