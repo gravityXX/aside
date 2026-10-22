@@ -6,6 +6,7 @@ Issues and pull requests are welcome. A pull request needs a passing CI run (`va
 
 ```sh
 python3 scripts/check_rules.py
+npx oxlint@1.89.0
 claude plugin validate .
 claude plugin test .
 claude --plugin-dir .

@@ -120,7 +120,7 @@ refuse. `claude plugin test .` is where it shows, as every test failing to load 
 
 ### Style
 
-16. As in the files: two spaces, single quotes, no semicolons, trailing commas in multi-line literals. There is no formatter, so match the file.
+16. As in the files: two spaces, single quotes, no semicolons, trailing commas in multi-line literals. There is no formatter, so match the file: the long lines here are deliberate, and reflowing them buys nothing.
 17. `import type` for types. Imports in groups: the engine, then `types/`, then the repository's files by layer.
 18. **Prefer** early returns over nested `if`, and a blank line before the closing `return` of a longer function.
 19. A pure helper that takes no `$` may be an arrow constant. A function that takes `$` follows 3.1.
@@ -179,10 +179,11 @@ refuse. `claude plugin test .` is where it shows, as every test failing to load 
 
 ### CI and versions
 
-7. CI runs `cz check`, the bump, `claude plugin validate .` and `claude plugin test .`. After the merge, the Release workflow tags `vX.Y.Z` and publishes a GitHub release with that section.
-8. Tool versions in CI are pinned (Commitizen, Claude Code, actions by major). Raising one is a `ci:` commit of its own.
+7. CI runs `cz check`, the bump, `python3 scripts/check_rules.py`, `npx oxlint@1.89.0`, `claude plugin validate .` and `claude plugin test .`. After the merge, the Release workflow tags `vX.Y.Z` and publishes a GitHub release with that section.
+8. Tool versions in CI are pinned (Commitizen, Claude Code, oxlint, actions by major). Raising one is a `ci:` commit of its own.
 9. CI cannot type-check, since the types are written only by a session that loads the plugin (3.13), and a session needs an account where `claude plugin test` does not. Run `tsc` before opening a pull request, with the two commands in CONTRIBUTING.md; nothing else catches a type error, so skipping it ships one.
 10. The version stays 0.x while commands and stored data still change (`major_version_zero` in `.cz.toml`). 1.0.0 comes from one pull request that sets it to `false` and has a `!` commit.
+11. `npx oxlint@1.89.0` passes with nothing to say. It is a linter, not a formatter, so it leaves the lines alone (4.16); its defaults stand, and `.oxlintrc.json` turns off only `unicorn/no-thenable`, which reads the plan's own `then` field, the steps to run next, as a promise. It catches what `tsc` here cannot: the engine's tsconfig leaves `noUnusedLocals` off, so an import a change left behind shows up only here.
 
 ## 8. The Python scripts
 
@@ -211,6 +212,7 @@ refuse. `claude plugin test .` is where it shows, as every test failing to load 
 
 ```sh
 python3 scripts/check_rules.py
+npx oxlint@1.89.0
 claude plugin validate .
 claude plugin test .
 npx -p typescript@5.9.3 tsc -p .
