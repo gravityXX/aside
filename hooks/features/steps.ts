@@ -16,7 +16,9 @@ import { tagsInFiles } from './queue'
 // this area going one way (2.1): a step that asked for the queue to be organized says so to
 // whoever ended its turn, rather than organizing it itself. The queries the rest of the plan
 // shares, such as why nothing new may start while a step runs, live here beside the state they
-// read.
+// read. It is a little past the 400 lines 2.4 prefers and stays one file on purpose (1.2): a
+// step's prompt going out, the turns bound to it and its end are one chain of events, and a cut
+// anywhere along it would put two halves of the same walk in two places.
 
 // Submits the prompt `compose` gives as the person's own, or nothing when it gives none. It
 // goes out from a timer, since neither a command's hook nor a turn's end may submit one while
