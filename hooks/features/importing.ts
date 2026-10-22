@@ -7,7 +7,8 @@ import { listItems } from '../core/markdown'
 import { formatCount, newQueueNote, relativePath } from '../core/text'
 import { resolveFile, tryReadFile } from '../io/host'
 import { changeQueue } from '../io/queue'
-import { addIdeas, GLOBAL, isLocalQueue, loadIdeas, projectKeys, queueName, readTrackedFiles, refreshBand } from '../io/store'
+import { projectKeys, readTrackedFiles, refreshBand } from '../io/store'
+import { GLOBAL, addIdeas, isLocalQueue, loadIdeas, queueName } from '../io/queues'
 
 // How many list items one /aside import takes, so a long file is not queued by mistake.
 const MOST_ITEMS = 100

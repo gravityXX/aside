@@ -8,28 +8,9 @@ import type { Listed } from '../core/listing'
 import { MARKDOWN_PATH } from '../core/markdown'
 import { askPlaces, askTwoPlaces, formatCount, isPlace, newQueueNote, shortenText } from '../core/text'
 import { changeQueue } from '../io/queue'
-import {
-  addIdeas,
-  countQueues,
-  forgetCleared,
-  forgetGlobalIdeas,
-  GLOBAL,
-  isHiddenHere,
-  isLocalQueue,
-  loadCleared,
-  loadIdeas,
-  moveSessionRecords,
-  NAME_PATTERN,
-  queueName,
-  rankOf,
-  refreshBand,
-  resolveQueue,
-  restoreIdea,
-  saveCleared,
-  saveGlobalEditing,
-  saveGlobalIdea,
-} from '../io/store'
-import type { GlobalIdea } from '../io/store'
+import { refreshBand } from '../io/store'
+import { GLOBAL, NAME_PATTERN, addIdeas, countQueues, forgetCleared, forgetGlobalIdeas, isHiddenHere, isLocalQueue, loadCleared, loadIdeas, moveSessionRecords, queueName, rankOf, resolveQueue, restoreIdea, saveCleared, saveGlobalEditing, saveGlobalIdea } from '../io/queues'
+import type { GlobalIdea } from '../io/queues'
 import { addEntries } from './capture'
 import { importFile } from './importing'
 import { showWhileWorking } from './queue'
