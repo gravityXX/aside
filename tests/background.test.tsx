@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { asks, endSession, last, launched, notice, notify, STEPS, world } from './world'
+import { launched, notice, notify, STEPS, world } from './world'
 
 // A step whose turn leaves work going in the background, and a step whose turn never ends:
 // both are steps with no turn of their own that something other than an answer moves on.

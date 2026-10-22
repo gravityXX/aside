@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { asks, last, REPORT, REPORT_PATH, STEPS, world } from './world'
+import { REPORT, REPORT_PATH, STEPS, world } from './world'
 
 // /aside plan on a model of its own: one call outside the conversation organizes the queue.
 
@@ -257,7 +257,7 @@ describe('planning on a model of its own', () => {
   })
 
   test('a step that ends while the planner thinks, and the next that starts, change nothing it was given', SONNET, async ($, on) => {
-    const { w, sent, type, aside, shown, savePlan, startTurn, endTurn, idle } = world($, on)
+    const { w, sent, type, aside, savePlan, startTurn, endTurn, idle } = world($, on)
     await savePlan(STEPS)
     await aside('run all')
     await idle()

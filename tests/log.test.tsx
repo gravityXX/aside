@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { last, STEPS, world } from './world'
+import { STEPS, world } from './world'
 
 // The log of plans run to their end, as /aside log shows them.
 

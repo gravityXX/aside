@@ -6,42 +6,21 @@
 // commands, which call each other nowhere, but the turn's end needs both in one breath, so they
 // stay together and the file stays a little past the 400 lines 2.4 prefers (1.2).
 
-import type { Args, CatchHandler, EngineInterface as Engine, Hook, MatchedHook } from 'claude-code'
+import type { CatchHandler, EngineInterface as Engine, Hook } from 'claude-code'
 
-import type { Entry, Plan, Step, StepState } from '../../types'
+import type { Entry, Plan, Step } from '../../types'
 import type { Asker, Context } from '../context'
-import { inOrder, isSameEntry, KINDS } from '../core/entries'
-import { describeCount, formatPlace, leftOutSection, listingText, planSection } from '../core/listing'
-import {
-  answerContext,
-  closingPrompt,
-  entryPrompt,
-  isAddingPrompt,
-  isOwnPrompt,
-  isPlanningPrompt,
-  isSummingUp,
-  PLAN_SAVED_NOTE,
-  PLANNER_SYSTEM,
-  planningPrompt,
-  planningRequest,
-  readPlanReply,
-  readStepResult,
-  readTitleReply,
-  STEP_MARKER,
-  stepMode,
-  stepPrompt,
-  tidyPrompt,
-  TITLE_SYSTEM,
-} from '../core/prompts'
-import type { StepMode } from '../core/prompts'
-import { askedOf, awayWork, isAway, isWaiting, nextInRun, runOf, stepState, turnOf } from '../core/step'
-import { askPlaces, describeError, describeFailure, formatCount, formatDuration, isPlace, shortenText } from '../core/text'
+import { inOrder, KINDS } from '../core/entries'
+import { describeCount, formatPlace } from '../core/listing'
+import { entryPrompt, isAddingPrompt, isOwnPrompt, isPlanningPrompt, planningPrompt, STEP_MARKER } from '../core/prompts'
+import { askedOf, isAway, isWaiting, runOf, stepState, turnOf } from '../core/step'
+import { askPlaces, describeError, describeFailure, formatCount, isPlace, shortenText } from '../core/text'
 import { changePlan } from '../io/plan'
-import { bringBackTake, forgetAnsweredTake, giveBackItems, readQueue, takeChosen, takeForHandOver, takePlanned } from '../io/queue'
-import { loadPlan, loadTagIds, projectKeys, refreshBand, tagId } from '../io/store'
+import { bringBackTake, forgetAnsweredTake, readQueue, takeChosen, takeForHandOver } from '../io/queue'
+import { loadPlan, projectKeys, refreshBand } from '../io/store'
 import type { Keys } from '../io/store'
 import { archivePlan } from './history'
-import { openListPane, tagsInFiles } from './queue'
+import { tagsInFiles } from './queue'
 
 import {
   bindAnswerTurn,
@@ -60,8 +39,8 @@ import {
   takeOverNote,
 } from './steps'
 import type { TurnComplete, TurnEndReason } from './steps'
-import { parseSteps, parseUnclear, replaceSteps, savePlanSteps } from './plantool'
-import { nameOldSteps, nameStepsLater, planOutside } from './planner'
+import { replaceSteps } from './plantool'
+import { nameStepsLater, planOutside } from './planner'
 
 const EMPTY_QUEUE = 'The queue is empty. Start a message with "+" to add an idea, or "+?" to comment on a copied fragment.'
 
