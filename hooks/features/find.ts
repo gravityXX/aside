@@ -7,7 +7,8 @@ import type { Listed, ListingSection } from '../core/listing'
 import { TAG_NOTE } from '../core/prompts'
 import { foldText, splitWords } from '../core/text'
 import { readQueue } from '../io/queue'
-import { countQueues, GLOBAL, isHiddenHere, isLocalQueue, loadIdeas, loadPlan, projectKeys, queueName } from '../io/store'
+import { loadPlan, projectKeys } from '../io/store'
+import { GLOBAL, countQueues, isHiddenHere, isLocalQueue, loadIdeas, queueName } from '../io/queues'
 import { showWhileWorking, tagsInFiles } from './queue'
 
 // What a search looks at in an entry: its text, the quote it is about and where it points, as

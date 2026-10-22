@@ -8,7 +8,8 @@ import { queueListed, queuesListed } from '../features/global'
 import { logListed } from '../features/history'
 import { handOverQueue } from '../features/plan'
 import { currentListing, LIST_PANE } from '../features/queue'
-import { readBand, resolveQueue } from '../io/store'
+import { readBand } from '../io/store'
+import { resolveQueue } from '../io/queues'
 import { isDrawnOn, listingRows } from './rows'
 
 // How often the list pane is drawn again while a step runs or waits.

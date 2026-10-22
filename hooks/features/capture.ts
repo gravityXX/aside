@@ -13,29 +13,9 @@ import { readTidyReply, TIDY_SYSTEM, tidyPrompt } from '../core/prompts'
 import { describeError, describeTool, formatCount, newQueueNote, shortenText } from '../core/text'
 import { readClipboard, readGitBranch, resolveFile, searchMarkdown, tryReadFile } from '../io/host'
 import { changeQueue, changeQueueAfter } from '../io/queue'
-import {
-  addIdeas,
-  countQueues,
-  forgetEditing,
-  forgetGlobalEditing,
-  forgetGlobalIdeas,
-  loadEditing,
-  loadGlobalEditing,
-  loadIdeas,
-  GLOBAL,
-  isLocalQueue,
-  isOut,
-  projectKeys,
-  queueName,
-  queueOf,
-  resolveQueue,
-  refreshBand,
-  restoreIdea,
-  readTrackedFiles,
-  trackFile,
-  saveGlobalIdea,
-} from '../io/store'
-import type { GlobalIdea } from '../io/store'
+import { forgetEditing, loadEditing, projectKeys, readTrackedFiles, refreshBand, trackFile } from '../io/store'
+import { GLOBAL, addIdeas, countQueues, forgetGlobalEditing, forgetGlobalIdeas, isLocalQueue, isOut, loadGlobalEditing, loadIdeas, queueName, queueOf, resolveQueue, restoreIdea, saveGlobalIdea } from '../io/queues'
+import type { GlobalIdea } from '../io/queues'
 
 // The tools whose output a comment may be about when nothing else says so; any error counts.
 const OUTPUT_TOOLS = new Set(['Bash', 'Edit', 'Write', 'NotebookEdit'])
