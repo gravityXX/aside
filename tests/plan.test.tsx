@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { ALONE, answering, asks, last, MARKER, NEXT, notice, REPORT, REPORT_PATH, STEPS, WAITS, world } from './world'
+import { ALONE, answering, asks, last, MARKER, NEXT, REPORT, REPORT_PATH, STEPS, WAITS, world } from './world'
 
 describe('handing the queue over', () => {
   test('/aside plan sends the queue as one planning prompt: ideas, then comments by file', async ($, on) => {

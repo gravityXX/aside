@@ -2,10 +2,9 @@ import type { Args, CatchHandler, EngineInterface as Engine, Hook } from 'claude
 
 import type { Plan, Step, StepState } from '../../types'
 import type { Context } from '../context'
-import { describeCount, listingText } from '../core/listing'
 import { answerContext, closingPrompt, isSummingUp, readStepResult, stepMode, stepPrompt } from '../core/prompts'
 import { askedOf, awayWork, isAway, isWaiting, nextInRun, runOf, stepState, turnOf } from '../core/step'
-import { describeError, describeFailure, formatCount, formatDuration } from '../core/text'
+import { describeError, formatCount, formatDuration } from '../core/text'
 import { changePlan } from '../io/plan'
 import { readQueue } from '../io/queue'
 import { loadPlan, projectKeys, refreshBand } from '../io/store'
@@ -188,7 +187,7 @@ export async function goOnFromWaiting($: Engine, ctx: Context): Promise<string |
       // The turn it had, the question it asked and what it was still to wait for in the
       // background are all let go, as continue ends the step; the turn that sums up is this
       // session's, so its start binds to the step here.
-      const { background, ...kept } = runOf(active)
+      const { background: _background, ...kept } = runOf(active)
       const ending = stepState({ ...kept, sessionId: me, is: 'ending' })
       plan.active = ending
       return { active: ending, after: -1, isClosing: true, steps: structuredClone(plan.steps), note }
@@ -371,7 +370,7 @@ export async function dropDeadTurn($: Engine, ctx: Context, sessionId: string, t
     }
     // Read before the request to organize the queue is let go with the turn it was asked in.
     const hint = await organizeHint($, active)
-    const { isPlanningAfter, background, ...rest } = runOf(active)
+    const { isPlanningAfter: _isPlanningAfter, background, ...rest } = runOf(active)
     // With the session itself gone, so is the work it had going and the step's wait on it.
     const run = isGone || background === undefined ? rest : { ...rest, background }
     if (!isGone && active.is === 'noticing') {
@@ -438,7 +437,7 @@ export async function finishStep($: Engine, ctx: Context, e: TurnComplete[1]): P
     if (asked !== undefined && !isAnswered) {
       // The request to organize the queue goes with the turn it was asked in; a turn that took
       // an answer before this one leaves the step asking for another.
-      const { isPlanningAfter, ...run } = runOf(active)
+      const { isPlanningAfter: _isPlanningAfter, ...run } = runOf(active)
       const isAgain = active.is === 'answering' || (active.is === 'asking' && active.isAnswered === true)
       const back = stepState(isAgain ? { ...run, is: 'answered', pausedFor: asked } : { ...run, is: 'waiting', pausedFor: asked })
       plan.active = back

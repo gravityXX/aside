@@ -861,7 +861,7 @@ describe('queues for this project alone', () => {
   })
 
   test('/aside find names a queue of this project\'s as its own', { options: { newQueues: 'local' } }, async ($, on) => {
-    const { aside, queue, shown } = world($, on)
+    const { queue, shown } = world($, on)
     await queue('+@later read the RFC')
 
     expect(await shown('find rfc')).toEqual(["In @later, this project's (/aside q later)", '1 idea read the RFC'])

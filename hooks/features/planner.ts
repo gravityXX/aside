@@ -117,7 +117,7 @@ export async function planOutside($: Engine, ctx: Context, model: Exclude<PlanMo
   ctx.session.planner = model
   try {
     // An entry tidied while the planner thinks would not be found again as it was given.
-    await Promise.allSettled([...ctx.session.tidies])
+    await Promise.allSettled(ctx.session.tidies)
     const keys = await projectKeys($)
     const before = await loadPlan($, keys.plan)
     const isAdding = (await runningHere($, before)) !== undefined
