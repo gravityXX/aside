@@ -279,16 +279,14 @@ function withStepTurn(active: StepState, turnId: string): StepState {
 export async function bindAnswerTurn($: Engine, ctx: Context, turnId: string, text: string) {
   const me = await $.session.id()
   // Kept through a turn it does not start, such as a background task's notice before it.
-  const isAnswer = ctx.session.answer === text
+  const answer = ctx.session.answer?.text === text ? ctx.session.answer : undefined
   // The turn a background task's notification starts, for the step its work was part of.
   const isNotice = ctx.session.notice === text
   if (isNotice) delete ctx.session.notice
   // Only an answer sent with the step's own words ends the step with the reply to it.
-  const isTold = isAnswer && ctx.session.isAnswerTold === true
-  if (isAnswer) {
-    delete ctx.session.answer
-    delete ctx.session.isAnswerTold
-  }
+  const isAnswer = answer !== undefined
+  const isTold = answer?.isTold === true
+  if (isAnswer) delete ctx.session.answer
   const isBound = await changePlan($, plan => {
     const active = plan.active
     if (!active || active.sessionId !== me) return false
@@ -330,13 +328,12 @@ export async function noteStepAnswer(ctx: Context, $: Engine, e: Submit[1], next
   if (!active || active.sessionId !== (await $.session.id()) || askedOf(active) === undefined) {
     return next(e)
   }
-  ctx.session.answer = e.text
-  ctx.session.isAnswerTold = false
+  ctx.session.answer = { text: e.text, isTold: false }
   if (e.turnId !== undefined || !isWaiting(active)) {
     return next(e)
   }
   const isLast = isSummingUp(plan.steps, stepMode(plan.steps, active.step, active.isChain, active.then))
-  ctx.session.isAnswerTold = true
+  ctx.session.answer = { text: e.text, isTold: true }
 
   return next({ ...e, context: [...(e.context ?? []), answerContext(plan.steps, active.step, isLast, ctx.session.waitTool)] })
 }
