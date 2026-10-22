@@ -167,33 +167,17 @@ async function removeIdeas($: Engine, ctx: Context, name: string, numbers: reado
   return sayIdeas(`Removed from ${nameOf(name)}`, chosen.map(idea => idea.entry))
 }
 
-// /aside q NAME pop [N]: the idea in the prompt box, ready to send, and off its queue once it
-// is there; the first one unless named.
-async function popIdea($: Engine, ctx: Context, name: string, n?: number): Promise<string> {
-  const ideas = await shownIdeas($, ctx, name)
-  if (ideas.length === 0) {
-    return emptyOf(name)
-  }
-  const at = n ?? 1
-  if (!isPlace(at, ideas.length)) {
-    return askPlaces(1, ideas.length, 'number', commandOf(name))
-  }
-  const idea = ideas[at - 1]!
-  const filled = await $.prompt.fill({ text: idea.entry.text, mode: 'insert' })
-  if (!filled.isFilled) {
-    return `The prompt box cannot take it now; the idea stays ${inName(name)}.`
-  }
-  await forgetGlobalIdeas($, [idea.key])
-  await refreshBand($)
-
-  return `In the prompt box, ready to send: ${shortenText(idea.entry.text, 60)}`
-}
-
-// /aside q NAME edit N: as /aside edit does for the queue, the idea leaves its queue for the
-// prompt box with its mark, "+@work idea", and the next message that is one such idea takes its
-// place again, or moves it to the queue it names. The record is written before the idea leaves,
-// so a failure between keeps it in both.
-async function editIdea($: Engine, ctx: Context, name: string, n: number): Promise<string> {
+// Takes idea `n` of queue `name` into the prompt box, its key gone once the box has it. `into`
+// says what goes in the box and what the person reads, and `before` what is written while the
+// idea is still there, such as the record of the place an idea out for editing goes back to, so
+// a failure between the two writes keeps it in both rather than in neither.
+async function takeIdeaIntoBox(
+  $: Engine,
+  ctx: Context,
+  name: string,
+  n: number,
+  into: (idea: GlobalIdea) => { typed: string; said: string; before?: () => Promise<unknown> },
+): Promise<string> {
   const ideas = await shownIdeas($, ctx, name)
   if (ideas.length === 0) {
     return emptyOf(name)
@@ -202,16 +186,38 @@ async function editIdea($: Engine, ctx: Context, name: string, n: number): Promi
     return askPlaces(1, ideas.length, 'number', commandOf(name))
   }
   const idea = ideas[n - 1]!
-  const filled = await $.prompt.fill({ text: `${markOf(name)} ${idea.entry.text}`, mode: 'insert' })
+  const { typed, said, before } = into(idea)
+  const filled = await $.prompt.fill({ text: typed, mode: 'insert' })
   if (!filled.isFilled) {
     return `The prompt box cannot take it now; the idea stays ${inName(name)}.`
   }
-  await saveGlobalEditing($, idea)
+  await before?.()
   await forgetGlobalIdeas($, [idea.key])
   await refreshBand($)
+
+  return said
+}
+
+// /aside q NAME pop [N]: the idea in the prompt box, ready to send, and off its queue once it
+// is there; the first one unless named.
+async function popIdea($: Engine, ctx: Context, name: string, n?: number): Promise<string> {
+  return takeIdeaIntoBox($, ctx, name, n ?? 1, idea => ({
+    typed: idea.entry.text,
+    said: `In the prompt box, ready to send: ${shortenText(idea.entry.text, 60)}`,
+  }))
+}
+
+// /aside q NAME edit N: as /aside edit does for the queue, the idea leaves its queue for the
+// prompt box with its mark, "+@work idea", and the next message that is one such idea takes its
+// place again, or moves it to the queue it names.
+async function editIdea($: Engine, ctx: Context, name: string, n: number): Promise<string> {
   const which = name === GLOBAL ? `Global idea ${n}` : `Idea ${n} of ${nameOf(name)}`
 
-  return `${which} is in the prompt box: change it and press Enter; it goes back to place ${n}.`
+  return takeIdeaIntoBox($, ctx, name, n, idea => ({
+    typed: `${markOf(name)} ${idea.entry.text}`,
+    said: `${which} is in the prompt box: change it and press Enter; it goes back to place ${n}.`,
+    before: () => saveGlobalEditing($, idea),
+  }))
 }
 
 // /aside q NAME move N M: one write, to the idea moved, which takes a place between its new
