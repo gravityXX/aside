@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.37.2 - 2026-10-22
 
 - Nothing changes in use: inside, the step of a plan that is running is kept as one state rather than a set of flags, the plan is stored exactly as it was before, and the code of the plan, the queue and where a comment points is laid out so that each thing is written in one place and each area reads in one direction.
 - A step that asked you something while its work ran in the background waits for your answer, which is what `/aside` showed for it all along: `/aside run` and `/aside plan` no longer answer that it goes on in the background, and when the turn it asked in never ends, a toast says it waits.
