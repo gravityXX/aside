@@ -52,11 +52,11 @@ export type Session = {
   // The last message queued, until the box it went back into has been emptied.
   justQueued?: string
   // The person's message to a step that waits for them, until the turn it starts is bound to
-  // the step: that turn took up their answer. isAnswerTold: it went with the step's own words,
-  // which tell Claude its reply ends the step; one typed over a running turn goes without them,
-  // so its turn leaves the step waiting for /aside continue.
-  answer?: string
-  isAnswerTold?: boolean
+  // the step: that turn took up their answer. isTold: it went with the step's own words, which
+  // tell Claude its reply ends the step; one typed over a running turn goes without them, so
+  // its turn leaves the step waiting for /aside continue. The two are one field, so a message
+  // cannot be told about without being there to tell about.
+  answer?: { text: string; isTold: boolean }
   // The notification of a step's work in the background, until the turn it starts is bound to
   // the step, which that turn's end then ends.
   notice?: string
