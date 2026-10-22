@@ -110,6 +110,9 @@ jobs:
       - name: Rule numbers
         if: steps.bump.outputs.pushed != 'true'
         run: python3 scripts/check_rules.py
+      - name: Lint
+        if: steps.bump.outputs.pushed != 'true'
+        run: npx --yes oxlint@1.89.0
       - name: Validate
         if: steps.bump.outputs.pushed != 'true'
         run: claude plugin validate .
