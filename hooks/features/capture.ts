@@ -5,10 +5,12 @@ import { currentOutput } from '../context'
 import type { Context } from '../context'
 import { inOrder, isSameEntry, KINDS, parseEntries, retypedRaw } from '../core/entries'
 import type { Order, TypedEntry } from '../core/entries'
-import { formatPlace, isExportText } from '../core/listing'
-import { findFragment, findHeading, fragmentWords, MARKDOWN_PATH, MIN_FRAGMENT_WORDS } from '../core/markdown'
+import { formatPlace } from '../core/listing'
+import { MARKDOWN_PATH } from '../core/markdown'
+import { pinComment } from '../core/pin'
+import type { Copied, Pin, Sources } from '../core/pin'
 import { readTidyReply, TIDY_SYSTEM, tidyPrompt } from '../core/prompts'
-import { describeError, describeTool, formatCount, newQueueNote, relativePath, shortenText } from '../core/text'
+import { describeError, describeTool, formatCount, newQueueNote, shortenText } from '../core/text'
 import { readClipboard, readGitBranch, resolveFile, searchMarkdown, tryReadFile } from '../io/host'
 import { changeQueue, changeQueueAfter } from '../io/queue'
 import {
@@ -38,126 +40,57 @@ import type { GlobalIdea } from '../io/store'
 // The tools whose output a comment may be about when nothing else says so; any error counts.
 const OUTPUT_TOOLS = new Set(['Bash', 'Edit', 'Write', 'NotebookEdit'])
 
-// Where a comment points, and why it points nowhere when it does: `note` is said to the
-// person at once, so a comment that missed its fragment never passes unnoticed.
-type Pin = Pick<Entry, 'file' | 'line' | 'heading' | 'quote' | 'isLoose' | 'from' | 'output'> & { note?: string }
-
-// What a comment can be about when it names no place: the clipboard (and whether it changed
-// since the last comment), the text selected in a transcript row, the last tool output.
-// Each is asked at most once per message.
-// Where a comment's text may come from. `missing` says why nothing was read: no reader runs
-// here, or the comment came from another device, whose clipboard this machine cannot see.
-type Copied = { text: string; isNew: boolean; missing?: string }
-type CommentSources = { selection: () => Promise<string>; clipboard: () => Promise<Copied>; output?: string }
-
-type ReadSource = (file: string) => Promise<string | undefined>
-
 // The text selected in one transcript row: one in the prompt box or a pane is not about
 // Claude's output.
 function readReplySelection($: Engine): Promise<string> {
   return $.ui.selection().then(one => (one?.requestId ? one.text.trim() : ''), () => '')
 }
 
-function commentSources($: Engine, ctx: Context, output: string | undefined, selection: string | undefined, isRemote: boolean): CommentSources {
+// What the pinning rules in core/pin.ts read, each a closure over `$` made here, where `$` is.
+// The clipboard and the selection are read at most once per message, and a file at most once,
+// however many comments the message holds.
+function commentSources(
+  $: Engine,
+  ctx: Context,
+  root: string,
+  seen: readonly string[],
+  output: string | undefined,
+  selection: string | undefined,
+  isRemote: boolean,
+): Sources {
   let clipboard: Promise<Copied> | undefined
   let selected: Promise<string> | undefined
+  const sourceCache = new Map<string, Promise<string | undefined>>()
   const readCopied = async (): Promise<Copied> => {
     const read = await readClipboard($, ctx.session.clipboard)
 
     return read.hasReader ? read : { ...read, missing: 'no clipboard reader here (wl-clipboard, xclip or xsel)' }
   }
+  const machine = {
+    read: (file: string) => {
+      if (!sourceCache.has(file)) sourceCache.set(file, tryReadFile($, file))
 
+      return sourceCache.get(file)!
+    },
+    search: (quote: string) => searchMarkdown($, quote, root),
+    resolve: (file: string) => resolveFile($, file, root, seen),
+    ...(output ? { output } : {}),
+  }
+
+  // A comment from another device: this machine's clipboard is not the one it was copied on.
   if (isRemote) {
     return {
+      ...machine,
       clipboard: () => Promise.resolve({ text: '', isNew: false, missing: 'sent from another device, so no clipboard was read' }),
       selection: () => Promise.resolve(''),
-      ...(output ? { output } : {}),
     }
   }
 
   return {
+    ...machine,
     clipboard: () => (clipboard ??= readCopied()),
     selection: () => (selected ??= selection !== undefined ? Promise.resolve(selection) : readReplySelection($)),
-    ...(output ? { output } : {}),
   }
-}
-
-const pinToHeading = async (heading: string, named: string | undefined, candidates: readonly string[], root: string, readSource: ReadSource): Promise<Pin> => {
-  for (const file of candidates) {
-    const text = await readSource(file)
-    const found = text === undefined ? undefined : findHeading(text, heading)
-    if (found) {
-      return { file, line: found.line, heading: found.title }
-    }
-  }
-  const scope = named ? relativePath(named, root) : `the ${candidates.length} files written this session`
-
-  return { heading, ...(named ? { file: named } : {}), note: `no heading "${heading}" in ${scope}` }
-}
-
-// A fresh clipboard first; else the text selected in a transcript row (Claude's reply);
-// else an older clipboard. Each is looked for in the session's files and the project's.
-// Text no file holds is kept as a loose quote and said so, since the person sees it and can
-// take the entry back with /aside pop. With nothing on the clipboard, or nothing found, the
-// last tool output rides along.
-async function pinToCopiedText(
-  $: Engine,
-  named: string | undefined,
-  candidates: readonly string[],
-  root: string,
-  sources: CommentSources,
-  readSource: ReadSource,
-): Promise<Pin> {
-  const find = async (quote: string) => {
-    if (fragmentWords(quote).length < MIN_FRAGMENT_WORDS) return undefined
-    const more = named ? [] : (await searchMarkdown($, quote, root)).filter(file => !candidates.includes(file))
-    for (const file of [...candidates, ...more]) {
-      const text = await readSource(file)
-      // An export quotes what it lists: the text was copied from somewhere else, unless the
-      // comment names the export itself.
-      const line = text === undefined || (file !== named && isExportText(text)) ? undefined : findFragment(quote, text)
-      if (line !== undefined) return { file, line, quote: shortenText(quote, 300) }
-    }
-
-    return undefined
-  }
-  const base = named ? { file: named } : {}
-  const output = sources.output ? { output: sources.output } : {}
-  const withOutput = sources.output ? '; the last tool output is attached' : ''
-
-  const { text: quote, isNew, missing } = await sources.clipboard()
-  const count = fragmentWords(quote).length
-  const selected = await sources.selection()
-  if (count > 0 && (isNew || fragmentWords(selected).length === 0)) {
-    const found = await find(quote)
-    if (found) return found
-  }
-  if (fragmentWords(selected).length > 0) {
-    return (await find(selected)) ?? { ...base, quote: shortenText(selected, 300), isLoose: true, from: 'terminal' }
-  }
-
-  if (count === 0) {
-    return sources.output ? { ...base, ...output, note: 'with the last tool output' } : { ...base, note: missing ?? 'no text on the clipboard' }
-  }
-  const scope = named ? relativePath(named, root) : `any .md file under ${root}`
-  const why = count < MIN_FRAGMENT_WORDS ? `copied text too short to find (${count} words)` : `copied text not found in ${scope}`
-
-  return { ...base, quote: shortenText(quote, 300), isLoose: true, from: 'clipboard', ...output, note: `${why}${withOutput}` }
-}
-
-// Where a comment points: the line or heading it names, else the text it was copied from.
-async function pinComment($: Engine, entry: TypedEntry, root: string, seen: readonly string[], sources: CommentSources, readSource: ReadSource): Promise<Pin> {
-  const { anchor } = entry
-  const named = anchor.file ? await resolveFile($, anchor.file, root, seen) : undefined
-  if (named && anchor.line) {
-    return { file: named, line: anchor.line }
-  }
-  const candidates = named ? [named] : [...seen].reverse()
-  if (anchor.heading) {
-    return pinToHeading(anchor.heading, named, candidates, root, readSource)
-  }
-
-  return pinToCopiedText($, named, candidates, root, sources, readSource)
 }
 
 // What was queued and where it points, as the line the dropped prompt leaves in the transcript.
@@ -322,19 +255,12 @@ export async function addEntries(
     const seen = await readTrackedFiles($)
     const now = await $.clock.now()
     const branch = await readGitBranch($, keys.root)
-    const sources = commentSources($, ctx, output, options.selection, options.isRemote === true)
+    const sources = commentSources($, ctx, keys.root, seen, output, options.selection, options.isRemote === true)
     // An entry taken out with /aside edit comes back where it was, keeping what it pointed at,
     // unless the reworked text names a place of its own.
     const editing = await loadEditing($, keys.editing)
     const isRework =
       editing !== undefined && typed.length === 1 && typed[0]!.list === undefined && typed[0]!.kind === editing.idea.kind && Object.keys(typed[0]!.anchor).length === 0
-    const sourceCache = new Map<string, Promise<string | undefined>>()
-    const readSource: ReadSource = file => {
-      if (!sourceCache.has(file)) sourceCache.set(file, tryReadFile($, file))
-
-      return sourceCache.get(file)!
-    }
-
     const added: Entry[] = []
     const notes: string[] = []
     // Each "+@name" to the queue that name means here, or a new one of the scope the setting gives.
@@ -354,7 +280,7 @@ export async function addEntries(
         added.push({ ...kept, text: one.text, raw: one.raw })
         continue
       }
-      const { note, ...spot } = one.kind === 'idea' ? ({} as Pin) : await pinComment($, one, keys.root, seen, sources, readSource)
+      const { note, ...spot } = one.kind === 'idea' ? ({} as Pin) : await pinComment(one, keys.root, seen, sources)
       if (note) notes.push(note)
       added.push({ text: one.text, raw: one.raw, at: now, kind: one.kind, ...spot, ...(task ? { task } : {}), ...(branch ? { branch } : {}) })
     }
