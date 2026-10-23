@@ -33,52 +33,43 @@ export type ToolOutput = { text: string; turnId: string | undefined; isError: bo
 export type PaneView = { kind: 'queue' } | { kind: 'named'; typed: string } | { kind: 'queues' } | { kind: 'find'; query: string } | { kind: 'log'; n?: number }
 
 export type Session = {
-  // The plan tool's full name as the engine registered it: its prefix comes from where the
-  // plugin was loaded from (a marketplace install, a --plugin-dir folder), so it is never assumed.
+  // Full names as the engine registered them: the prefix comes from where the plugin was
+  // loaded from, a marketplace install or a --plugin-dir folder, so it is never assumed (3.10).
   planTool: string
-  // The same for the tool a step pauses the plan with.
   waitTool: string
-  // The main loop's current (or last) turn, and whether it was the plugin's own.
+  // The current turn, or the last one: it is not cleared when a turn ends.
   turnId?: string
   isOwnTurn: boolean
-  // Whether a main-loop turn is in flight: only an entry queued then was made "while Claude
-  // worked on" the last prompt.
+  // Only an entry queued while a turn is in flight was made "while Claude worked on" it.
   isRunning: boolean
   lastTask?: string
   // The last tool output of the turn: an error stays over a later success.
   lastOutput?: ToolOutput
-  // The last tool the main loop called, in the turn turnId names: what a step does now.
+  // In the turn turnId names: what the listing shows a running step as doing now.
   lastTool?: { turnId: string | undefined; text: string }
   // The last message queued, until the box it went back into has been emptied.
   justQueued?: string
-  // The person's message to a step that waits for them, until the turn it starts is bound to
-  // the step: that turn took up their answer. isTold: it went with the step's own words, which
-  // tell Claude its reply ends the step; one typed over a running turn goes without them, so
-  // its turn leaves the step waiting for /aside continue. The two are one field, so a message
-  // cannot be told about without being there to tell about.
+  // Held until the turn it starts is bound to the step, which is what takes the answer up.
+  // isTold: it went with the step's own words, which tell Claude its reply ends the step; one
+  // typed over a running turn goes without them, so its turn leaves the step waiting.
   answer?: { text: string; isTold: boolean }
-  // The notification of a step's work in the background, until the turn it starts is bound to
-  // the step, which that turn's end then ends.
+  // Held the same way; the turn it starts is the step's, and that turn's end ends the step.
   notice?: string
-  // What /aside plan handed over, until the turn that organizes it ends: the items as the
-  // planning prompt numbered them, that turn once it starts, and whether Claude saved a plan.
-  // A reload loses it, and the take then waits for /aside undo as it did before. isAdding: it
-  // adds to the plan, which a second hand-over before its turn ends would save over.
+  // What /aside plan handed over, the items numbered as the planning prompt numbered them. A
+  // reload loses it, and the take then waits for /aside undo. isAdding: a second hand-over
+  // before this turn ends would save over the steps this one adds.
   planning?: { items: Entry[]; turnId?: string; isSaved: boolean; isAdding: boolean }
-  // The model organizing the queue outside the conversation right now: one at a time, so a
-  // second plan never saves over the first one's.
+  // One planner at a time, so a second plan never saves over the first one's.
   planner?: Exclude<PlanModel, 'session'>
   // The entries being tidied now: a planner waits for them, or it would plan an entry under
   // the text it had before.
   tidies: Set<Promise<void>>
   // The prompts of steps with a title an earlier release cut, sent to be named in this process.
   namedOld: Set<string>
-  // The turns of the main loop this process saw start and has not yet seen end, and the work
-  // in the background calls here started: what a step's turn or work can be known dead by.
+  // What this process saw start and not end: how a step's turn, or its work, is known dead.
   openTurns: Set<string>
   ownWork: Set<string>
-  // What the list pane shows: the queue, as /aside and the band's list button open it, or what
-  // /aside g, q, find or log asked for while Claude worked. None is the queue.
+  // What /aside g, q, find or log asked for while Claude worked. None of them means the queue.
   paneView?: PaneView
   // What draws the list pane again while a step runs or waits, so its time there moves on.
   paneTick?: Timer
