@@ -212,3 +212,67 @@ describe('any other turn of this session starting', () => {
     expect(decide(theirs, event).outcome).toBe('nothing')
   })
 })
+
+describe('a run starting a step', () => {
+  test('the step waits for its prompt, and the prompt is asked for after the band is counted', () => {
+    const made = decide(planOf(), { is: 'start', sessionId: ME, index: 1, isChain: true })
+
+    expect(made.outcome).toBe('started')
+    expect(made.plan.active).toEqual(stepState({ step: 1, isChain: true, sessionId: ME, is: 'due' }))
+    // The order is the move's, not the shell's: the band is counted before the prompt goes out.
+    expect(made.does).toEqual([{ does: 'refreshBand' }, { does: 'sendStep', index: 1, isChain: true, isClosing: false }])
+  })
+
+  test('the steps /aside run named ride along to the prompt', () => {
+    const made = decide(planOf(), { is: 'start', sessionId: ME, index: 0, isChain: false, then: [1] })
+
+    expect(made.plan.active?.then).toEqual([1])
+    expect(made.does[1]).toEqual({ does: 'sendStep', index: 0, isChain: false, then: [1], isClosing: false })
+  })
+
+  test('a step that starts ends any pause but its own', () => {
+    const paused = { step: 0, reason: 'to organize the queue', isChain: true }
+    const was = { ...planOf(), paused }
+
+    expect(decide(was, { is: 'start', sessionId: ME, index: 1, isChain: true }).plan.paused).toBe(undefined)
+    expect(decide(was, { is: 'start', sessionId: ME, index: 1, isChain: false, paused }).plan.paused).toEqual(paused)
+  })
+
+  test('a run takes over the step that was there, whoever was running it', () => {
+    const theirs = planOf(stepState({ ...run, sessionId: 'session-2', is: 'running', turnId: 't1' }))
+    const made = decide(theirs, { is: 'start', sessionId: ME, index: 1, isChain: true })
+
+    expect(made.plan.active?.sessionId).toBe(ME)
+    expect(made.plan.active?.step).toBe(1)
+  })
+})
+
+describe('a step whose prompt never went out', () => {
+  test('a step that continue or stop had ended is done as it stands, with the time it took', () => {
+    const plan = planOf(stepState({ ...run, startedAt: 1000, result: 'half done', is: 'ending' }))
+    const made = decide(plan, { is: 'promptDropped', index: 0, now: 61_000 })
+
+    expect(made.outcome).toBe('ending')
+    expect(made.plan.active).toBe(undefined)
+    expect(made.plan.steps[0]).toEqual({ ...STEPS[0], isDone: true, ms: 60_000, doneAt: 61_000, result: 'half done' })
+    // Done as it stands means the run stops there: no step follows it in.
+    expect(made.plan.steps[1]?.isDone).toBe(undefined)
+  })
+
+  test('a step that never started is let go', () => {
+    const made = decide(planOf(stepState({ ...run, is: 'due' })), { is: 'promptDropped', index: 0, now: 1 })
+
+    expect(made.outcome).toBe('gone')
+    expect(made.plan.active).toBe(undefined)
+    expect(made.does).toEqual([{ does: 'refreshBand' }])
+  })
+
+  test('a step something else took the place of meanwhile is left alone', () => {
+    const running = planOf(stepState({ ...run, is: 'running', turnId: 't1' }))
+    const other = planOf(stepState({ step: 1, isChain: true, sessionId: ME, is: 'due' }))
+
+    expect(decide(running, { is: 'promptDropped', index: 0, now: 1 }).outcome).toBe('nothing')
+    expect(decide(other, { is: 'promptDropped', index: 0, now: 1 }).outcome).toBe('nothing')
+    expect(decide(planOf(), { is: 'promptDropped', index: 0, now: 1 }).does).toEqual([])
+  })
+})

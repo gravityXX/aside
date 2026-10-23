@@ -9,7 +9,7 @@
 
 import type { Plan, Step, StepRun, StepState } from '../../types'
 import { isSummingUp, stepMode } from './prompts'
-import { isAway, isWaiting, runOf, stepState, turnOf, withRun } from './step'
+import { isAway, isWaiting, nextInRun, runOf, stepState, turnOf, withRun } from './step'
 
 export type StepEvent =
   // Claude asked the person something with the wait tool, in the turn of the step it is working
@@ -32,18 +32,51 @@ export type StepEvent =
   // with the step's own words, so Claude's reply to it ends the step; isNotice, that a
   // background task's notification started it.
   | { is: 'bindAnswer'; sessionId: string; turnId: string; isAnswer: boolean; isTold: boolean; isNotice: boolean }
+  // A run starts step `index`: with isChain the next step not done follows when it ends, with
+  // `then` the steps /aside run named instead, and with `paused` the step runs alone out of a
+  // paused run, which stays paused after it.
+  | { is: 'start'; sessionId: string; index: number; isChain: boolean; then?: readonly number[]; paused?: Plan['paused'] }
+  // The prompt of step `index` never went out: a hook beneath dropped it, or the engine refused
+  // it. `now` is when, by the clock, for a step that is done as it stands.
+  | { is: 'promptDropped'; index: number; now: number }
 
 // What a move asks the shell to do about it, as data and never as a function: the engine
 // refuses `$` passed to a property call, so a table of handlers taking it cannot exist (3.2).
-export type Effect = { does: 'refreshBand' }
+export type Effect =
+  // The line above the prompt counts what the move changed.
+  | { does: 'refreshBand' }
+  // The prompt of step `index` goes out, from a timer: a hook that holds the turn may not
+  // submit one (3.8). With isClosing it is the turn that sums a run up rather than a step's own.
+  | { does: 'sendStep'; index: number; isChain: boolean; then?: readonly number[]; isClosing: boolean }
 
 // The word the shell turns into a sentence for the person or for Claude. 'nothing' is a move
 // that did not happen, which every event may answer with.
-export type Outcome = 'nothing' | 'ending' | 'waits' | 'last' | 'noted' | 'told' | 'quiet' | 'bound'
+export type Outcome = 'nothing' | 'ending' | 'waits' | 'last' | 'noted' | 'told' | 'quiet' | 'bound' | 'started' | 'gone'
 
 export type Decided = { plan: Plan; does: readonly Effect[]; outcome: Outcome }
 
 const nothing = (plan: Plan): Decided => ({ plan, does: [], outcome: 'nothing' })
+
+// The step `active` runs, done at `now`, with the time it took and what its last turn said.
+// With isGoingOn the next step of the run starts in the same answer, so nothing in between
+// finds the run with no step. `after` is that step's index, or -1 when none follows.
+export function completed(plan: Plan, active: StepState, me: string, isGoingOn: boolean, now: number): { plan: Plan; after: number } {
+  const step = plan.steps[active.step]!
+  // The time by the clock, waits for the person included; never less than its turns took.
+  const ms = Math.max(active.ms ?? 0, active.startedAt === undefined ? 0 : now - active.startedAt)
+  const steps = plan.steps.map((one, i) =>
+    i === active.step ? { ...step, isDone: true as const, ms, doneAt: now, ...(active.result ? { result: active.result } : {}) } : one,
+  )
+  const after = isGoingOn ? nextInRun(steps, active.step, active.isChain, active.then) : -1
+  const { active: _done, paused, ...rest } = plan
+  if (after < 0) {
+    return { plan: { ...rest, ...(paused ? { paused } : {}), steps }, after }
+  }
+  const then = active.then?.slice(1)
+  const next = stepState({ step: after, isChain: active.isChain, sessionId: me, ...(then ? { then } : {}), is: 'due' })
+
+  return { plan: { ...rest, steps, active: next }, after }
+}
 
 // Claude's question, asked in the turn of the step it is working on. The question is new, so an
 // answer a turn took before it no longer ends the step, and a step that was in the background
@@ -190,6 +223,36 @@ function bindAnswer(plan: Plan, event: Extract<StepEvent, { is: 'bindAnswer' }>)
   return { plan: { ...plan, active: next }, does: [], outcome: 'bound' }
 }
 
+// A run starting a step. A step that starts, the run going on or a new one, ends any pause but
+// its own, and nothing is asked of the step that was there: the run took it over already.
+function start(plan: Plan, event: Extract<StepEvent, { is: 'start' }>): Decided {
+  const { index, isChain, then, paused, sessionId } = event
+  const active = stepState({ step: index, isChain, sessionId, ...(then ? { then: [...then] } : {}), is: 'due' })
+  const { paused: _was, ...rest } = plan
+
+  return {
+    plan: { ...rest, ...(paused ? { paused } : {}), active },
+    does: [{ does: 'refreshBand' }, { does: 'sendStep', index, isChain, ...(then ? { then } : {}), isClosing: false }],
+    outcome: 'started',
+  }
+}
+
+// The prompt of a step that never went out. A step continue or stop had ended, whose prompt was
+// only to sum the run up, is done as it stands; any other is let go. A step something else took
+// the place of meanwhile is left alone.
+function promptDropped(plan: Plan, event: Extract<StepEvent, { is: 'promptDropped' }>): Decided {
+  const active = plan.active
+  if (active?.step !== event.index || turnOf(active) !== undefined) {
+    return nothing(plan)
+  }
+  if (active.is === 'ending') {
+    return { plan: completed(plan, active, active.sessionId, false, event.now).plan, does: [{ does: 'refreshBand' }], outcome: 'ending' }
+  }
+  const { active: _gone, ...rest } = plan
+
+  return { plan: rest, does: [{ does: 'refreshBand' }], outcome: 'gone' }
+}
+
 export function decide(plan: Plan, event: StepEvent): Decided {
   switch (event.is) {
     case 'ask':
@@ -204,6 +267,10 @@ export function decide(plan: Plan, event: StepEvent): Decided {
       return bindTurn(plan, event)
     case 'bindAnswer':
       return bindAnswer(plan, event)
+    case 'start':
+      return start(plan, event)
+    case 'promptDropped':
+      return promptDropped(plan, event)
   }
 }
 
