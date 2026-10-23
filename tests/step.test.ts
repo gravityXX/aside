@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'claude-code/testing'
 
 import type { StepRun, StepState, StoredActive } from '../types'
-import { askedOf, isAway, isWaiting, readActive, storedActive, turnOf } from '../hooks/core/step'
+import type { Where } from '../hooks/core/step'
+import { askedOf, canFollow, FOLLOWS, isAway, isWaiting, readActive, storedActive, turnOf } from '../hooks/core/step'
 
 // How the marks the store keeps become the step's state and go back again (2.7). These are
 // rules over every combination the store can hold, not only those a release writes, so each
@@ -130,5 +131,46 @@ describe('the step running, read from the marks the store keeps', () => {
       const asks = ['asking', 'answering', 'waiting', 'answered', 'ending', 'closing'].includes(state.is)
       expect(askedOf(state)).toBe(asks ? one.pausedFor : undefined)
     }
+  })
+})
+
+// The graph the writers make between them, held to the shape a run has to have: every state is
+// reached from somewhere, and from every state a run can end. A state nothing reaches would be
+// dead, and one that cannot reach `none` would be a step no command could finish.
+describe('where the step running can go', () => {
+  const WHERE: Where[] = [...STATES, 'none'] as Where[]
+
+  test('the graph names every state and nothing else', () => {
+    expect(Object.keys(FOLLOWS).sort()).toEqual([...WHERE].sort())
+    for (const [from, tos] of Object.entries(FOLLOWS)) {
+      expect(WHERE).toContain(from)
+      for (const to of tos) {
+        expect(WHERE).toContain(to)
+        // A state is never listed against itself: a change that moves nothing is no move.
+        expect(to).not.toBe(from)
+      }
+    }
+  })
+
+  test('every state is reached from a run starting, and from every state a run can end', () => {
+    const walk = (start: Where, next: (one: Where) => readonly Where[]) => {
+      const seen = new Set<Where>([start])
+      for (const one of seen) for (const to of next(one)) seen.add(to)
+
+      return seen
+    }
+    const forward = walk('none', one => FOLLOWS[one])
+    expect([...forward].sort()).toEqual([...WHERE].sort())
+
+    const back = walk('none', one => WHERE.filter(other => FOLLOWS[other].includes(one)))
+    expect([...back].sort()).toEqual([...WHERE].sort())
+  })
+
+  test('a move the graph does not have is refused, and standing still is not a move', () => {
+    expect(canFollow('due', 'running')).toBe(true)
+    expect(canFollow('running', 'running')).toBe(true)
+    expect(canFollow('due', 'ending')).toBe(false)
+    expect(canFollow('closing', 'asking')).toBe(false)
+    expect(canFollow('none', 'running')).toBe(false)
   })
 })

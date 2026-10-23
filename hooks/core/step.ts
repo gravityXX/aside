@@ -1,5 +1,6 @@
-// The step running, read from the marks the store keeps and written back as those marks. The
-// only file that knows both shapes, so no feature ever sees a flag (2.10).
+// The step running, read from the marks the store keeps and written back as those marks, and
+// the graph of where it may go from where it is. The only file that knows both shapes, so no
+// feature ever sees a flag (2.10), and the only one that holds that graph whole (2.11).
 
 import type { Plan, Step, StepRun, StepState, StoredActive } from '../../types'
 
@@ -157,3 +158,35 @@ export function nextInRun(steps: readonly Step[], index: number, isChain: boolea
 // Whether `turnId` is the turn of this session's prompt that adds to the plan.
 export const isAddingTurn = (plan: Plan, me: string, turnId: string | undefined) =>
   plan.adding?.sessionId === me && plan.adding.turnId !== undefined && plan.adding.turnId === turnId
+
+// Where the step running can go from where it is, as the writers in features/steps.ts,
+// features/plan.ts, features/plantool.ts and features/background.ts take it. 'none' is no step
+// running: a run starts one, and a step done, let go or stopped leaves none. A state is not
+// listed against itself, since a change that leaves the step where it was is no move at all.
+// This is the graph those writers make between them, which no one of them can show; changePlan
+// refuses a move that is not here, so a writer and this table cannot drift apart (2.10).
+export type Where = StepState['is'] | 'none'
+
+export const FOLLOWS: Record<Where, readonly Where[]> = {
+  // A run starts a step, and nothing else makes one.
+  none: ['due'],
+  // Its prompt goes out and its turn starts, or a stop keeps it from going out, or the session
+  // ends under it and it waits for the person.
+  due: ['running', 'waiting', 'none'],
+  // Every state that has a turn can also be ended by /aside continue, which is what a step an
+  // earlier process left running looks like here: its turn is one this process never saw start,
+  // so continue ends it and, on the last step of a run, takes it to ending to sum the run up.
+  running: ['asking', 'away', 'waiting', 'ending', 'due', 'none'],
+  asking: ['waiting', 'answered', 'away', 'closing', 'ending', 'due', 'none'],
+  // Claude may ask again inside the very turn that took the answer.
+  answering: ['asking', 'waiting', 'answered', 'away', 'closing', 'ending', 'due', 'none'],
+  waiting: ['asking', 'answering', 'ending', 'due', 'none'],
+  answered: ['asking', 'answering', 'ending', 'due', 'none'],
+  noticing: ['asking', 'away', 'waiting', 'ending', 'due', 'none'],
+  away: ['noticing', 'ending', 'waiting', 'due', 'none'],
+  // A step continue ended still holds its question, so a message typed to it is still an answer.
+  ending: ['closing', 'asking', 'answering', 'due', 'none'],
+  closing: ['ending', 'due', 'none'],
+}
+
+export const canFollow = (from: Where, to: Where) => from === to || FOLLOWS[from].includes(to)
