@@ -8,8 +8,9 @@ import type { CatchHandler, EngineInterface as Engine, MatchedHook } from 'claud
 import type { Plan, Step } from '../../types'
 import type { Context } from '../context'
 import { leftOutSection, listingText, planSection } from '../core/listing'
-import { PLAN_SAVED_NOTE, isSummingUp, stepMode } from '../core/prompts'
-import { isAddingTurn, runOf, stepState, turnOf } from '../core/step'
+import { PLAN_SAVED_NOTE } from '../core/prompts'
+import { decide, writeInto } from '../core/reduce'
+import { isAddingTurn } from '../core/step'
 import { describeFailure, shortenText } from '../core/text'
 import { changePlan } from '../io/plan'
 import { giveBackItems } from '../io/queue'
@@ -205,20 +206,14 @@ export async function pausePlanFromTool(ctx: Context, $: Engine, e: PlanToolCall
   }
   const me = await $.session.id()
   const reason = (e as unknown as { reason?: unknown }).reason
+  const pausedFor = typeof reason === 'string' && reason.trim() !== '' ? shortenText(reason, 120) : 'it needs your answer'
   const said = await changePlan($, plan => {
-    const active = plan.active
-    if (!active) return undefined
-    const turnId = turnOf(active)
-    if (turnId === undefined || active.sessionId !== me) return undefined
-    if (active.is === 'closing') return 'ending'
-    const pausedFor = typeof reason === 'string' && reason.trim() !== '' ? shortenText(reason, 120) : 'it needs your answer'
-    // The question is new, so an answer a turn took before it no longer ends the step. A step
-    // that was in the background waits from here, keeping the work on its record.
-    plan.active = stepState({ ...runOf(active), is: 'asking', turnId, pausedFor })
+    const made = decide(plan, { is: 'ask', sessionId: me, pausedFor })
+    writeInto(plan, made.plan)
 
-    return isSummingUp(plan.steps, stepMode(plan.steps, active.step, active.isChain, active.then)) ? 'last' : 'waits'
+    return made.outcome
   })
-  if (said === undefined) {
+  if (said === 'nothing') {
     return { deny: 'no step of the aside plan is running; call this tool only from a step of the plan' }
   }
   if (said === 'ending') {
