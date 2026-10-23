@@ -130,6 +130,7 @@ refuse. `claude plugin test .` is where it shows, as every test failing to load 
 20. A comment is a full sentence above a type, a field, a constant or a function: what it is, or why it is so.
 21. It says what the code cannot: an engine limit, a race it avoids, a shape an earlier release stored, a simpler design that breaks, a consequence in another file. **The test is deletion**: cut the sentence, and if nothing is lost but words, it was never a comment. A name, a type or a member of a union that already says it leaves nothing to say, and a comment that restates the line under it is worse than none, since 4.22 makes it a line to keep true for no return.
 22. A changed line comes with its comment changed, so no comment goes stale.
+23. Every file under `hooks/` and `types/` opens with a comment: what belongs in it, what deliberately does not, and any rule it is under. It is not its own name in a sentence, nor its line from 2. Layers, which is written there once; it is what a reader needs before the first declaration and cannot get from either. `scripts/check_rules.py` refuses a file that opens without one.
 
 ## 5. What the person reads
 

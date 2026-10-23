@@ -1,3 +1,6 @@
+// What a typed line means, and what an entry is once it is stored. The marks and the words for
+// them are one table here, so the listing, the prompts and the help never spell them apart.
+
 import type { Entry, Kind } from '../../types'
 import { findFencedLines, visibleText } from './markdown'
 import { shortenText } from './text'

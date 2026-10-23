@@ -1,3 +1,6 @@
+// The /aside listing as data rather than text: sections and rows that the terminal, the pane
+// and an export each draw their own way. Nothing here draws, and nothing here writes.
+
 import type { Entry, PastRun, Plan } from '../../types'
 import { KINDS } from './entries'
 import { askedOf, awayWork, isAway, isWaiting } from './step'

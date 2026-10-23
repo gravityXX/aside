@@ -1,3 +1,6 @@
+// The line above the prompt. It reads the band atom and draws it, deciding nothing: what it
+// shows was counted in io/store.ts.
+
 import type { EngineInterface as Engine, MatchedHook } from 'claude-code'
 
 import type { Context } from '../context'

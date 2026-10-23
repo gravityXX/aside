@@ -1,3 +1,7 @@
+// Where a comment points, settled before anything is stored. The machine is handed in as
+// closures (`Sources`), so these rules stay plain functions with no `$` of their own and can be
+// held to a table (pin.test.ts, 6.3).
+
 import type { Entry } from '../../types'
 import type { TypedEntry } from './entries'
 import { isExportText } from './listing'

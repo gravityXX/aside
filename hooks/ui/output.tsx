@@ -1,3 +1,5 @@
+// What /aside printed, drawn in its frame, and the plan tool's row in the transcript.
+
 import type { EngineInterface as Engine, MatchedHook } from 'claude-code'
 
 import type { Context } from '../context'

@@ -1,3 +1,7 @@
+// /aside itself: the table of its commands, the one switch that calls them, the help and the
+// Tab hints. The table holds data only, since `$` may not be passed to a method call (3.2), and
+// the help and the hints are built from it, so neither can drift from what runs.
+
 import type { CatchHandler, EngineInterface as Engine, Hook, MatchedHook } from 'claude-code'
 
 import { currentOutput, currentTask } from '../context'

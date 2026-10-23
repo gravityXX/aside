@@ -1,3 +1,6 @@
+// /aside import and /aside scan: a markdown file becoming entries or tags, leaving the file as
+// it is.
+
 import type { EngineInterface as Engine } from 'claude-code'
 
 import type { Entry, Kind } from '../../types'

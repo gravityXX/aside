@@ -1,3 +1,6 @@
+// The step running, read from the marks the store keeps and written back as those marks. The
+// only file that knows both shapes, so no feature ever sees a flag (2.10).
+
 import type { Plan, Step, StepRun, StepState, StoredActive } from '../../types'
 
 // The step's own fields, in the one order every state keeps them in, so a state built by a

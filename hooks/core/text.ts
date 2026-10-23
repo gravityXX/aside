@@ -1,3 +1,6 @@
+// Text in, text out: the words the person reads and the paths the plugin spells. Nothing here
+// knows what an entry, a step or a queue is.
+
 import type { HookFailure } from 'claude-code'
 
 // Lower case, without diacritics, ł as l: how two spellings of a word are compared.

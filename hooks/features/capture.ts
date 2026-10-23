@@ -1,3 +1,7 @@
+// A typed message becoming stored entries: what it holds, where each one points, and what the
+// person reads back. The slow part, the clipboard and git, runs before the queue is read and
+// never while it is held (2.9).
+
 import type { CatchHandler, EngineInterface as Engine, Hook } from 'claude-code'
 
 import type { Band, Entry } from '../../types'

@@ -1,3 +1,6 @@
+// The project's own records, and the two atoms a drawing reads. The atoms are read and written
+// only here, since the engine ties one to the file that makes it (3.6).
+
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface as Engine } from 'claude-code'
 

@@ -1,3 +1,8 @@
+// The two tools Claude reaches the plan through: `plan`, which saves the steps it proposed for
+// the queue, and `wait`, which keeps a step open for the person's answer. Their schemas, what
+// they answer Claude, and how steps saved now meet the plan already there are one contract, and
+// it reads as one.
+
 import type { CatchHandler, EngineInterface as Engine, MatchedHook } from 'claude-code'
 
 import type { Plan, Step } from '../../types'
@@ -12,10 +17,6 @@ import { loadPlan, projectKeys, refreshBand } from '../io/store'
 import { archivePlan } from './history'
 import { tagsInFiles } from './queue'
 
-// The two tools Claude reaches the plan through: `plan`, which saves the steps it proposed for
-// the queue, and `wait`, which keeps a step open for the person's answer. Their schemas, what
-// they answer Claude, and how steps saved now meet the plan already there are one contract, and
-// it reads as one.
 
 // The plan made of `steps` alone, in place of the one it was.
 export function replaceSteps(plan: Plan, steps: readonly Step[]) {

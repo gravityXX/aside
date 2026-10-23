@@ -1,3 +1,6 @@
+// /aside find: one pass over the queue, the tags in files, the plan's steps and every other
+// queue, folded and blind to accents.
+
 import type { EngineInterface as Engine } from 'claude-code'
 
 import type { Entry } from '../../types'
