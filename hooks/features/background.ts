@@ -5,7 +5,8 @@ import type { EngineInterface as Engine, Hook, MatchedHook } from 'claude-code'
 
 import type { Context } from '../context'
 import { backgroundContext, isSummingUp, stepMode } from '../core/prompts'
-import { awayWork, isAway, runOf, stepState, turnOf } from '../core/step'
+import { decide, writeInto } from '../core/reduce'
+import { awayWork } from '../core/step'
 import { changePlan } from '../io/plan'
 import { refreshBand } from '../io/store'
 
@@ -46,11 +47,9 @@ export async function noteBackgroundWork(ctx: Context, $: Engine, e: WorkCall[1]
   const callId = e.tool_use_id
   // The call has run: a store that fails here costs the step its wait, never the call's result.
   await changePlan($, plan => {
-    const active = plan.active
-    const turnId = active === undefined ? undefined : turnOf(active)
-    if (!active || turnId === undefined || active.sessionId !== me || turnId !== ctx.session.turnId) return
-    active.background = [...(active.background ?? []), { ...(callId ? { callId } : {}), ...work }]
-    if (callId) ctx.session.ownWork.add(callId)
+    const made = decide(plan, { is: 'workStarted', sessionId: me, turnId: ctx.session.turnId, ...(callId ? { callId } : {}), ...work })
+    writeInto(plan, made.plan)
+    if (made.outcome === 'noted' && callId) ctx.session.ownWork.add(callId)
   }).catch(() => undefined)
 
   return done
@@ -64,15 +63,7 @@ async function dropStoppedWork(ctx: Context, $: Engine, taskId: unknown) {
   }
   const me = await $.session.id()
   await changePlan($, plan => {
-    const active = plan.active
-    const left = active?.background?.filter(one => one.taskId !== taskId)
-    if (!active?.background || left === undefined || left.length === active.background.length) return
-    if (left.length > 0) active.background = left
-    else delete active.background
-    const turnId = ctx.session.turnId
-    if (left.length === 0 && active.sessionId === me && isAway(active) && turnId !== undefined) {
-      plan.active = stepState({ ...runOf(active), is: 'noticing', turnId })
-    }
+    writeInto(plan, decide(plan, { is: 'workStopped', sessionId: me, turnId: ctx.session.turnId, taskId }).plan)
   }).catch(() => undefined)
   await refreshBand($)
 }
@@ -87,17 +78,17 @@ export async function noteBackgroundEnd(ctx: Context, $: Engine, e: Submit[1], n
   }
   const me = await $.session.id()
   const gone = await changePlan($, plan => {
-    const active = plan.active
-    const left = active?.background?.filter(one => one.taskId !== taskId && (callId === undefined || one.callId !== callId))
-    if (!active?.background || left === undefined || left.length === active.background.length) return undefined
-    if (left.length > 0) active.background = left
-    else delete active.background
-    const isTold = active.sessionId === me && isAway(active)
-    // Delivered into a turn already running, that turn takes it up, so it is the step's.
-    const now = isTold && e.turnId !== undefined ? stepState({ ...runOf(active), is: 'noticing', turnId: e.turnId }) : active
-    plan.active = now
+    const made = decide(plan, {
+      is: 'workEnded',
+      sessionId: me,
+      ...(e.turnId === undefined ? {} : { turnId: e.turnId }),
+      ...(taskId === undefined ? {} : { taskId }),
+      ...(callId === undefined ? {} : { callId }),
+    })
+    if (made.outcome === 'nothing') return undefined
+    writeInto(plan, made.plan)
 
-    return { active: structuredClone(now), steps: structuredClone(plan.steps), isTold }
+    return { active: structuredClone(made.plan.active!), steps: structuredClone(made.plan.steps), isTold: made.outcome === 'told' }
   })
   if (gone === undefined) {
     return next(e)
