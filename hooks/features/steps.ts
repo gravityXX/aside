@@ -11,7 +11,8 @@ import type { Args, CatchHandler, EngineInterface as Engine, Hook } from 'claude
 import type { Plan, Step, StepState } from '../../types'
 import type { Context } from '../context'
 import { answerContext, closingPrompt, isSummingUp, readStepResult, stepMode, stepPrompt } from '../core/prompts'
-import { decide, writeInto } from '../core/reduce'
+import { completed, decide, writeInto } from '../core/reduce'
+import type { Effect } from '../core/reduce'
 import { askedOf, awayWork, isAway, isWaiting, nextInRun, runOf, stepState, turnOf } from '../core/step'
 import { describeError, formatCount, formatDuration } from '../core/text'
 import { changePlan } from '../io/plan'
@@ -51,19 +52,19 @@ export async function hasItems($: Engine): Promise<boolean> {
 // was only to sum the run up, is done as it stands.
 async function releaseStep($: Engine, ctx: Context, index: number, why: string) {
   const now = await $.clock.now()
-  const gone = await changePlan($, plan => {
-    const active = plan.active
-    if (active?.step !== index || turnOf(active) !== undefined) return undefined
-    // With no turn, the step continue or stop ended is the one that shows as ending.
-    if (active.is === 'ending') completeStep(plan, active, active.sessionId, false, now)
-    else delete plan.active
-    return active
+  const made = await changePlan($, plan => {
+    const was = plan.active
+    const out = decide(plan, { is: 'promptDropped', index, now })
+    writeInto(plan, out.plan)
+
+    // The step as it was: its own sentence says whether /aside plan still has anything to do.
+    return { outcome: out.outcome, does: out.does, plan: structuredClone(out.plan), was: out.outcome === 'nothing' || was === undefined ? undefined : structuredClone(was) }
   })
-  if (gone) await refreshBand($)
+  await run($, ctx, made.plan, made.does)
   $.ui.toast(
-    gone?.is === 'ending'
+    made.outcome === 'ending'
       ? `Could not ask Claude to sum the run up (${why}); step ${index + 1} is done as it stands.`
-      : `Could not send step ${index + 1} of the plan: ${why}${await organizeHint($, gone)}`,
+      : `Could not send step ${index + 1} of the plan: ${why}${await organizeHint($, made.was)}`,
   )
 }
 
@@ -79,15 +80,28 @@ export async function organizeHint($: Engine, active: Plan['active'] | undefined
 // stays paused after it for /aside continue.
 export async function startStep($: Engine, ctx: Context, index: number, isChain: boolean, then?: readonly number[], paused?: Plan['paused']) {
   const sessionId = await $.session.id()
-  const steps = await changePlan($, plan => {
-    // A step that starts, the run going on or a new one, ends any pause but its own.
-    if (paused) plan.paused = paused
-    else delete plan.paused
-    plan.active = stepState({ step: index, isChain, sessionId, ...(then ? { then: [...then] } : {}), is: 'due' })
-    return structuredClone(plan.steps)
+  const made = await changePlan($, plan => {
+    const out = decide(plan, { is: 'start', sessionId, index, isChain, ...(then ? { then } : {}), ...(paused ? { paused } : {}) })
+    writeInto(plan, out.plan)
+
+    return { plan: structuredClone(out.plan), does: out.does }
   })
-  await refreshBand($)
-  sendStep($, ctx, steps, index, isChain, then)
+  await run($, ctx, made.plan, made.does)
+}
+
+// What a move asked for, done in the order it asked for it. The sentences a move leads to stay
+// here rather than in `core/`, built from its outcome: one of them has to read the queue.
+async function run($: Engine, ctx: Context, plan: Plan, does: readonly Effect[]) {
+  for (const one of does) {
+    switch (one.does) {
+      case 'refreshBand':
+        await refreshBand($)
+        break
+      case 'sendStep':
+        sendStep($, ctx, plan.steps, one.index, one.isChain, one.then, one.isClosing)
+        break
+    }
+  }
 }
 
 // Sends the prompt of step `index`, which the plan holds as running, unless a stop or another
@@ -143,22 +157,14 @@ export async function runningHere($: Engine, plan: Plan): Promise<string | undef
     : `Step ${n} is running. /aside stop stops after it.`
 }
 
-// With isGoingOn the next step of the run starts in this same change, so nothing in between
-// finds the run with no step. Answers that step's index, or -1 when none follows.
+// `completed` in core/reduce.ts answers with a new plan; the callers left here still edit the
+// one they hold, so this writes its answer in and hands back the step that follows. It goes
+// when the last of those callers moves onto an event.
 export function completeStep(plan: Plan, active: StepState, me: string, isGoingOn: boolean, now: number): number {
-  const step = plan.steps[active.step]!
-  // The time by the clock, waits for the person included; never less than its turns took.
-  const ms = Math.max(active.ms ?? 0, active.startedAt === undefined ? 0 : now - active.startedAt)
-  plan.steps[active.step] = { ...step, isDone: true, ms, doneAt: now, ...(active.result ? { result: active.result } : {}) }
-  delete plan.active
-  const after = isGoingOn ? nextInRun(plan.steps, active.step, active.isChain, active.then) : -1
-  if (after >= 0) {
-    const then = active.then?.slice(1)
-    delete plan.paused
-    plan.active = stepState({ step: after, isChain: active.isChain, sessionId: me, ...(then ? { then } : {}), is: 'due' })
-  }
+  const made = completed(plan, active, me, isGoingOn, now)
+  writeInto(plan, made.plan)
 
-  return after
+  return made.after
 }
 
 // A step running in this session on a turn this process never saw start, or saw start and
