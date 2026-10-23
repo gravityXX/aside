@@ -1,3 +1,6 @@
+// The work a step's turn leaves running, and the notification that ends it. register.tsx calls
+// these and nothing in the plan does, so this file is a leaf of its area.
+
 import type { EngineInterface as Engine, Hook, MatchedHook } from 'claude-code'
 
 import type { Context } from '../context'

@@ -1,3 +1,6 @@
+// Reading markdown: its fences, its headings, and the fragment a copied quote is found in. The
+// thresholds that decide a match live here, and matching.test.ts holds them to a table (6.3).
+
 import type { Kind } from '../../types'
 import { slugify, splitWords } from './text'
 

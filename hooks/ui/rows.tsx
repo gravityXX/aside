@@ -1,3 +1,6 @@
+// The rows the band, the pane and the frame share, and which surfaces aside draws on at all
+// (3.11).
+
 import type { Elements, RenderSurface } from 'claude-code'
 
 import type { ListingSection } from '../core/listing'

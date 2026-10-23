@@ -1,3 +1,7 @@
+// The queues no project owns: the global list and the named ones. They are stored a key per
+// idea rather than as one list (3.17), so these are not the commands in `queue` under another
+// key: a move places an idea between its neighbours, and a clear is a record per session.
+
 import type { EngineInterface as Engine } from 'claude-code'
 
 import type { Entry } from '../../types'

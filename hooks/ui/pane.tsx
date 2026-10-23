@@ -1,3 +1,6 @@
+// The list pane. It lists anew at each draw, so what it shows follows the queue and the plan
+// without anyone telling it to.
+
 import type { EngineInterface as Engine, MatchedHook } from 'claude-code'
 
 import type { Context } from '../context'

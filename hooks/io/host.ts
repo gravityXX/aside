@@ -1,3 +1,7 @@
+// The machine outside the store: the clipboard, git, the files and the processes. Everything
+// here answers with a value or nothing, never a throw, so no failure reaches the person as a
+// stack (4.10).
+
 import type { EngineInterface as Engine } from 'claude-code'
 
 import { isExportText } from '../core/listing'

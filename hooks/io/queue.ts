@@ -1,3 +1,7 @@
+// Every change to the project's queue, one after another, and the take /aside undo brings back.
+// Features read the queue to list, count or check it and store it nowhere: only this file writes
+// it (2.9).
+
 import type { EngineInterface as Engine } from 'claude-code'
 
 import type { Entry } from '../../types'

@@ -1,3 +1,6 @@
+// The log of plans run to their end. A plan goes there as another takes its place, so the log
+// is written by the plan itself and never by a command.
+
 import type { EngineInterface as Engine } from 'claude-code'
 
 import type { PastRun, Plan } from '../../types'

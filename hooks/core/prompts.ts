@@ -1,3 +1,7 @@
+// Every word the plugin puts in Claude's mouth, in one file: a change to a prompt is one diff,
+// and a test checks its full text (5.7). Each prompt says that the plugin, not the person, sent
+// it.
+
 import type { Entry, Plan, Step } from '../../types'
 import { KINDS } from './entries'
 import { isWaiting, nextInRun } from './step'

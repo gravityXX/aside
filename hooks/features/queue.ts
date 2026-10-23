@@ -1,3 +1,6 @@
+// The project's own queue: its listing, and the commands on its entries. The queues no project
+// owns are in `global`. Nothing here holds the queue's key: only io/queue.ts writes it (2.9).
+
 import type { EngineInterface as Engine } from 'claude-code'
 
 import type { Entry } from '../../types'

@@ -1,3 +1,7 @@
+// One line per hook, each handing its event straight on. Nothing is decided here: a hook that
+// needs a condition puts it in the function it calls, so this file stays the list of what the
+// plugin listens to. Its matchers are literals, since the engine reads this file as written (3.5).
+
 import type { Register } from 'claude-code'
 
 import { createContext } from './context'

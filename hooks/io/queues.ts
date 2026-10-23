@@ -1,7 +1,3 @@
-import type { EngineInterface as Engine } from 'claude-code'
-
-import type { Entry } from '../../types'
-
 // The global list and the named queues: ideas outside a project's own queue, one store key each,
 // so that sessions in different projects add and take them at the same time without writing
 // over each other's. The global list is the queue named "global", under the keys it has always
@@ -14,6 +10,11 @@ import type { Entry } from '../../types'
 //
 // The code knows a queue by an id: "global", a name for a named queue every project sees, and
 // "." before the name for one of this project's, as a typed name never holds a dot.
+
+import type { EngineInterface as Engine } from 'claude-code'
+
+import type { Entry } from '../../types'
+
 const GLOBAL_IDEA = 'global:idea:'
 
 export const GLOBAL = 'global'

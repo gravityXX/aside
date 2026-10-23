@@ -1,3 +1,7 @@
+// Everything whose life is one load of the plugin, and nothing whose life is longer: a reload
+// starts this over (3.7), so what must outlast one belongs in `$.store` or an atom. The settings
+// are read once here and never checked again further in (4.8).
+
 import type { Register, Timer } from 'claude-code'
 
 import type { Entry } from '../types'

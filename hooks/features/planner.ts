@@ -1,3 +1,7 @@
+// Organizing the queue without asking Claude in this conversation: one call to a model of its
+// own, and the small model that names a step made of a long entry. Both answer outside any turn,
+// so both check that what they were given is still there before anything is saved (3.16).
+
 import type { EngineInterface as Engine } from 'claude-code'
 
 import type { Entry, Plan, Step } from '../../types'
@@ -14,9 +18,6 @@ import { parseSteps, parseUnclear, savePlanSteps } from './plantool'
 import { openListPane, tagsInFiles } from './queue'
 import { runningHere } from './steps'
 
-// Organizing the queue without asking Claude in this conversation: one call to a model of its
-// own, and the small model that names a step made of a long entry. Both answer outside any turn,
-// so both check that what they were given is still there before anything is saved (3.16).
 
 // A title for each of `named`, from the small model reading the text typed alone, never what
 // was copied, as tidying does. A step keeps the one it has when no reply comes in time, or when

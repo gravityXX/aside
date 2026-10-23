@@ -1,3 +1,6 @@
+// Every change to the project's plan, on a chain of its own, so the queue's chain and the
+// plan's never wait on each other (2.9).
+
 import type { EngineInterface as Engine } from 'claude-code'
 
 import type { Plan } from '../../types'
