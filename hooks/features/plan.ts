@@ -13,7 +13,7 @@ import type { Asker, Context } from '../context'
 import { inOrder, KINDS } from '../core/entries'
 import { describeCount, formatPlace } from '../core/listing'
 import { entryPrompt, isAddingPrompt, isOwnPrompt, isPlanningPrompt, planningPrompt, STEP_MARKER } from '../core/prompts'
-import { askedOf, isAway, isWaiting, runOf, stepState, turnOf } from '../core/step'
+import { askedOf, isWaiting, turnOf } from '../core/step'
 import { askPlaces, describeError, describeFailure, formatCount, isPlace, shortenText } from '../core/text'
 import { changePlan } from '../io/plan'
 import { bringBackTake, forgetAnsweredTake, readQueue, takeChosen, takeForHandOver } from '../io/queue'
@@ -22,20 +22,20 @@ import type { Keys } from '../io/store'
 import { archivePlan } from './history'
 import { tagsInFiles } from './queue'
 
+import { decide, writeInto } from '../core/reduce'
 import {
   bindAnswerTurn,
   bindStepTurn,
-  completeStep,
   dropDeadTurn,
   finishStep,
   goOnFromWaiting,
   hasItems,
-  isLeftHere,
   organizeHint,
   pausedNext,
   runningHere,
   startStep,
   submitLater,
+  runEffects,
   takeOverNote,
 } from './steps'
 import type { TurnComplete, TurnEndReason } from './steps'
@@ -311,43 +311,30 @@ export async function runEntries($: Engine, ctx: Context): Promise<string> {
 export async function stopPlan($: Engine, ctx: Context): Promise<string> {
   const me = await $.session.id()
   const now = await $.clock.now()
-  const text = await changePlan($, async plan => {
-    const active = plan.active
-    if (!active && plan.paused) {
-      delete plan.paused
-      return 'Dropped the paused run. /aside run all starts the plan again from its first step to do.'
-    }
-    if (!active) {
-      return undefined
-    }
-    const n = active.step + 1
-    // A step with no turn of its own left: one that waits, one in the background, one continue
-    // or stop already ended, or one an earlier process left running here.
-    if (isWaiting(active) || isAway(active) || active.is === 'ending' || isLeftHere(ctx, active, me)) {
-      // With nothing it said it did, the step shows that stop ended it.
-      active.result ??= 'stopped'
-      completeStep(plan, active, me, false, now)
-      return `Step ${n} is done as it stands, and the plan stops there.`
-    }
-    const turnId = turnOf(active)
-    if (turnId === undefined || active.sessionId !== me) {
-      delete plan.active
-      return `The plan stopped ${askedOf(active) === undefined ? 'before' : 'at'} step ${n}${await organizeHint($, active)}.`
-    }
-    active.isChain = false
-    delete active.then
-    // A step that had asked the person something is done once the turn it has left ends.
-    const asked = askedOf(active)
-    if (asked !== undefined) plan.active = stepState({ ...runOf(active), is: 'closing', turnId, pausedFor: asked })
+  const made = await changePlan($, plan => {
+    const was = plan.active
+    const out = decide(plan, { is: 'stop', sessionId: me, now, openTurns: [...ctx.session.openTurns] })
+    if (out.outcome === 'nothing') return undefined
+    writeInto(plan, out.plan)
 
-    return `The plan stops after step ${n}.`
+    return { was: was === undefined ? undefined : structuredClone(was), plan: structuredClone(out.plan), does: out.does, outcome: out.outcome }
   })
-  if (text === undefined) {
+  if (made === undefined) {
     return 'Nothing is running.'
   }
-  await refreshBand($)
+  await runEffects($, ctx, made.plan, made.does)
+  if (made.outcome === 'dropped') {
+    return 'Dropped the paused run. /aside run all starts the plan again from its first step to do.'
+  }
+  const n = made.was!.step + 1
+  if (made.outcome === 'doneAsStands') {
+    return `Step ${n} is done as it stands, and the plan stops there.`
+  }
+  if (made.outcome === 'letGo') {
+    return `The plan stopped ${askedOf(made.was!) === undefined ? 'before' : 'at'} step ${n}${await organizeHint($, made.was)}.`
+  }
 
-  return text
+  return `The plan stops after step ${n}.`
 }
 
 // The turn of this session's prompt that adds to the plan, known by its text, so a reload

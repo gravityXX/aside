@@ -60,7 +60,7 @@ async function releaseStep($: Engine, ctx: Context, index: number, why: string) 
     // The step as it was: its own sentence says whether /aside plan still has anything to do.
     return { outcome: out.outcome, does: out.does, plan: structuredClone(out.plan), was: out.outcome === 'nothing' || was === undefined ? undefined : structuredClone(was) }
   })
-  await run($, ctx, made.plan, made.does)
+  await runEffects($, ctx, made.plan, made.does)
   $.ui.toast(
     made.outcome === 'ending'
       ? `Could not ask Claude to sum the run up (${why}); step ${index + 1} is done as it stands.`
@@ -86,12 +86,12 @@ export async function startStep($: Engine, ctx: Context, index: number, isChain:
 
     return { plan: structuredClone(out.plan), does: out.does }
   })
-  await run($, ctx, made.plan, made.does)
+  await runEffects($, ctx, made.plan, made.does)
 }
 
 // What a move asked for, done in the order it asked for it. The sentences a move leads to stay
 // here rather than in `core/`, built from its outcome: one of them has to read the queue.
-async function run($: Engine, ctx: Context, plan: Plan, does: readonly Effect[]) {
+export async function runEffects($: Engine, ctx: Context, plan: Plan, does: readonly Effect[]) {
   for (const one of does) {
     switch (one.does) {
       case 'refreshBand':
@@ -167,15 +167,6 @@ export function completeStep(plan: Plan, active: StepState, me: string, isGoingO
   return made.after
 }
 
-// A step running in this session on a turn this process never saw start, or saw start and
-// never end: one an earlier process left when it closed in the middle of it. /aside continue
-// and /aside stop end it, as one that waits; a turn of this process still running is its own.
-export const isLeftHere = (ctx: Context, active: StepState, me: string) => {
-  const turnId = turnOf(active)
-
-  return active.sessionId === me && turnId !== undefined && !ctx.session.openTurns.has(turnId)
-}
-
 // /aside continue on a step that waits for the person, in this session or one before it: it
 // is done, and its run goes on here. The last step of a run of several takes one more turn
 // first, which sums the run up and then ends it, as it stands if that turn is cut short, with
@@ -184,40 +175,31 @@ export async function goOnFromWaiting($: Engine, ctx: Context): Promise<string |
   const me = await $.session.id()
   const now = await $.clock.now()
   const end = await changePlan($, plan => {
-    const active = plan.active
-    if (!active || !(isWaiting(active) || isAway(active) || isLeftHere(ctx, active, me))) return undefined
-    const note = active.sessionId === me ? '' : takeOverNote(plan)
-    if (isSummingUp(plan.steps, stepMode(plan.steps, active.step, active.isChain, active.then))) {
-      // The turn it had, the question it asked and what it was still to wait for in the
-      // background are all let go, as continue ends the step; the turn that sums up is this
-      // session's, so its start binds to the step here.
-      const { background: _background, ...kept } = runOf(active)
-      const ending = stepState({ ...kept, sessionId: me, is: 'ending' })
-      plan.active = ending
-      return { active: ending, after: -1, isClosing: true, steps: structuredClone(plan.steps), note }
-    }
-    // completeStep reads only how the run goes on, so the step's own marks need no clearing.
-    const after = completeStep(plan, active, me, true, now)
-    return { active, after, isClosing: false, steps: structuredClone(plan.steps), note }
+    const was = plan.active
+    // Read before the move: the note is about the step that was running, wherever it ran.
+    const note = was === undefined || was.sessionId === me ? '' : takeOverNote(plan)
+    const out = decide(plan, { is: 'continue', sessionId: me, now, openTurns: [...ctx.session.openTurns] })
+    if (out.outcome === 'nothing') return undefined
+    writeInto(plan, out.plan)
+
+    return { was: structuredClone(was!), plan: structuredClone(out.plan), does: out.does, outcome: out.outcome, note }
   })
   if (end === undefined) {
     return undefined
   }
-  const { active, after, isClosing, steps, note } = end
-  const n = active.step + 1
-  await refreshBand($)
-  if (isClosing) {
-    sendStep($, ctx, steps, active.step, active.isChain, active.then, true)
+  const { was, plan, does, outcome, note } = end
+  const n = was.step + 1
+  await runEffects($, ctx, plan, does)
+  if (outcome === 'closing') {
     return `Step ${n} ends here; Claude sums the run up.${note}`
   }
-  if (after >= 0) {
-    const then = active.then?.slice(1)
-    sendStep($, ctx, steps, after, active.isChain, then)
-    const named = active.then === undefined ? '' : `: steps ${active.then.map(i => i + 1).join(', ')}`
-    return `Step ${n} done; going on with the plan from step ${after + 1}${named}. /aside stop stops after the current one.${note}`
+  if (outcome === 'onward') {
+    const named = was.then === undefined ? '' : `: steps ${was.then.map(i => i + 1).join(', ')}`
+
+    return `Step ${n} done; going on with the plan from step ${plan.active!.step + 1}${named}. /aside stop stops after the current one.${note}`
   }
 
-  return `${steps.every(one => one.isDone) ? doneText(steps) : `Step ${n} done.`}${note}`
+  return `${plan.steps.every(one => one.isDone) ? doneText(plan.steps) : `Step ${n} done.`}${note}`
 }
 
 // What the person reads once every step of the plan is done.
