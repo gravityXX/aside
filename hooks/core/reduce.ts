@@ -9,7 +9,7 @@
 
 import type { Plan, Step, StepRun, StepState } from '../../types'
 import { isSummingUp, stepMode } from './prompts'
-import { isAway, isWaiting, nextInRun, runOf, stepState, turnOf, withRun } from './step'
+import { askedOf, isAway, isWaiting, nextInRun, runOf, stepState, turnOf, withRun } from './step'
 
 export type StepEvent =
   // Claude asked the person something with the wait tool, in the turn of the step it is working
@@ -39,6 +39,13 @@ export type StepEvent =
   // The prompt of step `index` never went out: a hook beneath dropped it, or the engine refused
   // it. `now` is when, by the clock, for a step that is done as it stands.
   | { is: 'promptDropped'; index: number; now: number }
+  // /aside continue, on a step that waits for the person, goes on in the background, or was
+  // left running by an earlier process of this session. `openTurns` is the turns this process
+  // saw start and not end, which is how a turn of an earlier one is known dead.
+  | { is: 'continue'; sessionId: string; now: number; openTurns: readonly string[] }
+  // /aside stop. A paused run with no step is dropped; a step with no turn of its own left is
+  // done as it stands; a step of another session is let go; the step running here is the last.
+  | { is: 'stop'; sessionId: string; now: number; openTurns: readonly string[] }
 
 // What a move asks the shell to do about it, as data and never as a function: the engine
 // refuses `$` passed to a property call, so a table of handlers taking it cannot exist (3.2).
@@ -51,7 +58,24 @@ export type Effect =
 
 // The word the shell turns into a sentence for the person or for Claude. 'nothing' is a move
 // that did not happen, which every event may answer with.
-export type Outcome = 'nothing' | 'ending' | 'waits' | 'last' | 'noted' | 'told' | 'quiet' | 'bound' | 'started' | 'gone'
+export type Outcome =
+  | 'nothing'
+  | 'ending'
+  | 'waits'
+  | 'last'
+  | 'noted'
+  | 'told'
+  | 'quiet'
+  | 'bound'
+  | 'started'
+  | 'gone'
+  | 'closing'
+  | 'onward'
+  | 'done'
+  | 'dropped'
+  | 'doneAsStands'
+  | 'letGo'
+  | 'after'
 
 export type Decided = { plan: Plan; does: readonly Effect[]; outcome: Outcome }
 
@@ -253,6 +277,77 @@ function promptDropped(plan: Plan, event: Extract<StepEvent, { is: 'promptDroppe
   return { plan: rest, does: [{ does: 'refreshBand' }], outcome: 'gone' }
 }
 
+// A step running in this session on a turn this process never saw start, or saw start and never
+// end: one an earlier process left when it closed in the middle of it.
+const isLeftHere = (openTurns: readonly string[], active: StepState, sessionId: string) => {
+  const turnId = turnOf(active)
+
+  return active.sessionId === sessionId && turnId !== undefined && !openTurns.includes(turnId)
+}
+
+// Whether a step is one /aside continue and /aside stop may end without its turn ending.
+const isEndable = (active: StepState, event: { sessionId: string; openTurns: readonly string[] }) =>
+  isWaiting(active) || isAway(active) || isLeftHere(event.openTurns, active, event.sessionId)
+
+// /aside continue. The last step of a run of several takes one more turn first, which sums the
+// run up; the turn it had, the question it asked and what it was still waiting on in the
+// background are all let go, and the turn that sums up is this session's.
+function goOn(plan: Plan, event: Extract<StepEvent, { is: 'continue' }>): Decided {
+  const active = plan.active
+  if (!active || !isEndable(active, event)) {
+    return nothing(plan)
+  }
+  if (isSummingUp(plan.steps, stepMode(plan.steps, active.step, active.isChain, active.then))) {
+    const { background: _waited, ...kept } = runOf(active)
+    const ending = stepState({ ...kept, sessionId: event.sessionId, is: 'ending' })
+    const does: Effect[] = [{ does: 'refreshBand' }, { does: 'sendStep', index: active.step, isChain: active.isChain, ...(active.then ? { then: active.then } : {}), isClosing: true }]
+
+    return { plan: { ...plan, active: ending }, does, outcome: 'closing' }
+  }
+  const made = completed(plan, active, event.sessionId, true, event.now)
+  if (made.after < 0) {
+    return { plan: made.plan, does: [{ does: 'refreshBand' }], outcome: 'done' }
+  }
+  const then = active.then?.slice(1)
+  const does: Effect[] = [{ does: 'refreshBand' }, { does: 'sendStep', index: made.after, isChain: active.isChain, ...(then ? { then } : {}), isClosing: false }]
+
+  return { plan: made.plan, does, outcome: 'onward' }
+}
+
+// /aside stop.
+function stop(plan: Plan, event: Extract<StepEvent, { is: 'stop' }>): Decided {
+  const active = plan.active
+  const band: Effect[] = [{ does: 'refreshBand' }]
+  if (!active) {
+    if (plan.paused === undefined) {
+      return nothing(plan)
+    }
+    const { paused: _dropped, ...rest } = plan
+
+    return { plan: rest, does: band, outcome: 'dropped' }
+  }
+  if (isEndable(active, event) || active.is === 'ending') {
+    // With nothing it said it did, the step shows that stop ended it.
+    const said = withRun(active, { ...runOf(active), result: active.result ?? 'stopped' })
+
+    return { plan: completed(plan, said, event.sessionId, false, event.now).plan, does: band, outcome: 'doneAsStands' }
+  }
+  const turnId = turnOf(active)
+  if (turnId === undefined || active.sessionId !== event.sessionId) {
+    const { active: _letGo, ...rest } = plan
+
+    return { plan: rest, does: band, outcome: 'letGo' }
+  }
+  // The run stops with this step: no chain, and none of the steps /aside run named after it.
+  const { then: _named, ...run } = runOf(active)
+  const stopping = { ...run, isChain: false }
+  const asked = askedOf(active)
+  // A step that had asked the person something is done once the turn it has left ends.
+  const next = asked === undefined ? withRun(active, stopping) : stepState({ ...stopping, is: 'closing', turnId, pausedFor: asked })
+
+  return { plan: { ...plan, active: next }, does: band, outcome: 'after' }
+}
+
 export function decide(plan: Plan, event: StepEvent): Decided {
   switch (event.is) {
     case 'ask':
@@ -271,6 +366,10 @@ export function decide(plan: Plan, event: StepEvent): Decided {
       return start(plan, event)
     case 'promptDropped':
       return promptDropped(plan, event)
+    case 'continue':
+      return goOn(plan, event)
+    case 'stop':
+      return stop(plan, event)
   }
 }
 
