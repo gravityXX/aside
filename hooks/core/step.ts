@@ -55,6 +55,37 @@ export const stepState = (state: StepState): StepState => {
   }
 }
 
+// The state the step is in, carried over to a different run: whatever the tag owns stays, and
+// nothing of the old run comes along, which a spread could not do - it cannot drop a key, so a
+// run that leaves `background` out would never lose the one the step had.
+export function withRun(active: StepState, run: StepRun): StepState {
+  switch (active.is) {
+    case 'due':
+    case 'away':
+      return stepState({ ...run, is: active.is })
+    case 'running':
+    case 'noticing':
+      return stepState({ ...run, is: active.is, turnId: active.turnId })
+    case 'asking':
+      return stepState({
+        ...run,
+        is: 'asking',
+        turnId: active.turnId,
+        pausedFor: active.pausedFor,
+        ...(active.isAnswered === undefined ? {} : { isAnswered: active.isAnswered }),
+      })
+    case 'answering':
+      return stepState({ ...run, is: 'answering', turnId: active.turnId, pausedFor: active.pausedFor })
+    case 'waiting':
+    case 'answered':
+      return stepState({ ...run, is: active.is, pausedFor: active.pausedFor })
+    case 'ending':
+      return stepState({ ...run, is: 'ending', ...(active.pausedFor === undefined ? {} : { pausedFor: active.pausedFor }) })
+    case 'closing':
+      return stepState({ ...run, is: 'closing', turnId: active.turnId, ...(active.pausedFor === undefined ? {} : { pausedFor: active.pausedFor }) })
+  }
+}
+
 // The stored flags as the state they stand for, for every combination the store can hold, not
 // only those a release writes (2.7). The marks are tested in the precedence every reader of
 // them has always used: isEnding first (pausePlanFromTool, stopPlan, dropDeadTurn and
