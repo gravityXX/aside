@@ -70,3 +70,66 @@ describe('the wait tool asking the person something', () => {
     }
   })
 })
+
+describe('the work a step leaves running in the background', () => {
+  const W1 = { callId: 'c1', taskId: 'w1', what: 'review' }
+  const W2 = { callId: 'c2', taskId: 'a7', what: 'find the docs' }
+
+  test("a call of the step's own turn makes its work the step's", () => {
+    const plan = planOf(stepState({ ...run, is: 'running', turnId: 't1' }))
+    const made = decide(plan, { is: 'workStarted', sessionId: ME, turnId: 't1', ...W1 })
+
+    expect(made.outcome).toBe('noted')
+    expect(made.plan.active?.background).toEqual([W1])
+    expect(made.plan.active?.is).toBe('running')
+  })
+
+  test('work started outside the step\'s turn, or by another session, is not the step\'s', () => {
+    const plan = planOf(stepState({ ...run, is: 'running', turnId: 't1' }))
+
+    expect(decide(plan, { is: 'workStarted', sessionId: ME, turnId: 'other', ...W1 }).outcome).toBe('nothing')
+    expect(decide(plan, { is: 'workStarted', sessionId: 'session-2', turnId: 't1', ...W1 }).outcome).toBe('nothing')
+    expect(decide(plan, { is: 'workStarted', sessionId: ME, turnId: undefined, ...W1 }).outcome).toBe('nothing')
+  })
+
+  test('the last work ending leaves no list behind, so the step waits for continue and not for work', () => {
+    const plan = planOf(stepState({ ...run, background: [W1], is: 'away' }))
+    const made = decide(plan, { is: 'workEnded', sessionId: ME, turnId: 'n1', taskId: 'w1' })
+
+    expect(made.outcome).toBe('told')
+    expect(made.plan.active?.is).toBe('noticing')
+    // The record has to lose the key, not keep an empty list: the step is waiting on nobody.
+    expect('background' in made.plan.active!).toBe(false)
+  })
+
+  test('with work still left the step stays away, keeping only what has not ended', () => {
+    const plan = planOf(stepState({ ...run, background: [W1, W2], is: 'away' }))
+    const made = decide(plan, { is: 'workEnded', sessionId: ME, turnId: 'n1', taskId: 'w1' })
+
+    expect(made.plan.active?.is).toBe('noticing')
+    expect(made.plan.active?.background).toEqual([W2])
+  })
+
+  test('a notification is matched by the call that started the work as well as by its task', () => {
+    const plan = planOf(stepState({ ...run, background: [W1, W2], is: 'away' }))
+
+    expect(decide(plan, { is: 'workEnded', sessionId: ME, callId: 'c2' }).plan.active?.background).toEqual([W1])
+    expect(decide(plan, { is: 'workEnded', sessionId: ME, taskId: 'nothing-of-ours' }).outcome).toBe('nothing')
+  })
+
+  test("another session's step hears the work end but does not take the turn", () => {
+    const plan = planOf(stepState({ ...run, sessionId: 'session-2', background: [W1], is: 'away' }))
+    const made = decide(plan, { is: 'workEnded', sessionId: ME, turnId: 'n1', taskId: 'w1' })
+
+    expect(made.outcome).toBe('quiet')
+    expect(made.plan.active?.is).toBe('away')
+  })
+
+  test('work Claude stopped leaves the step at once, and the turn that stopped it is the step\'s', () => {
+    const plan = planOf(stepState({ ...run, background: [W1], is: 'away' }))
+    const made = decide(plan, { is: 'workStopped', sessionId: ME, turnId: 'h1', taskId: 'w1' })
+
+    expect(made.plan.active?.is).toBe('noticing')
+    expect(decide(plan, { is: 'workStopped', sessionId: ME, turnId: 'h1', taskId: 'other' }).outcome).toBe('nothing')
+  })
+})

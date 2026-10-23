@@ -7,17 +7,22 @@
 // Events arrive here one at a time as the plan's area is moved onto them; what is not here yet
 // is still built where it always was, in `features/`.
 
-import type { Plan, Step } from '../../types'
+import type { Plan, Step, StepRun } from '../../types'
 import { isSummingUp, stepMode } from './prompts'
-import { runOf, stepState, turnOf } from './step'
+import { isAway, runOf, stepState, turnOf, withRun } from './step'
 
-export type StepEvent = {
+export type StepEvent =
   // Claude asked the person something with the wait tool, in the turn of the step it is working
   // on. The step's own turn is the one it keeps; the tool brings no turn of its own.
-  is: 'ask'
-  sessionId: string
-  pausedFor: string
-}
+  | { is: 'ask'; sessionId: string; pausedFor: string }
+  // A call of the step's own turn left work running in the background, so the step does not end
+  // before that work does. `turnId` is the turn the call ran in.
+  | { is: 'workStarted'; sessionId: string; turnId: string | undefined; callId?: string; taskId: string; what: string }
+  // Claude stopped the work, which sends no notification: it leaves the step at once.
+  | { is: 'workStopped'; sessionId: string; turnId: string | undefined; taskId: string }
+  // The work's own notification, whatever its status. `turnId` is the turn it was delivered
+  // into, if it landed in one already running.
+  | { is: 'workEnded'; sessionId: string; turnId?: string; taskId?: string; callId?: string }
 
 // What a move asks the shell to do about it, as data and never as a function: the engine
 // refuses `$` passed to a property call, so a table of handlers taking it cannot exist (3.2).
@@ -25,7 +30,7 @@ export type Effect = { does: 'refreshBand' }
 
 // The word the shell turns into a sentence for the person or for Claude. 'nothing' is a move
 // that did not happen, which every event may answer with.
-export type Outcome = 'nothing' | 'ending' | 'waits' | 'last'
+export type Outcome = 'nothing' | 'ending' | 'waits' | 'last' | 'noted' | 'told' | 'quiet'
 
 export type Decided = { plan: Plan; does: readonly Effect[]; outcome: Outcome }
 
@@ -53,10 +58,69 @@ function ask(plan: Plan, event: Extract<StepEvent, { is: 'ask' }>): Decided {
   return { plan: { ...plan, active: asking }, does: [], outcome: isSummingUp(plan.steps, mode) ? 'last' : 'waits' }
 }
 
+// The work a turn of the step started, kept on the step's record until its notification comes.
+// The turn has to be the one running now: work a call of anything else started is not the
+// step's.
+function workStarted(plan: Plan, event: Extract<StepEvent, { is: 'workStarted' }>): Decided {
+  const active = plan.active
+  const turnId = active === undefined ? undefined : turnOf(active)
+  if (!active || turnId === undefined || active.sessionId !== event.sessionId || turnId !== event.turnId) {
+    return nothing(plan)
+  }
+  const { callId, taskId, what } = event
+  const background = [...(active.background ?? []), { ...(callId ? { callId } : {}), taskId, what }]
+
+  return { plan: { ...plan, active: withRun(active, { ...runOf(active), background }) }, does: [], outcome: 'noted' }
+}
+
+// The step with `left` as the work it still waits on: with none left and the step away in this
+// session, the turn that brought the news is the step's, and that turn's end ends it.
+const withWork = (plan: Plan, left: readonly { callId?: string; taskId: string; what: string }[], turnId: string | undefined, isMine: boolean) => {
+  const active = plan.active!
+  const { background: _gone, ...run } = runOf(active)
+  const rest: StepRun = left.length > 0 ? { ...run, background: [...left] } : run
+  const isTold = isMine && isAway(active)
+
+  return {
+    active: isTold && turnId !== undefined ? stepState({ ...rest, is: 'noticing', turnId }) : withRun(active, rest),
+    isTold,
+  }
+}
+
+function workStopped(plan: Plan, event: Extract<StepEvent, { is: 'workStopped' }>): Decided {
+  const active = plan.active
+  const left = active?.background?.filter(one => one.taskId !== event.taskId)
+  if (!active?.background || left === undefined || left.length === active.background.length) {
+    return nothing(plan)
+  }
+  // Only a step left with no work at all takes the turn that stopped it.
+  const isMine = left.length === 0 && active.sessionId === event.sessionId
+  const { active: next } = withWork(plan, left, event.turnId, isMine)
+
+  return { plan: { ...plan, active: next }, does: [], outcome: 'quiet' }
+}
+
+function workEnded(plan: Plan, event: Extract<StepEvent, { is: 'workEnded' }>): Decided {
+  const active = plan.active
+  const left = active?.background?.filter(one => one.taskId !== event.taskId && (event.callId === undefined || one.callId !== event.callId))
+  if (!active?.background || left === undefined || left.length === active.background.length) {
+    return nothing(plan)
+  }
+  const { active: next, isTold } = withWork(plan, left, event.turnId, active.sessionId === event.sessionId)
+
+  return { plan: { ...plan, active: next }, does: [], outcome: isTold ? 'told' : 'quiet' }
+}
+
 export function decide(plan: Plan, event: StepEvent): Decided {
   switch (event.is) {
     case 'ask':
       return ask(plan, event)
+    case 'workStarted':
+      return workStarted(plan, event)
+    case 'workStopped':
+      return workStopped(plan, event)
+    case 'workEnded':
+      return workEnded(plan, event)
   }
 }
 
