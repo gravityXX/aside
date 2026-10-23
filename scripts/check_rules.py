@@ -8,6 +8,7 @@ that cited one silently points somewhere else. This checks both directions.
 1. The numbering in guidelines.md itself: sections run 1, 2, 3, ... and the rules inside each
    section run 1, 2, 3, ... with no number used twice and none skipped.
 2. Every rule a file cites exists.
+3. Every file under hooks/ and types/ opens with a comment, as rule 4.23 asks.
 
 It runs from the repository root and prints what it checked:
 
@@ -89,6 +90,24 @@ def citations_of(text: str) -> set[tuple[int, str]]:
     return found
 
 
+# Where a file must open with a comment of its own (4.23).
+HEADED = ("hooks", "types")
+
+
+def unheaded() -> list[Path]:
+    """The source files that open with anything but a comment."""
+    missing = []
+    for folder in HEADED:
+        for path in sorted(Path(folder).rglob("*")):
+            if path.suffix not in {".ts", ".tsx"}:
+                continue
+            first = path.read_text(encoding="utf-8").lstrip("\ufeff").split("\n", 1)[0]
+            if not first.startswith("//"):
+                missing.append(path)
+
+    return missing
+
+
 def files() -> list[Path]:
     paths = [Path(one) for one in SEARCHED_FILES if Path(one).exists()]
     for folder in SEARCHED:
@@ -108,6 +127,7 @@ def main() -> int:
     known |= set(found)  # a section on its own, as the review checklist cites it
 
     problems = [f"{GUIDELINES}: {fault}" for fault in numbering_faults(found)]
+    problems += [f"{path}: opens without a comment of its own (4.23)" for path in unheaded()]
 
     checked = 0
     for path in files():
@@ -121,7 +141,9 @@ def main() -> int:
     if problems:
         return 1
 
+    headed = sum(1 for folder in HEADED for one in Path(folder).rglob("*") if one.suffix in {".ts", ".tsx"})
     print(f"{len(known)} rules in {len(found)} sections, {checked} citations in {len(files())} files, all resolved")
+    print(f"{headed} source files, every one opening with a comment")
 
     return 0
 
