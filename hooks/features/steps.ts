@@ -11,13 +11,13 @@ import type { Args, CatchHandler, EngineInterface as Engine, Hook } from 'claude
 import type { Plan, Step, StepState } from '../../types'
 import type { Context } from '../context'
 import { answerContext, closingPrompt, isSummingUp, readStepResult, stepMode, stepPrompt } from '../core/prompts'
+import { decide, writeInto } from '../core/reduce'
 import { askedOf, awayWork, isAway, isWaiting, nextInRun, runOf, stepState, turnOf } from '../core/step'
 import { describeError, formatCount, formatDuration } from '../core/text'
 import { changePlan } from '../io/plan'
 import { readQueue } from '../io/queue'
 import { loadPlan, projectKeys, refreshBand } from '../io/store'
 import { tagsInFiles } from './queue'
-
 
 // From a timer, since neither a command's hook nor a turn's end may submit a prompt while
 // it holds the turn; `onFail` hears why, once, when a hook beneath drops it, the engine
@@ -236,40 +236,11 @@ export function pausedNext(plan: Plan): { index: number; then: number[] | undefi
 // starts with its first turn, not when it was asked for, as its prompt may wait behind a turn
 // of something else.
 export async function bindStepTurn($: Engine, ctx: Context, turnId: string) {
-  const me = await $.session.id()
+  const sessionId = await $.session.id()
   const now = await $.clock.now()
   await changePlan($, plan => {
-    const active = plan.active
-    if (!active || turnOf(active) !== undefined || active.sessionId !== me) return
-    active.startedAt ??= now
-    plan.active = withStepTurn(active, turnId)
+    writeInto(plan, decide(plan, { is: 'bindTurn', sessionId, turnId, now }).plan)
   })
-}
-
-// The step with the turn of its own prompt running. Only the states with no turn are reachable
-// here, the step bindStepTurn guards for; the rest are written out so a new state cannot be
-// added without saying what its turn does (4.6).
-function withStepTurn(active: StepState, turnId: string): StepState {
-  const run = runOf(active)
-  switch (active.is) {
-    case 'due':
-    case 'running':
-      return stepState({ ...run, is: 'running', turnId })
-    // A step that waits takes the turn as any other of this session's: its question stands,
-    // and only an answer told about the step ends it (bindAnswerTurn).
-    case 'waiting':
-    case 'answered':
-    case 'asking':
-    case 'answering':
-      return stepState({ ...run, is: 'asking', turnId, pausedFor: active.pausedFor })
-    case 'away':
-    case 'noticing':
-      return stepState({ ...run, is: 'noticing', turnId })
-    // The prompt that sums the run up: the step is done when its turn ends.
-    case 'ending':
-    case 'closing':
-      return stepState({ ...run, is: 'closing', turnId, ...(active.pausedFor === undefined ? {} : { pausedFor: active.pausedFor }) })
-  }
 }
 
 // A turn of this session while its step waits for the person belongs to the step: their
@@ -287,26 +258,10 @@ export async function bindAnswerTurn($: Engine, ctx: Context, turnId: string, te
   const isTold = answer?.isTold === true
   if (isAnswer) delete ctx.session.answer
   const isBound = await changePlan($, plan => {
-    const active = plan.active
-    if (!active || active.sessionId !== me) return false
-    // A step in the background takes only the turn of its work's notification, never one
-    // of the person's own.
-    if (isAway(active)) {
-      if (isNotice) plan.active = stepState({ ...runOf(active), is: 'noticing', turnId })
-      return isNotice
-    }
-    if (!isWaiting(active)) return false
-    const { pausedFor } = active
-    // An answer taken before this turn still counts: the step says "answer again" until Claude
-    // asks something new (pausePlanFromTool), which is the one place that mark is let go.
-    const isAnswerTaken = isAnswer || active.is === 'answered'
-    // Only an answer sent with the step's own words makes this turn the one whose reply ends
-    // the step; any other turn of this session leaves it waiting for the next answer.
-    plan.active = isTold
-      ? stepState({ ...runOf(active), is: 'answering', turnId, pausedFor })
-      : stepState({ ...runOf(active), is: 'asking', turnId, pausedFor, ...(isAnswerTaken ? { isAnswered: true as const } : {}) })
+    const made = decide(plan, { is: 'bindAnswer', sessionId: me, turnId, isAnswer, isTold, isNotice })
+    writeInto(plan, made.plan)
 
-    return true
+    return made.outcome === 'bound'
   })
   if (isBound) await refreshBand($)
 }

@@ -7,9 +7,9 @@
 // Events arrive here one at a time as the plan's area is moved onto them; what is not here yet
 // is still built where it always was, in `features/`.
 
-import type { Plan, Step, StepRun } from '../../types'
+import type { Plan, Step, StepRun, StepState } from '../../types'
 import { isSummingUp, stepMode } from './prompts'
-import { isAway, runOf, stepState, turnOf, withRun } from './step'
+import { isAway, isWaiting, runOf, stepState, turnOf, withRun } from './step'
 
 export type StepEvent =
   // Claude asked the person something with the wait tool, in the turn of the step it is working
@@ -23,6 +23,15 @@ export type StepEvent =
   // The work's own notification, whatever its status. `turnId` is the turn it was delivered
   // into, if it landed in one already running.
   | { is: 'workEnded'; sessionId: string; turnId?: string; taskId?: string; callId?: string }
+  // The turn of the step's own prompt started. `now` is when, by the clock, so the step's first
+  // turn stamps the time it has been running since.
+  | { is: 'bindTurn'; sessionId: string; turnId: string; now: number }
+  // A turn of this session that is not the step's own prompt started while the step waits or
+  // goes on in the background. The shell reads what it is from `ctx.session`, which `core/`
+  // cannot see: isAnswer, that the person's message started it; isTold, that the message went
+  // with the step's own words, so Claude's reply to it ends the step; isNotice, that a
+  // background task's notification started it.
+  | { is: 'bindAnswer'; sessionId: string; turnId: string; isAnswer: boolean; isTold: boolean; isNotice: boolean }
 
 // What a move asks the shell to do about it, as data and never as a function: the engine
 // refuses `$` passed to a property call, so a table of handlers taking it cannot exist (3.2).
@@ -30,7 +39,7 @@ export type Effect = { does: 'refreshBand' }
 
 // The word the shell turns into a sentence for the person or for Claude. 'nothing' is a move
 // that did not happen, which every event may answer with.
-export type Outcome = 'nothing' | 'ending' | 'waits' | 'last' | 'noted' | 'told' | 'quiet'
+export type Outcome = 'nothing' | 'ending' | 'waits' | 'last' | 'noted' | 'told' | 'quiet' | 'bound'
 
 export type Decided = { plan: Plan; does: readonly Effect[]; outcome: Outcome }
 
@@ -111,6 +120,76 @@ function workEnded(plan: Plan, event: Extract<StepEvent, { is: 'workEnded' }>): 
   return { plan: { ...plan, active: next }, does: [], outcome: isTold ? 'told' : 'quiet' }
 }
 
+// The step with the turn of its own prompt running. Only the states with no turn are reachable
+// here, the step bindStepTurn guards for; the rest are written out so a new state cannot be
+// added without saying what its turn does (4.6).
+function withStepTurn(active: StepState, turnId: string): StepState {
+  const run = runOf(active)
+  switch (active.is) {
+    case 'due':
+    case 'running':
+      return stepState({ ...run, is: 'running', turnId })
+    // A step that waits takes the turn as any other of this session's: its question stands,
+    // and only an answer told about the step ends it (bindAnswerTurn).
+    case 'waiting':
+    case 'answered':
+    case 'asking':
+    case 'answering':
+      return stepState({ ...run, is: 'asking', turnId, pausedFor: active.pausedFor })
+    case 'away':
+    case 'noticing':
+      return stepState({ ...run, is: 'noticing', turnId })
+    // The prompt that sums the run up: the step is done when its turn ends.
+    case 'ending':
+    case 'closing':
+      return stepState({ ...run, is: 'closing', turnId, ...(active.pausedFor === undefined ? {} : { pausedFor: active.pausedFor }) })
+  }
+}
+
+// The step's own prompt has started its turn. The step's first turn stamps when it began, so
+// the listing counts from there and not from when the prompt was asked for.
+function bindTurn(plan: Plan, event: Extract<StepEvent, { is: 'bindTurn' }>): Decided {
+  const active = plan.active
+  if (!active || turnOf(active) !== undefined || active.sessionId !== event.sessionId) {
+    return nothing(plan)
+  }
+  const started = withRun(active, { ...runOf(active), startedAt: active.startedAt ?? event.now })
+
+  return { plan: { ...plan, active: withStepTurn(started, event.turnId) }, does: [], outcome: 'bound' }
+}
+
+// Any other turn of this session, while the step waits for the person or goes on in the
+// background. A step in the background takes only the turn of its work's notification, never
+// one of the person's own.
+function bindAnswer(plan: Plan, event: Extract<StepEvent, { is: 'bindAnswer' }>): Decided {
+  const active = plan.active
+  if (!active || active.sessionId !== event.sessionId) {
+    return nothing(plan)
+  }
+  if (isAway(active)) {
+    if (!event.isNotice) {
+      return nothing(plan)
+    }
+
+    return { plan: { ...plan, active: stepState({ ...runOf(active), is: 'noticing', turnId: event.turnId }) }, does: [], outcome: 'bound' }
+  }
+  if (!isWaiting(active)) {
+    return nothing(plan)
+  }
+  const { pausedFor } = active
+  const run = runOf(active)
+  // An answer taken before this turn still counts: the step says "answer again" until Claude
+  // asks something new (`ask`), which is the one place that mark is let go.
+  const isAnswerTaken = event.isAnswer || active.is === 'answered'
+  // Only an answer sent with the step's own words makes this turn the one whose reply ends the
+  // step; any other turn of this session leaves it waiting for the next answer.
+  const next = event.isTold
+    ? stepState({ ...run, is: 'answering', turnId: event.turnId, pausedFor })
+    : stepState({ ...run, is: 'asking', turnId: event.turnId, pausedFor, ...(isAnswerTaken ? { isAnswered: true as const } : {}) })
+
+  return { plan: { ...plan, active: next }, does: [], outcome: 'bound' }
+}
+
 export function decide(plan: Plan, event: StepEvent): Decided {
   switch (event.is) {
     case 'ask':
@@ -121,6 +200,10 @@ export function decide(plan: Plan, event: StepEvent): Decided {
       return workStopped(plan, event)
     case 'workEnded':
       return workEnded(plan, event)
+    case 'bindTurn':
+      return bindTurn(plan, event)
+    case 'bindAnswer':
+      return bindAnswer(plan, event)
   }
 }
 

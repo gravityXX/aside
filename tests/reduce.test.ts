@@ -133,3 +133,82 @@ describe('the work a step leaves running in the background', () => {
     expect(decide(plan, { is: 'workStopped', sessionId: ME, turnId: 'h1', taskId: 'other' }).outcome).toBe('nothing')
   })
 })
+
+describe("the turn of the step's own prompt starting", () => {
+  test('a step waiting for its prompt starts running, and stamps when it began', () => {
+    const plan = planOf(stepState({ ...run, is: 'due' }))
+    const made = decide(plan, { is: 'bindTurn', sessionId: ME, turnId: 't1', now: 5000 })
+
+    expect(made.outcome).toBe('bound')
+    expect(made.plan.active?.is).toBe('running')
+    expect(made.plan.active?.startedAt).toBe(5000)
+  })
+
+  test('a step that has run before keeps the time it began, not the time of this turn', () => {
+    const plan = planOf(stepState({ ...run, startedAt: 100, is: 'waiting', pausedFor: 'which' }))
+
+    expect(decide(plan, { is: 'bindTurn', sessionId: ME, turnId: 't2', now: 9000 }).plan.active?.startedAt).toBe(100)
+  })
+
+  test('the prompt that sums a run up takes an ending step to closing', () => {
+    const plan = planOf(stepState({ ...run, is: 'ending' }))
+
+    expect(decide(plan, { is: 'bindTurn', sessionId: ME, turnId: 't1', now: 1 }).plan.active?.is).toBe('closing')
+  })
+
+  test('a step whose turn already runs, or another session\'s, takes no turn here', () => {
+    const mine = planOf(stepState({ ...run, is: 'running', turnId: 't1' }))
+    const theirs = planOf(stepState({ ...run, sessionId: 'session-2', is: 'due' }))
+
+    expect(decide(mine, { is: 'bindTurn', sessionId: ME, turnId: 't2', now: 1 }).outcome).toBe('nothing')
+    expect(decide(theirs, { is: 'bindTurn', sessionId: ME, turnId: 't2', now: 1 }).outcome).toBe('nothing')
+  })
+})
+
+describe('any other turn of this session starting', () => {
+  const waiting = () => planOf(stepState({ ...run, is: 'waiting', pausedFor: 'may I push' }))
+
+  test("an answer sent with the step's own words makes this the turn whose reply ends it", () => {
+    const made = decide(waiting(), { is: 'bindAnswer', sessionId: ME, turnId: 'a1', isAnswer: true, isTold: true, isNotice: false })
+
+    expect(made.outcome).toBe('bound')
+    expect(made.plan.active?.is).toBe('answering')
+  })
+
+  test('an answer typed over a running turn leaves the step waiting for the next one', () => {
+    const made = decide(waiting(), { is: 'bindAnswer', sessionId: ME, turnId: 'a1', isAnswer: true, isTold: false, isNotice: false })
+
+    expect(made.plan.active).toEqual(stepState({ ...run, is: 'asking', turnId: 'a1', pausedFor: 'may I push', isAnswered: true }))
+  })
+
+  test('a turn of anything else takes the step but marks no answer', () => {
+    const made = decide(waiting(), { is: 'bindAnswer', sessionId: ME, turnId: 'h1', isAnswer: false, isTold: false, isNotice: false })
+
+    expect(made.plan.active?.is).toBe('asking')
+    expect('isAnswered' in made.plan.active!).toBe(false)
+  })
+
+  test('an answer taken before this turn still counts, so the step says "answer again"', () => {
+    const plan = planOf(stepState({ ...run, is: 'answered', pausedFor: 'may I push' }))
+    const made = decide(plan, { is: 'bindAnswer', sessionId: ME, turnId: 'h1', isAnswer: false, isTold: false, isNotice: false })
+
+    expect(made.plan.active).toEqual(stepState({ ...run, is: 'asking', turnId: 'h1', pausedFor: 'may I push', isAnswered: true }))
+  })
+
+  test('a step in the background takes the turn of its work\'s notice and no other', () => {
+    const away = planOf(stepState({ ...run, background: [{ taskId: 'w1', what: 'review' }], is: 'away' }))
+    const notice = { is: 'bindAnswer' as const, sessionId: ME, turnId: 'n1', isAnswer: false, isTold: false, isNotice: true }
+
+    expect(decide(away, notice).plan.active?.is).toBe('noticing')
+    expect(decide(away, { ...notice, isNotice: false }).outcome).toBe('nothing')
+  })
+
+  test('a step that is neither waiting nor away takes no turn, nor does another session\'s', () => {
+    const running = planOf(stepState({ ...run, is: 'running', turnId: 't1' }))
+    const theirs = planOf(stepState({ ...run, sessionId: 'session-2', is: 'waiting', pausedFor: 'x' }))
+    const event = { is: 'bindAnswer' as const, sessionId: ME, turnId: 'h1', isAnswer: true, isTold: true, isNotice: false }
+
+    expect(decide(running, event).outcome).toBe('nothing')
+    expect(decide(theirs, event).outcome).toBe('nothing')
+  })
+})
