@@ -7,8 +7,7 @@ import { serial } from '../core/serial'
 import { loadEntries, loadTagIds, projectKeys, tagId } from './store'
 import type { Keys } from './store'
 
-// What a change makes of the stored queue: the list to store in its place, left out to keep
-// the queue as it is, and the value the caller asked for. `afterSave` writes what goes with the
+// A `list` left out keeps the queue as it is. `afterSave` writes what goes with the
 // queue once it is stored, before the next change reads anything: the record of an entry out for
 // /aside edit, saved or forgotten, so a message sent right after finds it as the queue now stands.
 export type QueueChange<T> = { list?: readonly Entry[]; value: T; afterSave?: () => Promise<unknown> }
@@ -22,10 +21,7 @@ const inTurn = serial()
 // for, and a change asked for meanwhile without one, such as a hand-over, never waits on them.
 const inPrepared = serial()
 
-// Changes the queue as it is stored once every change asked for before has landed, and
-// resolves once this one has too, so what is read next holds it. A failure reaches the caller
-// and leaves the changes after it to run. A change never waits for another one, which would
-// wait for it.
+// On the chain (core/serial.ts), so what is read next holds the change.
 export function changeQueue<T>($: Engine, change: (stored: readonly Entry[]) => QueueChange<T> | Promise<QueueChange<T>>): Promise<T> {
   return inTurn(() => applyChange($, change))
 }
@@ -65,8 +61,6 @@ async function saveEntries($: Engine, key: string, list: readonly Entry[]) {
   }
 }
 
-// One change in its turn: the queue read as it is stored, the list it makes stored in its
-// place, then what goes with it.
 async function applyChange<T>($: Engine, change: (stored: readonly Entry[]) => QueueChange<T> | Promise<QueueChange<T>>): Promise<T> {
   const { queue } = await projectKeys($)
   const { list, value, afterSave } = await change(await loadEntries($, queue))
@@ -99,7 +93,6 @@ async function loadTake($: Engine, keys: Keys): Promise<Take> {
   return { entries: await loadEntries($, keys.taken), tagIds, by }
 }
 
-// Whether two takes hold the same entries and tags, taken the same way.
 const isSameTake = (one: Take, other: Take): boolean =>
   one.by === other.by &&
   one.entries.length === other.entries.length &&
@@ -168,8 +161,8 @@ export function takePlanned($: Engine, items: readonly Entry[]): Promise<void> {
   })
 }
 
-// Puts back all the last take took: its entries at the head of the queue, once each, its tags
-// in their files for the next hand-over. Returns what it put back.
+// Its entries go back at the head of the queue, once each, its tags into their files for the
+// next hand-over.
 export function bringBackTake($: Engine): Promise<Take> {
   return inTurn(async () => {
     const keys = await projectKeys($)
