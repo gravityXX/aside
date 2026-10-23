@@ -10,7 +10,6 @@ import { readQueue } from '../io/queue'
 import { loadPlan, projectKeys, refreshBand } from '../io/store'
 import { tagsInFiles } from './queue'
 
-// The step of a plan as it runs: its prompt going out, the turns that are its own, and its end.
 // Nothing here reaches for the hand-over or for the commands, which is what keeps the imports of
 // this area going one way (2.1): a step that asked for the queue to be organized says so to
 // whoever ended its turn, rather than organizing it itself. The queries the rest of the plan
@@ -19,8 +18,7 @@ import { tagsInFiles } from './queue'
 // step's prompt going out, the turns bound to it and its end are one chain of events, and a cut
 // anywhere along it would put two halves of the same walk in two places.
 
-// Submits the prompt `compose` gives as the person's own, or nothing when it gives none. It
-// goes out from a timer, since neither a command's hook nor a turn's end may submit one while
+// From a timer, since neither a command's hook nor a turn's end may submit a prompt while
 // it holds the turn; `onFail` hears why, once, when a hook beneath drops it, the engine
 // refuses it or composing it fails. Nothing here is left to throw unheard in the timer.
 export function submitLater($: Engine, compose: () => Promise<string | undefined>, onFail: (why: string) => Promise<void>) {
@@ -74,8 +72,8 @@ export async function organizeHint($: Engine, active: Plan['active'] | undefined
   return active?.isPlanningAfter && (await hasItems($)) ? '; /aside plan organizes the queue' : ''
 }
 
-// Runs step `index` of the plan; with `isChain`, the next one not done follows when it ends,
-// with `then`, those steps in that order. A stop that lands before its prompt goes out keeps
+// With `isChain` the next step not done follows when this one ends, with `then` those steps in
+// that order. A stop that lands before its prompt goes out keeps
 // it from going out at all. With `paused`, the step runs alone out of a paused run, which
 // stays paused after it for /aside continue.
 export async function startStep($: Engine, ctx: Context, index: number, isChain: boolean, then?: readonly number[], paused?: Plan['paused']) {
@@ -144,9 +142,8 @@ export async function runningHere($: Engine, plan: Plan): Promise<string | undef
     : `Step ${n} is running. /aside stop stops after it.`
 }
 
-// Marks the step `active` runs done at `now`, with the time it took and what its last turn
-// said, and with isGoingOn, the next step of its run running in that same change, so nothing
-// in between finds the run with no step. Answers that step, or -1 with none.
+// With isGoingOn the next step of the run starts in this same change, so nothing in between
+// finds the run with no step. Answers that step's index, or -1 when none follows.
 export function completeStep(plan: Plan, active: StepState, me: string, isGoingOn: boolean, now: number): number {
   const step = plan.steps[active.step]!
   // The time by the clock, waits for the person included; never less than its turns took.
