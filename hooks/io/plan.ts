@@ -5,6 +5,7 @@ import type { EngineInterface as Engine } from 'claude-code'
 
 import type { Plan } from '../../types'
 import { serial } from '../core/serial'
+import { canFollow } from '../core/step'
 import { loadPlan, projectKeys, savePlan } from './store'
 
 // The changes to this project's plan, one after another, so a step that ends and a planner
@@ -21,7 +22,12 @@ export function changePlan<T>($: Engine, change: (plan: Plan) => T | Promise<T>)
     const keys = await projectKeys($)
     const plan = await loadPlan($, keys.plan)
     const before = JSON.stringify(plan)
+    const was = plan.active?.is ?? 'none'
     const value = await change(plan)
+    const now = plan.active?.is ?? 'none'
+    // The step may only go where FOLLOWS says it can, so a writer that takes it somewhere the
+    // graph does not have is refused here rather than stored (2.10).
+    if (!canFollow(was, now)) throw new Error(`a step cannot go from ${was} to ${now}`)
     if (JSON.stringify(plan) !== before) await savePlan($, keys.plan, plan)
 
     return value

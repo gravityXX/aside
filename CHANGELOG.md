@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Nothing changes in use: the step of a running plan may now only move where the plugin's own graph of its states allows, and a move that graph does not hold is refused as the plan is saved rather than stored.
+
 ## 0.37.2 - 2026-10-22
 
 - Nothing changes in use: inside, the step of a plan that is running is kept as one state rather than a set of flags, the plan is stored exactly as it was before, and the code of the plan, the queue and where a comment points is laid out so that each thing is written in one place and each area reads in one direction.
