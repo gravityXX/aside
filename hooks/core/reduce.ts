@@ -8,7 +8,7 @@
 // is still built where it always was, in `features/`.
 
 import type { Plan, Step, StepRun, StepState } from '../../types'
-import { isSummingUp, stepMode } from './prompts'
+import { isSummingUp, readStepResult, stepMode } from './prompts'
 import { askedOf, isAway, isWaiting, nextInRun, runOf, stepState, turnOf, withRun } from './step'
 
 export type StepEvent =
@@ -46,6 +46,11 @@ export type StepEvent =
   // /aside stop. A paused run with no step is dropped; a step with no turn of its own left is
   // done as it stands; a step of another session is let go; the step running here is the last.
   | { is: 'stop'; sessionId: string; now: number; openTurns: readonly string[] }
+  // The turn of the step running here has ended, whatever ended it: isAnswer is the engine's own
+  // reason for it, `ms` what the turn took and `answer` what it said. canOrganize: /aside plan
+  // asked, mid-step, for the queue to be organized once the step ends, and there is something to
+  // organize - the plan holds the request, the queue is the shell's to read (2.11).
+  | { is: 'turnEnded'; sessionId: string; turnId: string; isAnswer: boolean; ms: number; answer: string; now: number; canOrganize: boolean }
 
 // What a move asks the shell to do about it, as data and never as a function: the engine
 // refuses `$` passed to a property call, so a table of handlers taking it cannot exist (3.2).
@@ -55,6 +60,11 @@ export type Effect =
   // The prompt of step `index` goes out, from a timer: a hook that holds the turn may not
   // submit one (3.8). With isClosing it is the turn that sums a run up rather than a step's own.
   | { does: 'sendStep'; index: number; isChain: boolean; then?: readonly number[]; isClosing: boolean }
+  // The queue a step asked /aside plan to organize goes to Claude now that the step has ended.
+  // Whoever ended its turn runs this one: features/steps.ts may not reach the hand-over (2.1),
+  // so it hands the effect on. isAdding: the plan has steps left, so the queue is organized as
+  // something to add to it rather than as a plan of its own.
+  | { does: 'organize'; isAdding: boolean }
 
 // The word the shell turns into a sentence for the person or for Claude. 'nothing' is a move
 // that did not happen, which every event may answer with.
@@ -76,6 +86,9 @@ export type Outcome =
   | 'doneAsStands'
   | 'letGo'
   | 'after'
+  | 'away'
+  | 'stopped'
+  | 'pausing'
 
 export type Decided = { plan: Plan; does: readonly Effect[]; outcome: Outcome }
 
@@ -348,6 +361,83 @@ function stop(plan: Plan, event: Extract<StepEvent, { is: 'stop' }>): Decided {
   return { plan: { ...plan, active: next }, does: band, outcome: 'after' }
 }
 
+// Why a run waits after a step that /aside plan asked to organize the queue after. It is the
+// plan's own, read back by the listing and by the toast that says the run paused.
+export const PLANNING_PAUSE = 'to organize the queue'
+
+// The turn of the step running here has ended. The branches are tried in the order the step's
+// end has always tried them, and the first that holds answers: a step continue or stop ended is
+// done; a question Claude asked and this turn did not answer leaves the step waiting; a turn of
+// a step in the background cut short leaves it there; a turn that is no answer at all leaves no
+// step; work still running keeps the step away; and otherwise the step is done, the run going on
+// with the next step unless the queue is to be organized first.
+function turnEnded(plan: Plan, event: Extract<StepEvent, { is: 'turnEnded' }>): Decided {
+  const active = plan.active
+  if (!active || turnOf(active) !== event.turnId || active.sessionId !== event.sessionId) {
+    return nothing(plan)
+  }
+  const { isAnswer, canOrganize, now } = event
+  const result = isAnswer ? readStepResult(event.answer) : undefined
+  // Whatever follows, the step keeps the time this turn took and what its answer said it did.
+  const said = withRun(active, { ...runOf(active), ms: (active.ms ?? 0) + event.ms, ...(result === undefined ? {} : { result }) })
+  const band: Effect[] = [{ does: 'refreshBand' }]
+  // Only a step that ended on an answer organizes the queue: one cut short leaves that to
+  // /aside plan, and one left waiting or away has not ended at all.
+  const andOrganize = (steps: readonly Step[]): Effect[] =>
+    isAnswer && canOrganize ? [...band, { does: 'organize', isAdding: steps.some(one => !one.isDone) }] : band
+
+  // continue or stop ended the step: it is done when this turn ends, whatever ends it.
+  if (said.is === 'closing') {
+    const { plan: ended } = completed(plan, said, event.sessionId, false, now)
+
+    return { plan: ended, does: andOrganize(ended.steps), outcome: 'done' }
+  }
+  const asked = askedOf(said)
+  // The turn that took the person's answer ends the step, unless Claude asked again in it.
+  if (asked !== undefined && !(isAnswer && said.is === 'answering')) {
+    // The request to organize the queue goes with the turn it was asked in; a turn that took an
+    // answer before this one leaves the step asking for another.
+    const { isPlanningAfter: _asked, ...run } = runOf(said)
+    const isAgain = said.is === 'answering' || (said.is === 'asking' && said.isAnswered === true)
+    const back = stepState(isAgain ? { ...run, is: 'answered', pausedFor: asked } : { ...run, is: 'waiting', pausedFor: asked })
+
+    return { plan: { ...plan, active: back }, does: andOrganize(plan.steps), outcome: 'waits' }
+  }
+  // A turn of a step in the background cut short leaves it there, as one that waits.
+  if (!isAnswer && said.is === 'noticing') {
+    return { plan: { ...plan, active: stepState({ ...runOf(said), is: 'away' }) }, does: band, outcome: 'away' }
+  }
+  if (!isAnswer) {
+    const { active: _stopped, ...rest } = plan
+
+    return { plan: rest, does: band, outcome: 'stopped' }
+  }
+  // Work in the background a turn of it started is still running: the step goes on there, and
+  // the turn that work's end brings is the one that ends it.
+  if ((said.background?.length ?? 0) > 0) {
+    return { plan: { ...plan, active: stepState({ ...runOf(said), is: 'away' }) }, does: band, outcome: 'away' }
+  }
+  // With the queue to organize first, the run waits after this step and /aside continue takes
+  // it on; the next step would otherwise start inside this same change (`completed`).
+  const isPausing = canOrganize && nextInRun(plan.steps, said.step, said.isChain, said.then) >= 0
+  const made = completed(plan, said, event.sessionId, !isPausing, now)
+  if (isPausing) {
+    const paused = { step: said.step, reason: PLANNING_PAUSE, isChain: said.isChain, ...(said.then ? { then: said.then } : {}) }
+
+    return { plan: { ...made.plan, paused }, does: andOrganize(made.plan.steps), outcome: 'pausing' }
+  }
+  if (made.after < 0) {
+    return { plan: made.plan, does: andOrganize(made.plan.steps), outcome: 'done' }
+  }
+  const then = said.then?.slice(1)
+
+  return {
+    plan: made.plan,
+    does: [...band, { does: 'sendStep', index: made.after, isChain: said.isChain, ...(then ? { then } : {}), isClosing: false }],
+    outcome: 'onward',
+  }
+}
+
 export function decide(plan: Plan, event: StepEvent): Decided {
   switch (event.is) {
     case 'ask':
@@ -370,6 +460,8 @@ export function decide(plan: Plan, event: StepEvent): Decided {
       return goOn(plan, event)
     case 'stop':
       return stop(plan, event)
+    case 'turnEnded':
+      return turnEnded(plan, event)
   }
 }
 
