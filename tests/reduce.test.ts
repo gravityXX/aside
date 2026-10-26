@@ -361,3 +361,129 @@ describe('/aside stop', () => {
     expect(made.plan.steps[0]?.isDone).toBe(undefined)
   })
 })
+
+describe("the end of the step's own turn", () => {
+  const ended = (over: Partial<Extract<Parameters<typeof decide>[1], { is: 'turnEnded' }>> = {}) =>
+    ({ is: 'turnEnded' as const, sessionId: ME, turnId: 't1', isAnswer: true, ms: 1000, answer: 'done it', now: 61_000, canOrganize: false, ...over })
+
+  test('the step keeps the time the turn took and what its answer said it did', () => {
+    const plan = planOf(stepState({ ...run, isChain: false, ms: 500, startedAt: 1000, is: 'running', turnId: 't1' }))
+    const made = decide(plan, ended({ answer: 'looked around\n\nResult: two files changed' }))
+
+    // The time by the clock, which is longer than the turn took, and the answer's own word.
+    expect(made.plan.steps[0]).toEqual({ ...STEPS[0], isDone: true, ms: 60_000, doneAt: 61_000, result: 'two files changed' })
+  })
+
+  test('a step continue or stop ended is done when its turn ends, whatever ended it', () => {
+    const plan = planOf(stepState({ ...run, is: 'closing', turnId: 't1', pausedFor: 'may I push' }))
+    const made = decide(plan, ended({ isAnswer: false }))
+
+    expect(made.outcome).toBe('done')
+    expect(made.plan.active).toBe(undefined)
+    expect(made.plan.steps[0]?.isDone).toBe(true)
+    // Done as it stands: the step after it is not started.
+    expect(made.plan.steps[1]?.isDone).toBe(undefined)
+  })
+
+  test('a question this turn did not answer leaves the step waiting for one, and says which', () => {
+    const asking = planOf(stepState({ ...run, is: 'asking', turnId: 't1', pausedFor: 'which design' }))
+    const again = planOf(stepState({ ...run, is: 'asking', turnId: 't1', pausedFor: 'which design', isAnswered: true }))
+    const answering = planOf(stepState({ ...run, is: 'answering', turnId: 't1', pausedFor: 'which design' }))
+
+    expect(decide(asking, ended()).outcome).toBe('waits')
+    expect(decide(asking, ended()).plan.active).toEqual(stepState({ ...run, ms: 1000, result: 'done it', is: 'waiting', pausedFor: 'which design' }))
+    // An answer taken before this turn, and one taken in a turn Claude asked again in, both
+    // leave the step asking for another.
+    expect(decide(again, ended()).plan.active?.is).toBe('answered')
+    expect(decide(answering, ended({ isAnswer: false })).plan.active?.is).toBe('answered')
+    expect(decide(asking, ended()).plan.steps[0]?.isDone).toBe(undefined)
+  })
+
+  test('the turn that took the answer ends the step, unless Claude asked again in it', () => {
+    const plan = planOf(stepState({ ...run, isChain: false, is: 'answering', turnId: 't1', pausedFor: 'which design' }))
+
+    expect(decide(plan, ended()).outcome).toBe('done')
+    expect(decide(plan, ended()).plan.steps[0]?.isDone).toBe(true)
+  })
+
+  test('a turn of a step in the background cut short leaves it in the background', () => {
+    const background = [{ callId: 'c1', taskId: 'w1', what: 'review' }]
+    const plan = planOf(stepState({ ...run, background, is: 'noticing', turnId: 't1' }))
+    const made = decide(plan, ended({ isAnswer: false }))
+
+    expect(made.outcome).toBe('away')
+    expect(made.plan.active).toEqual(stepState({ ...run, ms: 1000, background, is: 'away' }))
+  })
+
+  test('a turn that is no answer at all leaves no step, and none of it done', () => {
+    const plan = planOf(stepState({ ...run, is: 'running', turnId: 't1' }))
+    const made = decide(plan, ended({ isAnswer: false }))
+
+    expect(made.outcome).toBe('stopped')
+    expect(made.plan.active).toBe(undefined)
+    expect(made.plan.steps[0]?.isDone).toBe(undefined)
+  })
+
+  test('work a turn of the step started and still running keeps the step there', () => {
+    const background = [{ taskId: 'w1', what: 'review' }]
+    const plan = planOf(stepState({ ...run, background, is: 'running', turnId: 't1' }))
+    const made = decide(plan, ended())
+
+    expect(made.outcome).toBe('away')
+    expect(made.plan.active).toEqual(stepState({ ...run, ms: 1000, result: 'done it', background, is: 'away' }))
+    expect(made.plan.steps[0]?.isDone).toBe(undefined)
+  })
+
+  test('a step done with more to follow is done and the next one starts in the same answer', () => {
+    const plan = planOf(stepState({ ...run, is: 'running', turnId: 't1' }))
+    const made = decide(plan, ended())
+
+    expect(made.outcome).toBe('onward')
+    expect(made.plan.active).toEqual(stepState({ step: 1, isChain: true, sessionId: ME, is: 'due' }))
+    expect(made.does).toEqual([{ does: 'refreshBand' }, { does: 'sendStep', index: 1, isChain: true, isClosing: false }])
+  })
+
+  test('with the queue to organize first, the run waits after the step for /aside continue', () => {
+    const plan = planOf(stepState({ ...run, isPlanningAfter: true, is: 'running', turnId: 't1' }))
+    const made = decide(plan, ended({ canOrganize: true }))
+
+    expect(made.outcome).toBe('pausing')
+    expect(made.plan.active).toBe(undefined)
+    expect(made.plan.paused).toEqual({ step: 0, reason: 'to organize the queue', isChain: true })
+    expect(made.does).toEqual([{ does: 'refreshBand' }, { does: 'organize', isAdding: true }])
+  })
+
+  test('the queue a step asked to organize goes to Claude once that step has ended on an answer', () => {
+    const one = [{ title: 'One', prompt: 'do one' }]
+    const alone = planOf(stepState({ ...run, isChain: false, isPlanningAfter: true, is: 'running', turnId: 't1' }), one)
+    const cut = planOf(stepState({ ...run, isChain: false, isPlanningAfter: true, is: 'running', turnId: 't1' }), one)
+
+    // Nothing of the plan is left to add to, so the queue is organized as a plan of its own.
+    expect(decide(alone, ended({ canOrganize: true })).does).toEqual([{ does: 'refreshBand' }, { does: 'organize', isAdding: false }])
+    // A step cut short organizes nothing: the toast tells the person /aside plan does it.
+    expect(decide(cut, ended({ canOrganize: true, isAnswer: false })).does).toEqual([{ does: 'refreshBand' }])
+  })
+
+  test("a step away, or one whose question stands, has not ended, so it organizes nothing", () => {
+    const background = [{ taskId: 'w1', what: 'review' }]
+    const away = planOf(stepState({ ...run, background, isPlanningAfter: true, is: 'running', turnId: 't1' }))
+    const asking = planOf(stepState({ ...run, isPlanningAfter: true, is: 'asking', turnId: 't1', pausedFor: 'which' }))
+
+    expect(decide(away, ended({ canOrganize: true })).does).toEqual([{ does: 'refreshBand' }])
+    // The request goes with the turn it was asked in, so the step that waits no longer holds it.
+    expect(decide(asking, ended({ canOrganize: true })).plan.active?.isPlanningAfter).toBe(undefined)
+    expect(decide(asking, ended({ canOrganize: true })).does).toEqual([{ does: 'refreshBand' }, { does: 'organize', isAdding: true }])
+  })
+
+  test('no other turn ends the step: not another session\'s, not one it never had', () => {
+    const plan = planOf(stepState({ ...run, is: 'running', turnId: 't1' }))
+    const theirs = planOf(stepState({ ...run, sessionId: 'session-2', is: 'running', turnId: 't1' }))
+    const waiting = planOf(stepState({ ...run, is: 'waiting', pausedFor: 'x' }))
+    const none = planOf()
+
+    expect(decide(plan, ended({ turnId: 't2' })).outcome).toBe('nothing')
+    expect(decide(theirs, ended()).outcome).toBe('nothing')
+    expect(decide(waiting, ended()).outcome).toBe('nothing')
+    expect(decide(none, ended()).plan).toBe(none)
+  })
+})
