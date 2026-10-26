@@ -190,13 +190,14 @@ refuse. `claude plugin test .` is where it shows, as every test failing to load 
 
 ## 8. The Python scripts
 
-`assets/make_svgs.py` draws every picture in the README, the timeline and the steps, and those in `docs/use-cases.md`, light and dark. `scripts/check_rules.py` checks that the rule numbers in this file hold together: that each section runs 1, 2, 3 with none skipped or used twice, and that every rule the code, the tests and the docs cite exists. CI runs it, since nothing else keeps a citation honest when a rule is inserted.
+`assets/make_svgs.py` draws every picture in the README, the timeline and the steps, and those in `docs/use-cases.md`, light and dark. `assets/make_icon.py` draws the one picture it cannot, the square PNG the plugin directory takes as the listing's icon, since the directory refuses SVG. `scripts/check_rules.py` checks that the rule numbers in this file hold together: that each section runs 1, 2, 3 with none skipped or used twice, and that every rule the code, the tests and the docs cite exists. CI runs it, since nothing else keeps a citation honest when a rule is inserted.
 
-1. Python 3.12 or newer, the standard library only. Each runs from the repository root: `python3 assets/make_svgs.py`, `python3 scripts/check_rules.py`.
-2. They are formatted with `uvx ruff@0.17.1 format --line-length 120 assets scripts`, linted with `uvx ruff@0.17.1 check assets scripts` and typed so that `uvx mypy@2.4.0 --strict assets/make_svgs.py scripts/check_rules.py` passes.
+1. Python 3.12 or newer, the standard library only. Each runs from the repository root: `python3 assets/make_svgs.py`, `python3 assets/make_icon.py`, `python3 scripts/check_rules.py`.
+2. They are formatted with `uvx ruff@0.17.1 format --line-length 120 assets scripts`, linted with `uvx ruff@0.17.1 check assets scripts` and typed so that `uvx mypy@2.4.0 --strict assets/make_svgs.py assets/make_icon.py scripts/check_rules.py` passes.
 3. Colours live in `THEMES`: a light and a dark set with the same keys. Layout numbers are named constants (`W`, `ROW`, `PAD`).
-4. The SVGs are its output. Change the script, run it and commit both; never edit an SVG by hand.
-5. Every picture comes in light and dark and has an `aria-label` that says what it shows.
+4. The SVGs are its output, and `.claude-plugin/icon.png` is `make_icon.py`'s. Change a script, run it and commit both; never edit a picture by hand.
+5. Every picture comes in light and dark and has an `aria-label` that says what it shows. The icon is the exception: the directory takes one square PNG, which has neither.
+6. The directory reads the icon once, when the plugin is first submitted, and a later change does not reach the listing. It is settled before the submission, not after.
 
 ## 9. Review checklist
 
@@ -220,7 +221,7 @@ claude plugin validate .
 claude plugin test .
 npx -p typescript@5.9.3 tsc -p .
 # when a Python script changed
-uvx ruff@0.17.1 format --check --line-length 120 assets scripts && uvx ruff@0.17.1 check assets scripts && uvx mypy@2.4.0 --strict assets/make_svgs.py scripts/check_rules.py
+uvx ruff@0.17.1 format --check --line-length 120 assets scripts && uvx ruff@0.17.1 check assets scripts && uvx mypy@2.4.0 --strict assets/make_svgs.py assets/make_icon.py scripts/check_rules.py
 ```
 
 ## 10. Decisions
