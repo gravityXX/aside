@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Nothing changes in use: inside, every move of the step of a running plan - its prompt going out, the turns bound to it, the work it leaves in the background, `/aside continue` and `/aside stop` - is now decided in one place, which says where the step goes and what the plugin should do about it, rather than each of those working it out for itself.
+
 ## 0.37.3 - 2026-10-23
 
 - Nothing changes in use: the step of a running plan may now only move where the plugin's own graph of its states allows, and a move that graph does not hold is refused as the plan is saved rather than stored.
