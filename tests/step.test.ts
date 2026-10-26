@@ -2,7 +2,7 @@ import { describe, expect, test } from 'claude-code/testing'
 
 import type { StepRun, StepState, StoredActive } from '../types'
 import type { Where } from '../hooks/core/step'
-import { askedOf, canFollow, FOLLOWS, isAway, isWaiting, readActive, storedActive, turnOf } from '../hooks/core/step'
+import { askedOf, canFollow, FOLLOWS, isAway, isWaiting, mustFollow, readActive, storedActive, turnOf, whereOf } from '../hooks/core/step'
 
 // How the marks the store keeps become the step's state and go back again (2.7). These are
 // rules over every combination the store can hold, not only those a release writes, so each
@@ -172,5 +172,16 @@ describe('where the step running can go', () => {
     expect(canFollow('due', 'ending')).toBe(false)
     expect(canFollow('closing', 'asking')).toBe(false)
     expect(canFollow('none', 'running')).toBe(false)
+  })
+
+  test('where a plan is read off it, and a move it may not make throws by the same words', () => {
+    const active = readActive({ step: 0, isChain: false, sessionId: 'session-1', turnId: 't1' })
+
+    expect(whereOf({ steps: [] })).toBe('none')
+    expect(whereOf({ steps: [], active })).toBe('running')
+    expect(() => mustFollow('due', 'running')).not.toThrow()
+    // Both `decide` and changePlan refuse by this, so the sentence a hook shows is the same
+    // wherever the move was made.
+    expect(() => mustFollow('due', 'ending')).toThrow('a step cannot go from due to ending')
   })
 })

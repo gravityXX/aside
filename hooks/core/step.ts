@@ -194,8 +194,8 @@ export const isAddingTurn = (plan: Plan, me: string, turnId: string | undefined)
 // features/plan.ts, features/plantool.ts and features/background.ts take it. 'none' is no step
 // running: a run starts one, and a step done, let go or stopped leaves none. A state is not
 // listed against itself, since a change that leaves the step where it was is no move at all.
-// This is the graph those writers make between them, which no one of them can show; changePlan
-// refuses a move that is not here, so a writer and this table cannot drift apart (2.10).
+// This is the graph `decide` in reduce.ts executes, which no one arm of it can show; a move
+// that is not here is refused, so the decisions and this table cannot drift apart (2.10).
 export type Where = StepState['is'] | 'none'
 
 export const FOLLOWS: Record<Where, readonly Where[]> = {
@@ -221,3 +221,13 @@ export const FOLLOWS: Record<Where, readonly Where[]> = {
 }
 
 export const canFollow = (from: Where, to: Where) => from === to || FOLLOWS[from].includes(to)
+
+// Where the step of a plan is, with 'none' for a plan with no step running.
+export const whereOf = (plan: Plan): Where => (plan.active === undefined ? 'none' : plan.active.is)
+
+// The move from `was` to `now`, refused unless the graph holds it. `decide` holds to this the
+// move it just made, which says which event got it wrong, and changePlan holds to it the plan as
+// it is written, which catches a change that never went through `decide` at all (2.11).
+export function mustFollow(was: Where, now: Where) {
+  if (!canFollow(was, now)) throw new Error(`a step cannot go from ${was} to ${now}`)
+}

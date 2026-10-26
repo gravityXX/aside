@@ -9,7 +9,7 @@
 
 import type { Plan, Step, StepRun, StepState } from '../../types'
 import { isSummingUp, readStepResult, stepMode } from './prompts'
-import { askedOf, isAway, isWaiting, nextInRun, runOf, stepState, turnOf, withRun } from './step'
+import { askedOf, isAway, isWaiting, mustFollow, nextInRun, runOf, stepState, turnOf, whereOf, withRun } from './step'
 
 export type StepEvent =
   // Claude asked the person something with the wait tool, in the turn of the step it is working
@@ -488,7 +488,17 @@ function turnDied(plan: Plan, event: Extract<StepEvent, { is: 'turnDied' }>): De
   return { plan: { ...plan, active: next }, does: band, outcome: 'waits' }
 }
 
+// What happened to the step, and what it leaves behind. The move is held to the graph here as
+// well as where the plan is written: a decision one of the arms got wrong is caught with the
+// event that made it, rather than on the way to the store (2.11).
 export function decide(plan: Plan, event: StepEvent): Decided {
+  const made = move(plan, event)
+  mustFollow(whereOf(plan), whereOf(made.plan))
+
+  return made
+}
+
+function move(plan: Plan, event: StepEvent): Decided {
   switch (event.is) {
     case 'ask':
       return ask(plan, event)
