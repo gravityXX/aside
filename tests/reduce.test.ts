@@ -487,3 +487,72 @@ describe("the end of the step's own turn", () => {
     expect(decide(none, ended()).plan).toBe(none)
   })
 })
+
+describe('a turn that will never end', () => {
+  const W1 = { callId: 'c1', taskId: 'w1', what: 'review' }
+  const died = (over: Partial<Extract<Parameters<typeof decide>[1], { is: 'turnDied' }>> = {}) =>
+    ({ is: 'turnDied' as const, sessionId: ME, turnId: undefined, isGone: false, openTurns: ['t1'], ownWork: [], now: 61_000, ...over })
+
+  test('a step whose turn this process left open waits for the person, saying its turn ended', () => {
+    const plan = planOf(stepState({ ...run, startedAt: 1000, is: 'running', turnId: 't1' }))
+    const made = decide(plan, died({ turnId: 't2' }))
+
+    expect(made.outcome).toBe('waits')
+    expect(made.plan.active).toEqual(stepState({ ...run, startedAt: 1000, is: 'waiting', pausedFor: 'its turn ended without an answer' }))
+    expect(made.does).toEqual([{ does: 'refreshBand' }])
+    expect(made.plan.steps[0]?.isDone).toBe(undefined)
+  })
+
+  test('the question it asked stands in place of that, and an answer it took leaves it asked again', () => {
+    const asking = planOf(stepState({ ...run, is: 'asking', turnId: 't1', pausedFor: 'which design' }))
+    const answering = planOf(stepState({ ...run, is: 'answering', turnId: 't1', pausedFor: 'which design' }))
+
+    expect(decide(asking, died()).plan.active).toEqual(stepState({ ...run, is: 'waiting', pausedFor: 'which design' }))
+    expect(decide(answering, died()).plan.active).toEqual(stepState({ ...run, is: 'answered', pausedFor: 'which design' }))
+  })
+
+  test('a step continue or stop had ended is done as it stands, and says nothing', () => {
+    const closing = planOf(stepState({ ...run, is: 'closing', turnId: 't1', pausedFor: 'may I push' }))
+    const ending = planOf(stepState({ ...run, is: 'ending' }))
+
+    expect(decide(closing, died()).outcome).toBe('done')
+    expect(decide(closing, died()).plan.steps[0]?.isDone).toBe(true)
+    // With no turn to lose, only the session's own end reaches it.
+    expect(decide(ending, died()).outcome).toBe('nothing')
+    expect(decide(ending, died({ isGone: true })).plan.steps[0]?.isDone).toBe(true)
+  })
+
+  test('a step in the background goes back to waiting on its work, which a session gone lets go', () => {
+    const noticing = planOf(stepState({ ...run, background: [W1], is: 'noticing', turnId: 't1' }))
+    const away = planOf(stepState({ ...run, background: [W1], is: 'away' }))
+
+    expect(decide(noticing, died()).outcome).toBe('away')
+    expect(decide(noticing, died()).plan.active).toEqual(stepState({ ...run, background: [W1], is: 'away' }))
+    // The session that ended is the one whose call left that work running: both go.
+    const gone = decide(away, died({ isGone: true, ownWork: ['c1'] }))
+    expect(gone.outcome).toBe('waits')
+    expect(gone.plan.active).toEqual(stepState({ ...run, is: 'waiting', pausedFor: 'its turn ended without an answer' }))
+  })
+
+  test('the request to organize the queue goes with the turn it was asked in', () => {
+    const plan = planOf(stepState({ ...run, isPlanningAfter: true, is: 'running', turnId: 't1' }))
+
+    expect(decide(plan, died()).plan.active?.isPlanningAfter).toBe(undefined)
+  })
+
+  test('what another process runs is left to it, and so is a step already where it would land', () => {
+    const cases: [string, Plan, Partial<Extract<Parameters<typeof decide>[1], { is: 'turnDied' }>>][] = [
+      ['the turn running now', planOf(stepState({ ...run, is: 'running', turnId: 't1' })), { turnId: 't1' }],
+      ['a turn this process never saw start', planOf(stepState({ ...run, is: 'running', turnId: 'elsewhere' })), {}],
+      ['a step of another session', planOf(stepState({ ...run, sessionId: 'session-2', is: 'running', turnId: 't1' })), {}],
+      ['a step that waits for the person already', planOf(stepState({ ...run, is: 'waiting', pausedFor: 'x' })), { isGone: true }],
+      ['work another process left running', planOf(stepState({ ...run, background: [{ taskId: 'w1', what: 'review' }], is: 'away' })), { isGone: true }],
+      ['no step at all', planOf(), {}],
+    ]
+    for (const [what, plan, over] of cases) {
+      const made = decide(plan, died(over))
+      expect(`${what}: ${made.outcome}`).toBe(`${what}: nothing`)
+      expect(made.plan).toBe(plan)
+    }
+  })
+})

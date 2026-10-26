@@ -51,6 +51,11 @@ export type StepEvent =
   // asked, mid-step, for the queue to be organized once the step ends, and there is something to
   // organize - the plan holds the request, the queue is the shell's to read (2.11).
   | { is: 'turnEnded'; sessionId: string; turnId: string; isAnswer: boolean; ms: number; answer: string; now: number; canOrganize: boolean }
+  // A turn of this session that will never end: one this process started, still open, other
+  // than `turnId`; with isGone, the session itself ended under the step. `openTurns` is the
+  // turns this process saw start and not end, and `ownWork` the calls of this process that left
+  // work running, since the work of a session that ended goes with it.
+  | { is: 'turnDied'; sessionId: string; turnId: string | undefined; isGone: boolean; openTurns: readonly string[]; ownWork: readonly string[]; now: number }
 
 // What a move asks the shell to do about it, as data and never as a function: the engine
 // refuses `$` passed to a property call, so a table of handlers taking it cannot exist (3.2).
@@ -365,6 +370,10 @@ function stop(plan: Plan, event: Extract<StepEvent, { is: 'stop' }>): Decided {
 // plan's own, read back by the listing and by the toast that says the run paused.
 export const PLANNING_PAUSE = 'to organize the queue'
 
+// What a step waits for whose turn ended with no answer the plugin heard. It is printed as it
+// stands, in place of the question Claude would have left.
+export const CUT_OFF = 'its turn ended without an answer'
+
 // The turn of the step running here has ended. The branches are tried in the order the step's
 // end has always tried them, and the first that holds answers: a step continue or stop ended is
 // done; a question Claude asked and this turn did not answer leaves the step waiting; a turn of
@@ -438,6 +447,47 @@ function turnEnded(plan: Plan, event: Extract<StepEvent, { is: 'turnEnded' }>): 
   }
 }
 
+// A turn of this session that will never end, so the step lets go of it. One that continue or
+// stop had ended is done, as it stands; one in the background whose work is still running goes
+// back to waiting on that work; any other waits for the person, as after a step's question, so
+// /aside continue ends it and goes on and /aside stop ends it there.
+function turnDied(plan: Plan, event: Extract<StepEvent, { is: 'turnDied' }>): Decided {
+  const active = plan.active
+  if (!active || active.sessionId !== event.sessionId) {
+    return nothing(plan)
+  }
+  const { isGone, openTurns, ownWork, now } = event
+  const turnId = turnOf(active)
+  if (turnId !== undefined) {
+    // A turn this process never saw start belongs to another process, on the same session
+    // resumed elsewhere, and so does the step: both are left to it.
+    if (turnId === event.turnId || !openTurns.includes(turnId)) {
+      return nothing(plan)
+    }
+  } else if (!isGone || isWaiting(active) || (isAway(active) && !(active.background ?? []).every(work => work.callId !== undefined && ownWork.includes(work.callId)))) {
+    // With no turn of its own, only the session's own end reaches the step, and only where the
+    // work it waits on was this process's: a step that waits for the person is where the
+    // session's end would leave it already.
+    return nothing(plan)
+  }
+  const band: Effect[] = [{ does: 'refreshBand' }]
+  if (active.is === 'ending' || active.is === 'closing') {
+    return { plan: completed(plan, active, event.sessionId, false, now).plan, does: band, outcome: 'done' }
+  }
+  // The request to organize the queue goes with the turn it was asked in.
+  const { isPlanningAfter: _asked, background, ...rest } = runOf(active)
+  // With the session itself gone, so is the work it had running, and the step's wait on it.
+  const run = isGone || background === undefined ? rest : { ...rest, background }
+  if (!isGone && active.is === 'noticing') {
+    return { plan: { ...plan, active: stepState({ ...run, is: 'away' }) }, does: band, outcome: 'away' }
+  }
+  // What Claude asked the step to wait for if it asked, else that its turn ended with no answer.
+  const pausedFor = askedOf(active) ?? CUT_OFF
+  const next = stepState(active.is === 'answering' ? { ...run, is: 'answered', pausedFor } : { ...run, is: 'waiting', pausedFor })
+
+  return { plan: { ...plan, active: next }, does: band, outcome: 'waits' }
+}
+
 export function decide(plan: Plan, event: StepEvent): Decided {
   switch (event.is) {
     case 'ask':
@@ -462,6 +512,8 @@ export function decide(plan: Plan, event: StepEvent): Decided {
       return stop(plan, event)
     case 'turnEnded':
       return turnEnded(plan, event)
+    case 'turnDied':
+      return turnDied(plan, event)
   }
 }
 
