@@ -8,12 +8,12 @@
 
 import type { Args, CatchHandler, EngineInterface as Engine, Hook } from 'claude-code'
 
-import type { Plan, Step, StepState } from '../../types'
+import type { Plan, Step } from '../../types'
 import type { Context } from '../context'
 import { answerContext, closingPrompt, isSummingUp, stepMode, stepPrompt } from '../core/prompts'
-import { PLANNING_PAUSE, completed, decide, writeInto } from '../core/reduce'
+import { PLANNING_PAUSE, decide, writeInto } from '../core/reduce'
 import type { Effect } from '../core/reduce'
-import { askedOf, awayWork, isAway, isWaiting, runOf, stepState, turnOf } from '../core/step'
+import { askedOf, awayWork, isAway, isWaiting, turnOf } from '../core/step'
 import { describeError, formatCount, formatDuration } from '../core/text'
 import { changePlan } from '../io/plan'
 import { readQueue } from '../io/queue'
@@ -163,16 +163,6 @@ export async function runningHere($: Engine, plan: Plan): Promise<string | undef
     : `Step ${n} is running. /aside stop stops after it.`
 }
 
-// `completed` in core/reduce.ts answers with a new plan; the callers left here still edit the
-// one they hold, so this writes its answer in and hands back the step that follows. It goes
-// when the last of those callers moves onto an event.
-export function completeStep(plan: Plan, active: StepState, me: string, isGoingOn: boolean, now: number): number {
-  const made = completed(plan, active, me, isGoingOn, now)
-  writeInto(plan, made.plan)
-
-  return made.after
-}
-
 // /aside continue on a step that waits for the person, in this session or one before it: it
 // is done, and its run goes on here. The last step of a run of several takes one more turn
 // first, which sums the run up and then ends it, as it stands if that turn is cut short, with
@@ -290,51 +280,32 @@ type SessionEnd = Parameters<Hook<'session.end'>>
 
 export type TurnEndReason = Args<'turn.complete'>['reason']
 
-// What a step waits for whose turn ended with no end the plugin heard.
-const CUT_OFF = 'its turn ended without an answer'
-
 // The step of session `sessionId` whose turn will never end: one this process started, still
 // open, other than `turnId`; with isGone, the session itself ended, so also its work in the
-// background that calls here started, and a step whose turn never started. Turns and work of
-// another process, on the same session resumed elsewhere, are left to it. One that continue or
-// stop ended is done, as it stands; any other has no turn running and waits for the person, as
-// after a step's question, so /aside continue ends it and goes on and /aside stop ends it there.
+// background that calls here started, and a step whose turn never started. Where that leaves the
+// step is `turnDied` in core/reduce.ts; only a step left waiting has anything to say about it,
+// and a session that is gone says nothing at all.
 export async function dropDeadTurn($: Engine, ctx: Context, sessionId: string, turnId: string | undefined, isGone: boolean) {
   const { openTurns, ownWork } = ctx.session
   const now = await $.clock.now()
   const dropped = await changePlan($, async plan => {
-    const active = plan.active
-    if (!active || active.sessionId !== sessionId) return undefined
-    const turn = turnOf(active)
-    if (turn !== undefined) {
-      if (turn === turnId || !openTurns.has(turn)) return undefined
-    } else if (!isGone || isWaiting(active) || (isAway(active) && !(active.background ?? []).every(work => work.callId !== undefined && ownWork.has(work.callId)))) {
+    const was = plan.active
+    const out = decide(plan, { is: 'turnDied', sessionId, turnId, isGone, openTurns: [...openTurns], ownWork: [...ownWork], now })
+    if (out.outcome === 'nothing') {
       return undefined
     }
-    if (active.is === 'ending' || active.is === 'closing') {
-      completeStep(plan, active, sessionId, false, now)
-      return { n: active.step + 1, waits: false, hint: '' }
-    }
-    // Read before the request to organize the queue is let go with the turn it was asked in.
-    const hint = await organizeHint($, active)
-    const { isPlanningAfter: _isPlanningAfter, background, ...rest } = runOf(active)
-    // With the session itself gone, so is the work it had going and the step's wait on it.
-    const run = isGone || background === undefined ? rest : { ...rest, background }
-    if (!isGone && active.is === 'noticing') {
-      // Its work is still going: the step goes back to waiting on that, not on the person.
-      plan.active = stepState({ ...run, is: 'away' })
-      return { n: active.step + 1, waits: false, hint }
-    }
-    // Any other step waits for the person: what Claude asked it to wait for if it asked, else
-    // that its turn ended with no answer. The work it left behind stays on for /aside continue.
-    const pausedFor = askedOf(active) ?? CUT_OFF
-    plan.active = stepState(active.is === 'answering' ? { ...run, is: 'answered', pausedFor } : { ...run, is: 'waiting', pausedFor })
+    writeInto(plan, out.plan)
 
-    return { n: active.step + 1, waits: true, hint }
+    // Asked of the step as it was: the request to organize the queue is let go with the turn.
+    return { n: was!.step + 1, plan: structuredClone(out.plan), does: out.does, outcome: out.outcome, hint: await organizeHint($, was) }
   })
-  if (dropped === undefined) return
-  await refreshBand($)
-  if (!isGone && dropped.waits) $.ui.toast(`Step ${dropped.n}'s turn never ended; it waits, and /aside continue ends it and goes on${dropped.hint}.`)
+  if (dropped === undefined) {
+    return
+  }
+  await runEffects($, ctx, dropped.plan, dropped.does)
+  if (!isGone && dropped.outcome === 'waits') {
+    $.ui.toast(`Step ${dropped.n}'s turn never ended; it waits, and /aside continue ends it and goes on${dropped.hint}.`)
+  }
 }
 
 // The session ends: a turn of a step it runs never ends now.
