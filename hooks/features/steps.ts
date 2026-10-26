@@ -10,10 +10,10 @@ import type { Args, CatchHandler, EngineInterface as Engine, Hook } from 'claude
 
 import type { Plan, Step, StepState } from '../../types'
 import type { Context } from '../context'
-import { answerContext, closingPrompt, isSummingUp, readStepResult, stepMode, stepPrompt } from '../core/prompts'
-import { completed, decide, writeInto } from '../core/reduce'
+import { answerContext, closingPrompt, isSummingUp, stepMode, stepPrompt } from '../core/prompts'
+import { PLANNING_PAUSE, completed, decide, writeInto } from '../core/reduce'
 import type { Effect } from '../core/reduce'
-import { askedOf, awayWork, isAway, isWaiting, nextInRun, runOf, stepState, turnOf } from '../core/step'
+import { askedOf, awayWork, isAway, isWaiting, runOf, stepState, turnOf } from '../core/step'
 import { describeError, formatCount, formatDuration } from '../core/text'
 import { changePlan } from '../io/plan'
 import { readQueue } from '../io/queue'
@@ -70,8 +70,10 @@ async function releaseStep($: Engine, ctx: Context, index: number, why: string) 
 
 // What a step that never ran, or was cut short, adds to its message when /aside plan was to
 // organize the queue once it ended: that /aside plan does it now, if there is anything to.
+const ORGANIZE_HINT = '; /aside plan organizes the queue'
+
 export async function organizeHint($: Engine, active: Plan['active'] | undefined): Promise<string> {
-  return active?.isPlanningAfter && (await hasItems($)) ? '; /aside plan organizes the queue' : ''
+  return active?.isPlanningAfter && (await hasItems($)) ? ORGANIZE_HINT : ''
 }
 
 // With `isChain` the next step not done follows when this one ends, with `then` those steps in
@@ -99,6 +101,10 @@ export async function runEffects($: Engine, ctx: Context, plan: Plan, does: read
         break
       case 'sendStep':
         sendStep($, ctx, plan.steps, one.index, one.isChain, one.then, one.isClosing)
+        break
+      // Handed on to whoever ended the turn instead: the hand-over is out of this file's
+      // reach, which is what keeps its imports going one way (2.1).
+      case 'organize':
         break
     }
   }
@@ -338,88 +344,49 @@ export async function endSessionSteps(ctx: Context, $: Engine, e: SessionEnd[1],
   return next(e)
 }
 
-// Why a run waits after a step that /aside plan asked to organize the queue after.
-const PLANNING_PAUSE = 'to organize the queue'
+// What the turn's end hands on to whoever ended it, since only they can reach the hand-over.
+type Organize = Extract<Effect, { does: 'organize' }>
 
-// The turn of the step running here ends. A step that waits for the person stays open, as
-// whatever ended the turn, keeping its time and what it said so far, unless the turn took their
-// answer and Claude asked nothing again in it: it is then done, as any step after an answer; with /aside plan asked
-// meanwhile, the queue goes to Claude now, after an answer. A step that continue or stop ended
-// is done, as it stands when the turn was cut short. Any other step, after an answer, is done,
-// keeping what the answer said it did and how long it took by the clock, and the next one starts when
-// the plan runs as a chain; otherwise the plan stops there. The plan is read again as it is
-// changed, since a planner may have added steps since the turn's end read it, and the next step
-// is marked running in that same change, so nothing in between finds the run with no step. When
-// /aside plan asked during the step, and there is something to organize, the queue goes to
-// Claude now, and a run with steps left waits for it.
-export async function finishStep($: Engine, ctx: Context, e: TurnComplete[1]): Promise<{ isAdding: boolean } | undefined> {
+// The turn of the step running here ends, whatever ended it; where that leaves the step is
+// `turnEnded` in core/reduce.ts, and what the person reads of it is here. So is the one thing
+// the decision cannot see for itself: whether there is a queue for /aside plan to organize. The
+// plan is read again as it is changed, since a planner may have added steps since the turn's end
+// read it, and the step that follows is marked running in that same change, so nothing in
+// between finds the run with no step.
+export async function finishStep($: Engine, ctx: Context, e: TurnComplete[1]): Promise<Organize | undefined> {
   const me = await $.session.id()
   const now = await $.clock.now()
+  const isAnswer = e.reason === 'answer'
   const end = await changePlan($, async plan => {
-    const active = plan.active
-    if (!active || turnOf(active) !== e.turnId || active.sessionId !== me) {
+    const was = plan.active
+    // The queue is read for a step that asked for it to be organized and for no other, and
+    // before the move, which lets that request go with the turn it was asked in.
+    const canOrganize = was?.isPlanningAfter === true && (await hasItems($))
+    const out = decide(plan, { is: 'turnEnded', sessionId: me, turnId: e.turnId, isAnswer, ms: e.durationMs, answer: e.answer, now, canOrganize })
+    if (out.outcome === 'nothing') {
       return undefined
     }
-    const isAnswer = e.reason === 'answer'
-    const isPlanning = active.isPlanningAfter === true && (await hasItems($))
-    // Cut short, it organizes nothing, as any step's turn: the toast says /aside plan does.
-    const hint = isAnswer ? '' : await organizeHint($, active)
-    active.ms = (active.ms ?? 0) + e.durationMs
-    const result = isAnswer ? readStepResult(e.answer) : undefined
-    if (result !== undefined) active.result = result
-    // continue or stop ended the step: it is done when this turn ends, whatever ends it.
-    if (active.is === 'closing') {
-      completeStep(plan, active, me, false, now)
-      return { active, after: -1, isPausing: false, isPlanning: isPlanning && isAnswer, hint, steps: structuredClone(plan.steps) }
-    }
-    // The turn that took the person's answer ends the step, unless Claude asked again in it.
-    const isAnswered = isAnswer && active.is === 'answering'
-    const asked = askedOf(active)
-    if (asked !== undefined && !isAnswered) {
-      // The request to organize the queue goes with the turn it was asked in; a turn that took
-      // an answer before this one leaves the step asking for another.
-      const { isPlanningAfter: _isPlanningAfter, ...run } = runOf(active)
-      const isAgain = active.is === 'answering' || (active.is === 'asking' && active.isAnswered === true)
-      const back = stepState(isAgain ? { ...run, is: 'answered', pausedFor: asked } : { ...run, is: 'waiting', pausedFor: asked })
-      plan.active = back
-      return { active: back, after: -1, isPausing: false, isPlanning: isPlanning && isAnswer, hint, steps: structuredClone(plan.steps) }
-    }
-    // A turn of a step in the background cut short leaves it there, as one that waits.
-    if (!isAnswer && active.is === 'noticing') {
-      const away = stepState({ ...runOf(active), is: 'away' })
-      plan.active = away
-      return { active: away, after: -1, isPausing: false, isPlanning: false, hint, steps: structuredClone(plan.steps) }
-    }
-    if (!isAnswer) {
-      delete plan.active
-      return { active, after: -1, isPausing: false, isPlanning: false, hint, steps: plan.steps }
-    }
-    // Work in the background a turn of it started is still going: the step goes on there, and
-    // the turn that work's end brings ends it.
-    if ((active.background?.length ?? 0) > 0) {
-      const away = stepState({ ...runOf(active), is: 'away' })
-      plan.active = away
-      return { active: away, after: -1, isPausing: false, isPlanning: false, hint: '', steps: structuredClone(plan.steps) }
-    }
-    const after = nextInRun(plan.steps, active.step, active.isChain, active.then)
-    const isPausing = after >= 0 && isPlanning
-    completeStep(plan, active, me, !isPausing, now)
-    if (isPausing) plan.paused = { step: active.step, reason: PLANNING_PAUSE, isChain: active.isChain, ...(active.then ? { then: active.then } : {}) }
+    writeInto(plan, out.plan)
 
-    return { active, after, isPausing, isPlanning, hint: '', steps: structuredClone(plan.steps) }
+    return { was: structuredClone(was!), plan: structuredClone(out.plan), does: out.does, outcome: out.outcome, canOrganize }
   })
   if (end === undefined) {
     return undefined
   }
-  const { active, after, isPausing, isPlanning, hint, steps } = end
-  const n = active.step + 1
-  if (isAway(active)) {
+  const { was, plan, does, outcome, canOrganize } = end
+  const n = was.step + 1
+  await runEffects($, ctx, plan, does)
+  // Cut short, the step organizes nothing, as any step's turn: the toast says /aside plan does.
+  const hint = !isAnswer && canOrganize ? ORGANIZE_HINT : ''
+  const active = plan.active
+  if (active !== undefined && isAway(active)) {
+    const work = awayWork(active)
     $.ui.toast(
-      awayWork(active)
-        ? `Step ${n} goes on in the background (${awayWork(active)}); it ends once that work is done and Claude has answered it, or /aside continue ends it now.`
+      work
+        ? `Step ${n} goes on in the background (${work}); it ends once that work is done and Claude has answered it, or /aside continue ends it now.`
         : `Step ${n} waits for /aside continue, which ends it: its work in the background is done.`,
     )
-  } else if (isWaiting(active)) {
+  } else if (active !== undefined && isWaiting(active)) {
     // Asked of the state, not of a flag carried beside it: only a state that holds a question
     // can be read for one, so it can never come out as "undefined".
     $.ui.toast(
@@ -427,23 +394,15 @@ export async function finishStep($: Engine, ctx: Context, e: TurnComplete[1]): P
         ? `Step ${n} waits: answer again, and Claude's reply ends it, or /aside continue ends it now${hint}.`
         : `Step ${n} waits for your answer: ${active.pausedFor}. Answer as usual, and the step ends with Claude's reply; /aside continue ends it now${hint}.`,
     )
-  } else if (e.reason !== 'answer' && active.is !== 'closing') {
+  } else if (outcome === 'stopped') {
     $.ui.toast(`Plan stopped: step ${n} ${e.reason === 'aborted' ? 'was interrupted' : 'did not finish'}${hint}`)
-  } else if (isPausing) {
+  } else if (outcome === 'pausing') {
     $.ui.toast(`Plan paused after step ${n}: ${PLANNING_PAUSE}. /aside continue goes on.`)
-  } else if (after >= 0) {
-    sendStep($, ctx, steps, after, active.isChain, active.then?.slice(1))
-  } else if (steps.every(one => one.isDone)) {
-    $.ui.toast(`${doneText(steps)}${hint}`)
-  } else {
-    $.ui.toast(`Step ${n} done${hint}`)
+  } else if (outcome === 'done') {
+    $.ui.toast(`${plan.steps.every(one => one.isDone) ? doneText(plan.steps) : `Step ${n} done`}${hint}`)
   }
-  await refreshBand($)
 
-  // Whether the queue goes to Claude now, which the turn's end does: a plan with no step left
-  // to add after is organized afresh, as /aside plan would. The step's own work is over here,
-  // so what follows it is the caller's, not this function's.
-  return isPlanning ? { isAdding: steps.some(one => !one.isDone) } : undefined
+  return does.find((one): one is Organize => one.does === 'organize')
 }
 
 export type TurnComplete = Parameters<Hook<'turn.complete'>>
