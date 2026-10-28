@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.37.5 - 2026-10-28
 
 - Nothing changes in use: inside, everything the plugin asks of Claude Code - every call it makes, both atoms and every hook's handler - is bound in one file now, which is where Claude Code and the plugin directory both read what a plugin does.
 
