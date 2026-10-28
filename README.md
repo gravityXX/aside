@@ -143,19 +143,36 @@ Change these in `/config`:
 > [!IMPORTANT]
 > **The queue stays on your machine**, one per project, beside the global list and the named queues for ideas that belong to no project. Nothing reaches Claude's conversation until you run `/aside plan` or `/aside run`, or `afterClaudeAnswers` does. With `tidy` on, the text you type goes to Haiku to be corrected; what you copied never does. With `planModel` on a model, `/aside plan` sends the queue to that model in place of the conversation.
 
-<details>
-<summary>What <kbd>aside</kbd> reads, runs and sends</summary>
+## What <kbd>aside</kbd> reads, writes, runs and sends
 
-<br>
+<kbd>aside</kbd> opens no network connection of its own, installs nothing, and reads no credential, token or environment variable of yours.
 
-- **Keeps** the queue, the plan and what `/aside undo` brings back, one set per project, and the global list and the named queues, shared by all projects, in Claude Code's store for the plugin (`~/.claude/plugins/store/`). It writes a file only when you run `/aside export`, and never over one it did not write.
+- **Keeps** the queue, the plan and what `/aside undo` brings back, one set per project, and the global list and the named queues, shared by all projects, in Claude Code's store for the plugin (`~/.claude/plugins/store/`).
+- **Writes** one file, and only when you run `/aside export`: the path you name, and never over a file that `/aside export` did not write. It writes no build, start-up, settings or instructions file - not `CLAUDE.md`, not `settings.json`, not a lockfile, nothing of Claude Code's own - and changes no file in your project.
 - **Reads** `<!-- ? -->` tags in markdown files Claude wrote or edited this session, or that you `/aside scan`; for a comment, the clipboard, the lines you selected in Claude's reply, the last tool output and the project's markdown files; the project's git branch.
-- **Runs** a clipboard reader (`powershell.exe` on WSL and Windows, `pbpaste` on macOS, `wl-paste`, `xclip` or `xsel` on Linux), `git rev-parse --abbrev-ref HEAD`, and `grep -rlizP` over the project's markdown files.
-- **Sends** the entries to Claude only on `/aside plan`, `/aside run` or `afterClaudeAnswers`, with what you copied, and to the model `planModel` names instead on `/aside plan`; while `tidy` is on, the text you typed goes to Haiku through Claude Code, never what you copied.
+- **Runs** three programs, each for one job:
+  - a **clipboard reader**, so that a comment keeps the quote you copied without a paste: `powershell.exe -NoProfile -NonInteractive -Command "[Console]::OutputEncoding=[Text.Encoding]::UTF8; Get-Clipboard -Raw"` on Windows and WSL, `pbpaste` on macOS, and `wl-paste --no-newline --type text`, `xclip -selection clipboard -out` or `xsel --clipboard --output` on Linux. The first one that works is kept for the session;
+  - **`git -C <project> rev-parse --abbrev-ref HEAD`**, to name the branch an entry was queued on;
+  - **`grep -rlizP --include=*.md --include=*.markdown --include=*.mdx --exclude-dir=node_modules -e <words of the quote> <project>`**, to find the markdown file a copied quote came from. Where that grep is missing, it walks the files through Claude Code instead.
+- **Puts in the prompt box** only what you asked for: `/aside pop N` fills the box with that entry as you wrote it, and queuing with `+` empties the box it took the entry from.
+- **Submits** one prompt per step of a plan you ran, and nothing else. `/aside run` and `/aside run all` send the step's prompt - the text `/aside plan` made from your own entries - to Claude in this session, as if you had typed it.
+- **Sends** nothing off your machine by itself. Three things leave the plugin, all through Claude Code: the step's prompt, to Claude in your session; with `tidy` on, the text you typed, to Haiku, to have its spelling and wording fixed, never what you copied; with `planModel` set to a model, the queue, to that model, to be organized into steps. There is no other way out: no HTTP call, no socket, no telemetry.
 
-<kbd>aside</kbd> opens no network connection of its own and installs nothing.
+### What its hooks do
 
-</details>
+| It listens on | and |
+| - | - |
+| `session.start` | registers the `/aside` command and this plugin's two tools, and loads this project's queue |
+| `prompt.submit` | takes a message that starts or ends with `+` into the queue instead of sending it; otherwise reads your reply as the answer to a step that waits, and a background task's notification as the end of the work a step left running |
+| `prompt.change` | empties the prompt box once an entry has been queued from it |
+| `prompt.autocomplete` | completes `/aside`'s subcommands and your queue names |
+| `tool.call` | keeps the last tool output, so that a comment can quote it; notes work left running by `Workflow`, `Agent`, `Bash` or `TaskStop`; remembers a markdown file `Write` or `Edit` touched, to scan for tags; takes the plan from this plugin's own two tools |
+| `turn.start`, `turn.complete` | binds a turn to the step running, and moves the step on when that turn ends |
+| `session.end` | leaves a step that was running waiting for you, rather than lost |
+| `command.run` | runs `/aside` |
+| `ui.render` | draws the line above the prompt, the pane, the frame around a listing and the plan tool's own output |
+
+The two tools whose names end in `__plan` and `__wait` are this plugin's own, registered at `session.start`; <kbd>aside</kbd> calls into no other plugin.
 
 ## Contributing
 
