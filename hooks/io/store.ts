@@ -1,42 +1,31 @@
-// The project's own records, and the two atoms a drawing reads. The atoms are read and written
-// only here, since the engine ties one to the file that makes it (3.6).
-
-import { atom, read, update } from 'claude-code'
-import type { EngineInterface as Engine } from 'claude-code'
+// The project's own records, and what the line above the prompt shows. The two atoms behind it
+// are made in register.tsx, where `$` is, since the engine ties an atom to the file that makes
+// it (3.6); here they are four calls on the kit like any other.
 
 import type { Band, Entry, PastRun, Plan, StoredPlan } from '../../types'
 import { isAway, isWaiting, readActive, storedActive } from '../core/step'
 import { canonicalPath, pathKey } from '../core/text'
+import type { Kit } from '../kit'
 import { countQueues, GLOBAL, isHiddenHere, queueName } from './queues'
 
-const EMPTY_BAND: Band = { ideas: 0, comments: 0, tags: 0, steps: 0, done: 0 }
-
-// What the line above the prompt shows, kept up to date by refreshBand.
-const band = atom({ plugin: 'aside', key: 'band' } as const, EMPTY_BAND)
-
-// The markdown files /aside reads tags from, newest last: those written or edited in this
-// session, agents' included, and those /aside scan added.
-const trackedFiles = atom({ plugin: 'aside', key: 'files' } as const, [])
-
-// The atoms are read here, where they are made: the engine reads only an atom of the reading file.
-// A drawing that reads one through these is drawn again when it changes.
-export function readBand($: Engine): Promise<Band> {
-  return read($, band)
+// A drawing that reads an atom through these is drawn again when it changes.
+export function readBand($: Kit): Promise<Band> {
+  return $.atoms.band()
 }
 
 // The list holds each file once, by pathKey, in the spelling it was last tracked under. One
 // kept before it did may hold a Windows file twice, and comes back with the newest of the two.
-export async function readTrackedFiles($: Engine): Promise<string[]> {
-  const files = (await read($, trackedFiles)).map(file => canonicalPath(file))
+export async function readTrackedFiles($: Kit): Promise<string[]> {
+  const files = (await $.atoms.files()).map(file => canonicalPath(file))
   const keys = files.map(file => pathKey(file))
 
   return files.filter((file, i) => keys.indexOf(keys[i]!, i + 1) === -1)
 }
 
-export function trackFile($: Engine, path: string) {
+export function trackFile($: Kit, path: string) {
   const own = canonicalPath(path)
 
-  return update($, trackedFiles, list => [...list.filter(file => pathKey(file) !== pathKey(own)), own].slice(-100))
+  return $.atoms.setFiles(list => [...list.filter(file => pathKey(file) !== pathKey(own)), own].slice(-100))
 }
 
 // Everything belongs to the project: each root keeps its own queue and plan.
@@ -55,7 +44,7 @@ export type Keys = {
 
 // `root` is spelled as canonicalPath spells files, to compare them with; the keys keep the
 // engine's own spelling, under which earlier releases stored the queue.
-export async function projectKeys($: Engine): Promise<Keys> {
+export async function projectKeys($: Kit): Promise<Keys> {
   const root = await $.session.root()
 
   return {
@@ -74,7 +63,7 @@ export async function projectKeys($: Engine): Promise<Keys> {
 // The entries stored under `key`, as earlier releases stored them too, an entry with no kind
 // being an idea. Features read the project queue through readQueue in io/queue.ts and change it
 // only there, which alone stores lists of entries.
-export async function loadEntries($: Engine, key: string): Promise<Entry[]> {
+export async function loadEntries($: Kit, key: string): Promise<Entry[]> {
   const value = await $.store.get(key)
 
   return Array.isArray(value) ? (value as Entry[]).map(entry => ({ ...entry, kind: entry.kind ?? 'idea' })) : []
@@ -83,7 +72,7 @@ export async function loadEntries($: Engine, key: string): Promise<Entry[]> {
 // The plan as the features read it: the step running as a state (readActive), not as the flags
 // the store holds. The record itself is left as it is, so a session of an earlier release on
 // this machine reads it unchanged (2.7).
-export async function loadPlan($: Engine, key: string): Promise<Plan> {
+export async function loadPlan($: Kit, key: string): Promise<Plan> {
   const value = (await $.store.get(key)) as StoredPlan | undefined
   if (!value || !Array.isArray(value.steps)) {
     return { steps: [] }
@@ -93,7 +82,7 @@ export async function loadPlan($: Engine, key: string): Promise<Plan> {
   return active ? { ...rest, active: readActive(active) } : rest
 }
 
-export async function savePlan($: Engine, key: string, plan: Plan) {
+export async function savePlan($: Kit, key: string, plan: Plan) {
   if (plan.steps.length === 0) {
     await $.store.delete(key)
   } else {
@@ -117,7 +106,7 @@ const fingerprint = (run: PastRun) => {
 // it held, so sessions that end plans at once never write over each other's, and saving the same
 // plan again, as a save that failed half-way and is made again, keeps one. The oldest beyond the
 // last RUNS_KEPT go.
-export async function saveRun($: Engine, prefix: string, run: PastRun, stamp = run.at) {
+export async function saveRun($: Kit, prefix: string, run: PastRun, stamp = run.at) {
   await $.store.set(`${prefix}${stamp}:${fingerprint(run)}`, run)
   const keys = (await $.store.keys()).filter(key => key.startsWith(prefix))
   const oldest = keys.sort((a, b) => b.localeCompare(a, undefined, { numeric: true })).slice(RUNS_KEPT)
@@ -128,7 +117,7 @@ const isPastRun = (value: unknown): value is PastRun =>
   typeof value === 'object' && value !== null && typeof (value as PastRun).at === 'number' && Array.isArray((value as PastRun).steps)
 
 // The plans in the log, the one that ended last first.
-export async function loadRuns($: Engine, prefix: string): Promise<PastRun[]> {
+export async function loadRuns($: Kit, prefix: string): Promise<PastRun[]> {
   const runs: { key: string; run: PastRun }[] = []
   for (const key of (await $.store.keys()).filter(one => one.startsWith(prefix))) {
     const value = await $.store.get(key)
@@ -159,7 +148,7 @@ const respellTagIds = (stored: unknown): string[] => {
 
 // The tagIds stored under `key`, as tagId makes them now: the tags an earlier /aside already
 // handed over, or those a take holds.
-export async function loadTagIds($: Engine, key: string): Promise<string[]> {
+export async function loadTagIds($: Kit, key: string): Promise<string[]> {
   return respellTagIds(await $.store.get(key))
 }
 
@@ -167,23 +156,23 @@ export async function loadTagIds($: Engine, key: string): Promise<string[]> {
 // name `idea` that stored records already have.
 export type Editing = { index: number; idea: Entry }
 
-export function saveEditing($: Engine, key: string, editing: Editing) {
+export function saveEditing($: Kit, key: string, editing: Editing) {
   return $.store.set(key, editing)
 }
 
 // The entry being edited, if any. The next message that is stored takes it (forgetEditing),
 // so a message that fails to store leaves it for the one after.
-export async function loadEditing($: Engine, key: string): Promise<Editing | undefined> {
+export async function loadEditing($: Kit, key: string): Promise<Editing | undefined> {
   return (await $.store.get(key)) as Editing | undefined
 }
 
-export function forgetEditing($: Engine, key: string) {
+export function forgetEditing($: Kit, key: string) {
   return $.store.delete(key)
 }
 
 // Counts what waits and where the plan is, for the line above the prompt. The tags are
 // counted only when `tagCount` is given, since that takes reading the files.
-export async function refreshBand($: Engine, tagCount?: number): Promise<Band> {
+export async function refreshBand($: Kit, tagCount?: number): Promise<Band> {
   const keys = await projectKeys($)
   const list = await loadEntries($, keys.queue)
   const plan = await loadPlan($, keys.plan)
@@ -198,7 +187,7 @@ export async function refreshBand($: Engine, tagCount?: number): Promise<Band> {
   const next: Band = {
     ideas,
     comments: list.length - ideas,
-    tags: tagCount ?? (await read($, band)).tags,
+    tags: tagCount ?? (await $.atoms.band()).tags,
     steps: plan.steps.length,
     done: plan.steps.filter(step => step.isDone).length,
     ...(plan.active && !isWaiting(plan.active) ? { running: plan.active.step + 1 } : {}),
@@ -208,7 +197,7 @@ export async function refreshBand($: Engine, tagCount?: number): Promise<Band> {
     ...(global > 0 ? { global } : {}),
     ...(named.length > 0 ? { named } : {}),
   }
-  await update($, band, () => next)
+  await $.atoms.setBand(next)
 
   return next
 }

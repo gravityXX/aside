@@ -2,8 +2,6 @@
 // idea rather than as one list (3.17), so these are not the commands in `queue` under another
 // key: a move places an idea between its neighbours, and a clear is a record per session.
 
-import type { EngineInterface as Engine } from 'claude-code'
-
 import type { Entry } from '../../types'
 import type { Context } from '../context'
 import { inOrder, isSameEntry, withoutEntries } from '../core/entries'
@@ -15,6 +13,7 @@ import { changeQueue } from '../io/queue'
 import { refreshBand } from '../io/store'
 import { GLOBAL, NAME_PATTERN, addIdeas, countQueues, forgetCleared, forgetGlobalIdeas, isHiddenHere, isLocalQueue, loadCleared, loadIdeas, moveSessionRecords, queueName, rankOf, resolveQueue, restoreIdea, saveCleared, saveGlobalEditing, saveGlobalIdea } from '../io/queues'
 import type { GlobalIdea } from '../io/queues'
+import type { Kit } from '../kit'
 import { addEntries } from './capture'
 import { importFile } from './importing'
 import { showWhileWorking } from './queue'
@@ -30,7 +29,7 @@ const emptyOf = (name: string) =>
   name === GLOBAL ? 'The global list is empty. Start a message with "+g" to add an idea to it.' : `${nameOf(name)} is empty. Start a message with "${markOf(name)}" to add an idea to it.`
 
 // A queue as /aside q NAME numbers it, in the order setting.
-async function shownIdeas($: Engine, ctx: Context, name: string): Promise<GlobalIdea[]> {
+async function shownIdeas($: Kit, ctx: Context, name: string): Promise<GlobalIdea[]> {
   const ideas = await loadIdeas($, name)
 
   return ctx.settings.order === 'newest' ? ideas.reverse() : ideas
@@ -41,7 +40,7 @@ const sayIdeas = (done: string, entries: readonly Entry[]) =>
   entries.length === 1 ? `${done}: ${shortenText(entries[0]!.text, 60)}` : `${done} ${formatCount(entries.length, 'idea')}: ${entries.map(entry => shortenText(entry.text, 40)).join('; ')}`
 
 // The ideas of queue `name`, as /aside g or /aside q NAME lists them, and the list pane too.
-export async function queueListed($: Engine, ctx: Context, name: string): Promise<Listed> {
+export async function queueListed($: Kit, ctx: Context, name: string): Promise<Listed> {
   const ideas = await shownIdeas($, ctx, name)
   if (ideas.length === 0) {
     return emptyOf(name)
@@ -50,17 +49,17 @@ export async function queueListed($: Engine, ctx: Context, name: string): Promis
   return { sections: [namedSection(queueName(name), ideas.map(idea => idea.entry), isLocalQueue(name))] }
 }
 
-async function showQueue($: Engine, ctx: Context, name: string): Promise<string> {
+async function showQueue($: Kit, ctx: Context, name: string): Promise<string> {
   return showWhileWorking($, ctx, { kind: 'named', typed: queueName(name) }, await queueListed($, ctx, name), nameOf(name))
 }
 
 // /aside q: every queue of no project that holds an idea, in the order countQueues gives.
-async function showQueues($: Engine, ctx: Context): Promise<string> {
+async function showQueues($: Kit, ctx: Context): Promise<string> {
   return showWhileWorking($, ctx, { kind: 'queues' }, await queuesListed($), 'the queues')
 }
 
 // The queues as /aside q lists them, and the list pane too.
-export async function queuesListed($: Engine): Promise<Listed> {
+export async function queuesListed($: Kit): Promise<Listed> {
   const queues = await countQueues($)
   if (queues.length === 0) {
     return 'The global list and the named queues are empty. Start a message with "+@work" to add an idea to the queue work, or with "+g" to the global list.'
@@ -82,7 +81,7 @@ export async function queuesListed($: Engine): Promise<Listed> {
 // project's queue first, so a failure between the writes leaves an idea in both, never in neither.
 // The queue is read in the change's turn on its chain, so a tidy reply on its way meanwhile is
 // stored before it, not over it.
-async function moveHere($: Engine, ctx: Context, name: string, numbers: readonly number[]): Promise<string> {
+async function moveHere($: Kit, ctx: Context, name: string, numbers: readonly number[]): Promise<string> {
   const ideas = await shownIdeas($, ctx, name)
   if (ideas.length === 0) {
     return emptyOf(name)
@@ -108,7 +107,7 @@ async function moveHere($: Engine, ctx: Context, name: string, numbers: readonly
 // /aside q NAME add N ...: ideas from this project's queue to the end of a queue of no project,
 // onto it first, for the same reason, within the change that takes them out of the queue, so
 // the numbers are read against the queue as that change finds it. A comment stays in the queue.
-async function moveToQueue($: Engine, ctx: Context, name: string, numbers: readonly number[]): Promise<string> {
+async function moveToQueue($: Kit, ctx: Context, name: string, numbers: readonly number[]): Promise<string> {
   const { text, isMoved } = await changeQueue($, async stored => {
     const list = inOrder(stored, ctx.settings.order)
     if (list.length === 0) {
@@ -137,7 +136,7 @@ async function moveToQueue($: Engine, ctx: Context, name: string, numbers: reado
   return text
 }
 
-async function removeIdeas($: Engine, ctx: Context, name: string, numbers: readonly number[]): Promise<string> {
+async function removeIdeas($: Kit, ctx: Context, name: string, numbers: readonly number[]): Promise<string> {
   const ideas = await shownIdeas($, ctx, name)
   if (ideas.length === 0) {
     return emptyOf(name)
@@ -157,7 +156,7 @@ async function removeIdeas($: Engine, ctx: Context, name: string, numbers: reado
 // idea is still there, such as the record of the place an idea out for editing goes back to, so
 // a failure between the two writes keeps it in both rather than in neither.
 async function takeIdeaIntoBox(
-  $: Engine,
+  $: Kit,
   ctx: Context,
   name: string,
   n: number,
@@ -185,7 +184,7 @@ async function takeIdeaIntoBox(
 
 // /aside q NAME pop [N]: the idea in the prompt box, ready to send, and off its queue once it
 // is there; the first one unless named.
-async function popIdea($: Engine, ctx: Context, name: string, n?: number): Promise<string> {
+async function popIdea($: Kit, ctx: Context, name: string, n?: number): Promise<string> {
   return takeIdeaIntoBox($, ctx, name, n ?? 1, idea => ({
     typed: idea.entry.text,
     said: `In the prompt box, ready to send: ${shortenText(idea.entry.text, 60)}`,
@@ -195,7 +194,7 @@ async function popIdea($: Engine, ctx: Context, name: string, n?: number): Promi
 // /aside q NAME edit N: as /aside edit does for the queue, the idea leaves its queue for the
 // prompt box with its mark, "+@work idea", and the next message that is one such idea takes its
 // place again, or moves it to the queue it names.
-async function editIdea($: Engine, ctx: Context, name: string, n: number): Promise<string> {
+async function editIdea($: Kit, ctx: Context, name: string, n: number): Promise<string> {
   const which = name === GLOBAL ? `Global idea ${n}` : `Idea ${n} of ${nameOf(name)}`
 
   return takeIdeaIntoBox($, ctx, name, n, idea => ({
@@ -209,7 +208,7 @@ async function editIdea($: Engine, ctx: Context, name: string, n: number): Promi
 // neighbours, so other sessions adding meanwhile are left alone. Neighbours too close to
 // leave room between them are placed again, one after another, so the order shown is the
 // order stored.
-async function moveIdea($: Engine, ctx: Context, name: string, from: number, to: number): Promise<string> {
+async function moveIdea($: Kit, ctx: Context, name: string, from: number, to: number): Promise<string> {
   const ideas = await shownIdeas($, ctx, name)
   if (ideas.length < 2) {
     return 'Nothing to move.'
@@ -239,7 +238,7 @@ async function moveIdea($: Engine, ctx: Context, name: string, from: number, to:
 
 // /aside q NAME clear: what the queue holds is kept for /aside q NAME undo first, and its ideas
 // deleted after, so a failure between the writes loses nothing.
-async function clearQueue($: Engine, name: string): Promise<string> {
+async function clearQueue($: Kit, name: string): Promise<string> {
   const ideas = await loadIdeas($, name)
   if (ideas.length === 0) {
     return emptyOf(name)
@@ -254,7 +253,7 @@ async function clearQueue($: Engine, name: string): Promise<string> {
 // /aside q NAME undo: what this session's last clear of that queue took, back under the keys it
 // had while they are free; each idea's record goes as soon as it is back, so an undo cut short,
 // run again, brings each idea back once.
-async function undoClear($: Engine, name: string): Promise<string> {
+async function undoClear($: Kit, name: string): Promise<string> {
   const cleared = await loadCleared($, name)
   if (cleared.length === 0) {
     return `Nothing to bring back to ${nameOf(name)}.`
@@ -272,7 +271,7 @@ async function undoClear($: Engine, name: string): Promise<string> {
 // /aside q NAME rename NEW: every idea to the queue NEW, which may hold ideas already and then
 // holds both, in the order their places give. Each is written there first and taken from here
 // after, so a failure between leaves an idea in both, and running it again moves the rest.
-async function renameQueue($: Engine, name: string, to: string): Promise<string> {
+async function renameQueue($: Kit, name: string, to: string): Promise<string> {
   if (name === GLOBAL) {
     return `The global list keeps its name; /aside g here N ... moves its ideas into this queue.`
   }
@@ -315,7 +314,7 @@ const isNumbers = (words: readonly string[]) => words.length > 0 && words.every(
 // alone, or this project's goes to every project, joining the queue of its name there; so a
 // queue this project's own hides here is taken in too. Each idea is written there first and taken
 // from here after, so a failure between leaves it in both, and running it again moves the rest.
-async function setScope($: Engine, name: string, isLocal: boolean): Promise<string> {
+async function setScope($: Kit, name: string, isLocal: boolean): Promise<string> {
   const typed = queueName(name)
   if (name === GLOBAL) {
     return 'The global list is for every project; /aside q NAME local keeps a named queue for this one.'
@@ -346,7 +345,7 @@ async function setScope($: Engine, name: string, isLocal: boolean): Promise<stri
 
 // /aside q NAME ...: a command on that queue when the words have its shape, else an idea for it,
 // as "+@NAME TEXT" would.
-async function runQueue($: Engine, ctx: Context, name: string, args: readonly string[]): Promise<string> {
+async function runQueue($: Kit, ctx: Context, name: string, args: readonly string[]): Promise<string> {
   const [first, ...rest] = args
   const verb = first?.toLowerCase()
   const numbers = rest.map(Number)
@@ -391,13 +390,13 @@ async function runQueue($: Engine, ctx: Context, name: string, args: readonly st
 }
 
 // /aside g ...: the same commands on the global list.
-export async function runGlobal($: Engine, ctx: Context, args: readonly string[]): Promise<string> {
+export async function runGlobal($: Kit, ctx: Context, args: readonly string[]): Promise<string> {
   return runQueue($, ctx, GLOBAL, args)
 }
 
 // /aside q [NAME ...]: the queues for no project, or one of them, by its name with or without
 // its "@", in any letter case.
-export async function runNamed($: Engine, ctx: Context, args: readonly string[]): Promise<string> {
+export async function runNamed($: Kit, ctx: Context, args: readonly string[]): Promise<string> {
   const [first, ...rest] = args
   if (first === undefined) {
     return showQueues($, ctx)

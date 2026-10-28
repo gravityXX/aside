@@ -2,8 +2,6 @@
 // own, and the small model that names a step made of a long entry. Both answer outside any turn,
 // so both check that what they were given is still there before anything is saved (3.16).
 
-import type { EngineInterface as Engine } from 'claude-code'
-
 import type { Entry, Plan, Step } from '../../types'
 import type { Asker, Context, PlanModel } from '../context'
 import { describeCount, leftOutSection, listingText, planSection } from '../core/listing'
@@ -14,15 +12,15 @@ import { changePlan } from '../io/plan'
 import { readQueue, takePlanned } from '../io/queue'
 import { loadPlan, loadTagIds, projectKeys, refreshBand, tagId } from '../io/store'
 import type { Keys } from '../io/store'
+import type { Kit } from '../kit'
 import { parseSteps, parseUnclear, savePlanSteps } from './plantool'
 import { openListPane, tagsInFiles } from './queue'
 import { runningHere } from './steps'
 
-
 // A title for each of `named`, from the small model reading the text typed alone, never what
 // was copied, as tidying does. A step keeps the one it has when no reply comes in time, or when
 // the plan no longer holds it, under that title, by then.
-async function nameSteps($: Engine, ctx: Context, named: readonly { step: Step; text: string }[]): Promise<void> {
+async function nameSteps($: Kit, ctx: Context, named: readonly { step: Step; text: string }[]): Promise<void> {
   for (const { step, text } of named) {
     const reply = await $.model
       .complete({ model: 'haiku', system: TITLE_SYSTEM, prompt: tidyPrompt(text), maxTokens: 100, timeoutMs: 10_000 })
@@ -38,7 +36,7 @@ async function nameSteps($: Engine, ctx: Context, named: readonly { step: Step; 
 }
 
 // Names them in the background, where /aside idle waits for tidying too.
-function nameLater($: Engine, ctx: Context, named: readonly { step: Step; text: string }[]) {
+function nameLater($: Kit, ctx: Context, named: readonly { step: Step; text: string }[]) {
   if (!ctx.settings.tidy || named.length === 0) return
   const work = nameSteps($, ctx, named).catch(() => undefined)
   ctx.session.tidies.add(work)
@@ -46,7 +44,7 @@ function nameLater($: Engine, ctx: Context, named: readonly { step: Step; text: 
 }
 
 // The steps made of an entry whose text is long, once the run has started.
-export function nameStepsLater($: Engine, ctx: Context, steps: readonly Step[], entries: readonly Entry[]) {
+export function nameStepsLater($: Kit, ctx: Context, steps: readonly Step[], entries: readonly Entry[]) {
   nameLater(
     $,
     ctx,
@@ -60,7 +58,7 @@ export function nameStepsLater($: Engine, ctx: Context, steps: readonly Step[], 
 // in this process, whatever the model answers.
 const OLD_CUT = / \((?:while you worked on .*|branch [^)]*)\)$/
 
-export async function nameOldSteps($: Engine, ctx: Context): Promise<void> {
+export async function nameOldSteps($: Kit, ctx: Context): Promise<void> {
   const plan = await loadPlan($, (await projectKeys($)).plan)
   const named = plan.steps.flatMap(step => {
     const start = step.title.slice(0, -1).trimEnd()
@@ -74,7 +72,7 @@ export async function nameOldSteps($: Engine, ctx: Context): Promise<void> {
 const PLANNER_NAMES: Record<Exclude<PlanModel, 'session'>, string> = { sonnet: 'Sonnet', haiku: 'Haiku', opus: 'Opus' }
 
 // Why a planner's call gave no plan, in a few words.
-const describeNoPlan = (reply: Awaited<ReturnType<Engine['model']['complete']>> | string): string => {
+const describeNoPlan = (reply: Awaited<ReturnType<Kit['model']['complete']>> | string): string => {
   if (typeof reply === 'string') {
     return reply
   }
@@ -93,7 +91,7 @@ const describeNoPlan = (reply: Awaited<ReturnType<Engine['model']['complete']>> 
 
 // Whether the queue still holds what a planner was given: every entry in it as it was, and no
 // tag handed over since. The plan is checked as it is saved (savePlanSteps).
-async function isAsGiven($: Engine, keys: Keys, items: readonly Entry[]): Promise<boolean> {
+async function isAsGiven($: Kit, keys: Keys, items: readonly Entry[]): Promise<boolean> {
   // In the order the store keeps: only whether each entry is there counts.
   const queue = await readQueue($, 'oldest')
   const handed = new Set(await loadTagIds($, keys.handed))
@@ -110,7 +108,7 @@ async function isAsGiven($: Engine, keys: Keys, items: readonly Entry[]): Promis
 // planner adds to the plan, which may then go on meanwhile: a step ending, the next one
 // starting, a pause or a stop change nothing it was given. One planner at a time, set before
 // anything is awaited, so two quick asks never both run.
-export async function planOutside($: Engine, ctx: Context, model: Exclude<PlanModel, 'session'>, asker: Asker): Promise<string> {
+export async function planOutside($: Kit, ctx: Context, model: Exclude<PlanModel, 'session'>, asker: Asker): Promise<string> {
   const name = PLANNER_NAMES[model]
   if (ctx.session.planner) {
     return `${PLANNER_NAMES[ctx.session.planner]} is still organizing the queue.`

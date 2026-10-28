@@ -1,13 +1,14 @@
 // The line above the prompt. It reads the band atom and draws it, deciding nothing: what it
 // shows was counted in io/store.ts.
 
-import type { EngineInterface as Engine, MatchedHook } from 'claude-code'
+import type { MatchedHook } from 'claude-code'
 
 import type { Context } from '../context'
 import { describeError, formatCount, formatProgress } from '../core/text'
 import { runPlan, stopPlan } from '../features/plan'
 import { toggleListPane } from '../features/queue'
 import { readBand } from '../io/store'
+import type { Kit } from '../kit'
 import { isDrawnOn } from './rows'
 
 type Action = 'stop' | 'continue' | 'run plan'
@@ -16,7 +17,7 @@ type Action = 'stop' | 'continue' | 'run plan'
 // hook, and a stop is applied at once rather than when the turn ends. Continue and run plan
 // are both /aside run all: it ends a step that waits and goes on, goes on with a paused run, or
 // starts one.
-async function pressAction($: Engine, ctx: Context, action: Action) {
+async function pressAction($: Kit, ctx: Context, action: Action) {
   try {
     const said = action === 'stop' ? await stopPlan($, ctx) : await runPlan($, ctx)
     if (said !== undefined) $.ui.toast(said)
@@ -30,7 +31,7 @@ async function pressAction($: Engine, ctx: Context, action: Action) {
 // person or a run is paused, run plan while steps are left.
 type BandRender = Parameters<MatchedHook<'ui.render', { readonly component: 'AbovePrompt' }>>
 
-export async function drawBand(ctx: Context, $: Engine, e: BandRender[1], next: BandRender[2]) {
+export async function drawBand(ctx: Context, $: Kit, e: BandRender[1], next: BandRender[2]) {
   const now = await readBand($)
   const waiting = now.ideas + now.comments + now.tags
   const left = now.steps - now.done

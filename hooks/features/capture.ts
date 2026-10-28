@@ -2,7 +2,7 @@
 // person reads back. The slow part, the clipboard and git, runs before the queue is read and
 // never while it is held (2.9).
 
-import type { CatchHandler, EngineInterface as Engine, Hook } from 'claude-code'
+import type { CatchHandler, Hook } from 'claude-code'
 
 import type { Band, Entry } from '../../types'
 import { currentOutput } from '../context'
@@ -20,13 +20,14 @@ import { changeQueue, changeQueueAfter } from '../io/queue'
 import { forgetEditing, loadEditing, projectKeys, readTrackedFiles, refreshBand, trackFile } from '../io/store'
 import { GLOBAL, addIdeas, countQueues, forgetGlobalEditing, forgetGlobalIdeas, isLocalQueue, isOut, loadGlobalEditing, loadIdeas, queueName, queueOf, resolveQueue, restoreIdea, saveGlobalIdea } from '../io/queues'
 import type { GlobalIdea } from '../io/queues'
+import type { Kit } from '../kit'
 
 // The tools whose output a comment may be about when nothing else says so; any error counts.
 const OUTPUT_TOOLS = new Set(['Bash', 'Edit', 'Write', 'NotebookEdit'])
 
 // The text selected in one transcript row: one in the prompt box or a pane is not about
 // Claude's output.
-function readReplySelection($: Engine): Promise<string> {
+function readReplySelection($: Kit): Promise<string> {
   return $.ui.selection().then(one => (one?.requestId ? one.text.trim() : ''), () => '')
 }
 
@@ -34,7 +35,7 @@ function readReplySelection($: Engine): Promise<string> {
 // The clipboard and the selection are read at most once per message, and a file at most once,
 // however many comments the message holds.
 function commentSources(
-  $: Engine,
+  $: Kit,
   ctx: Context,
   root: string,
   seen: readonly string[],
@@ -116,7 +117,7 @@ type Listed = { list: string; entry: Entry }
 // idea, sent while an idea is out with /aside q edit, takes that idea's place when it names the
 // same queue, and moves it to the queue it names otherwise; the record goes once it is back.
 // All of them or none: should a write fail, those already written are taken back.
-async function storeListed($: Engine, ideas: readonly Listed[], isSingle: boolean): Promise<GlobalIdea[]> {
+async function storeListed($: Kit, ideas: readonly Listed[], isSingle: boolean): Promise<GlobalIdea[]> {
   if (ideas.length === 0) {
     return []
   }
@@ -158,7 +159,7 @@ const reportListed = (ideas: readonly Listed[], band: Band, isNew: (list: string
   })
 
 // A tidied text from the small model, or undefined when none comes in time.
-async function askTidy($: Engine, text: string): Promise<string | undefined> {
+async function askTidy($: Kit, text: string): Promise<string | undefined> {
   if (text.trim() === '') {
     return undefined
   }
@@ -170,7 +171,7 @@ async function askTidy($: Engine, text: string): Promise<string | undefined> {
 
 // An idea's text in a queue of no project, tidied as an entry's is, unless the idea has left
 // its queue or changed meanwhile.
-async function tidyGlobalIdea($: Engine, idea: GlobalIdea): Promise<void> {
+async function tidyGlobalIdea($: Kit, idea: GlobalIdea): Promise<void> {
   const fixed = await askTidy($, idea.entry.text)
   if (fixed === undefined) {
     return
@@ -190,7 +191,7 @@ async function tidyGlobalIdea($: Engine, idea: GlobalIdea): Promise<void> {
 // the reply comes, and keeps that text when none comes in time or the entry has left the
 // queue by then. The edit box gets the tidied text too, with its mark and place as typed.
 // It resolves once the tidied text is stored, so a planner that waits for it reads that text.
-async function tidyEntry($: Engine, entry: Entry): Promise<void> {
+async function tidyEntry($: Kit, entry: Entry): Promise<void> {
   const fixed = await askTidy($, entry.text)
   if (fixed === undefined) {
     return
@@ -214,7 +215,7 @@ type Report = 'log' | 'none'
 // Stores what a message (or /aside TEXT) holds and says what was queued and where it
 // points, or returns null when the text is no entry at all.
 export async function addEntries(
-  $: Engine,
+  $: Kit,
   ctx: Context,
   text: string,
   task: string | undefined,
@@ -312,7 +313,7 @@ export async function addEntries(
 // deleted by hand. The engine's put-back raises prompt.change, which empties the box at
 // once (emptyBoxAfterQueue); this timer is the fallback. Either empties it only while it
 // still holds exactly that message, so a new draft typed meanwhile is left alone.
-function emptyBoxLater($: Engine, ctx: Context, typed: string) {
+function emptyBoxLater($: Kit, ctx: Context, typed: string) {
   ctx.session.justQueued = typed
   $.clock.after(30, async () => {
     // Emptied already, or given back because it could not be stored.
@@ -331,7 +332,7 @@ const isTypedMessage = (e: { origin: { kind: string }; command?: unknown }) => (
 // the selection is read now, before it goes away.
 type Submit = Parameters<Hook<'prompt.submit'>>
 
-export async function queueTyped(ctx: Context, $: Engine, e: Submit[1], next: Submit[2]) {
+export async function queueTyped(ctx: Context, $: Kit, e: Submit[1], next: Submit[2]) {
   const entries = isTypedMessage(e) ? parseEntries(e.text) : null
   if (entries === null) {
     if (isTypedMessage(e) && e.text.trim() !== '') ctx.session.lastTask = shortenText(e.text, 200)
@@ -361,7 +362,7 @@ export async function queueTyped(ctx: Context, $: Engine, e: Submit[1], next: Su
 
 // A typed entry that could not be stored goes back into the prompt box when the box is empty,
 // so nothing typed is lost; with a new draft there, the transcript line gives it whole.
-async function storeFailed($: Engine, ctx: Context, text: string, error: unknown, isRemote: boolean) {
+async function storeFailed($: Kit, ctx: Context, text: string, error: unknown, isRemote: boolean) {
   if (ctx.session.justQueued === text.trim()) ctx.session.justQueued = undefined
   const why = describeError(error)
   const box = isRemote ? undefined : await $.prompt.read().catch(() => undefined)
@@ -376,13 +377,13 @@ async function storeFailed($: Engine, ctx: Context, text: string, error: unknown
 type SubmitFailed = Parameters<CatchHandler<Hook<'prompt.submit'>>>
 
 // A queued entry that failed to store is dropped, not sent: it was meant to wait.
-export function dropFailedEntry($: Engine, e: SubmitFailed[1], next: SubmitFailed[2]) {
+export function dropFailedEntry($: Kit, e: SubmitFailed[1], next: SubmitFailed[2]) {
   return next.called || !(isTypedMessage(e) && parseEntries(e.text)) ? next(e) : { drop: 'aside could not queue this entry; nothing was sent to Claude' }
 }
 
 type Change = Parameters<Hook<'prompt.change'>>
 
-export async function emptyBoxAfterQueue(ctx: Context, $: Engine, e: Change[1], next: Change[2]) {
+export async function emptyBoxAfterQueue(ctx: Context, $: Kit, e: Change[1], next: Change[2]) {
   if (ctx.session.justQueued !== undefined && e.origin.kind === 'engine' && e.text.trim() === ctx.session.justQueued) {
     ctx.session.justQueued = undefined
     await $.prompt.fill({ text: '', mode: 'replace' }).catch(() => undefined)
@@ -413,7 +414,7 @@ export async function rememberToolOutput(ctx: Context, e: ToolCall[1], next: Too
 }
 
 // A markdown file Claude wrote or edited may hold tags: /aside reads it from now on.
-export async function rememberMarkdownFile<R extends { deny?: unknown; isError?: boolean }>($: Engine, path: string, ran: R): Promise<R> {
+export async function rememberMarkdownFile<R extends { deny?: unknown; isError?: boolean }>($: Kit, path: string, ran: R): Promise<R> {
   if (ran.deny === undefined && !ran.isError && MARKDOWN_PATH.test(path)) {
     await trackFile($, path)
   }

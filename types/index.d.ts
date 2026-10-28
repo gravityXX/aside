@@ -1,5 +1,6 @@
 // The shapes the store holds, which every release must still be able to read (2.7), and the
-// PluginState contract. No behaviour here.
+// PluginState contract. No behaviour here, and nothing imported: the engine takes this file as
+// the plugin's types contract only while it stands on its own.
 
 // An idea, or one of the four marks that comment on what the agents wrote.
 export type Kind = 'idea' | 'question' | 'change' | 'drop' | 'deeper'

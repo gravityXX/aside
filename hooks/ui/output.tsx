@@ -1,10 +1,11 @@
 // What /aside printed, drawn in its frame, and the plan tool's row in the transcript.
 
-import type { EngineInterface as Engine, MatchedHook } from 'claude-code'
+import type { MatchedHook } from 'claude-code'
 
 import type { Context } from '../context'
 import { parseListingText } from '../core/listing'
 import type { ListingSection } from '../core/listing'
+import type { Kit } from '../kit'
 import { isFramedOn, listingRows } from './rows'
 import type { Drawing } from './rows'
 
@@ -23,7 +24,7 @@ const frame = (ui: Drawing, sections: readonly ListingSection[]) => {
 // text, so an older listing keeps showing what it said; any other output is left as it is.
 type OutputRender = Parameters<MatchedHook<'ui.render', { readonly component: 'CommandOutput' }>>
 
-export async function drawListingFrame($: Engine, e: OutputRender[1], next: OutputRender[2]) {
+export async function drawListingFrame($: Kit, e: OutputRender[1], next: OutputRender[2]) {
   const sections = e.props.command === 'aside' && !e.props.isErrored ? parseListingText(e.props.text.replace(/^aside: /, '')) : null
   if (!isFramedOn(e.surface) || sections === null) {
     return next(e)
@@ -53,7 +54,7 @@ const savedPlan = (ctx: Context, tool: string, output: unknown, isDone: boolean)
 // The plan tool's row in the transcript: the plan it saved, in the frame /aside draws.
 type ToolRender = Parameters<MatchedHook<'ui.render', { readonly component: 'ToolUse' }>>
 
-export async function drawPlanTool(ctx: Context, $: Engine, e: ToolRender[1], next: ToolRender[2]) {
+export async function drawPlanTool(ctx: Context, $: Kit, e: ToolRender[1], next: ToolRender[2]) {
   const { tool, output, isRunning, isErrored, isInterrupted } = e.props
   const sections = savedPlan(ctx, tool, output, !isRunning && !isErrored && !isInterrupted)
   if (!isFramedOn(e.surface) || sections === null) {
@@ -66,7 +67,7 @@ export async function drawPlanTool(ctx: Context, $: Engine, e: ToolRender[1], ne
 // Under that row the engine would print the same plan again as plain text: it draws nothing.
 type ResultRender = Parameters<MatchedHook<'ui.render', { readonly component: 'ToolResult' }>>
 
-export async function hidePlanToolResult(ctx: Context, $: Engine, e: ResultRender[1], next: ResultRender[2]) {
+export async function hidePlanToolResult(ctx: Context, $: Kit, e: ResultRender[1], next: ResultRender[2]) {
   const { tool, output, isErrored } = e.props
   if (!isFramedOn(e.surface) || savedPlan(ctx, tool, output, !isErrored) === null) {
     return next(e)

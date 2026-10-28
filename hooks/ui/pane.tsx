@@ -1,7 +1,7 @@
 // The list pane. It lists anew at each draw, so what it shows follows the queue and the plan
 // without anyone telling it to.
 
-import type { EngineInterface as Engine, MatchedHook } from 'claude-code'
+import type { MatchedHook } from 'claude-code'
 
 import type { Context } from '../context'
 import type { Listed } from '../core/listing'
@@ -13,6 +13,7 @@ import { handOverQueue } from '../features/plan'
 import { currentListing, LIST_PANE } from '../features/queue'
 import { readBand } from '../io/store'
 import { resolveQueue } from '../io/queues'
+import type { Kit } from '../kit'
 import { isDrawnOn, listingRows } from './rows'
 
 // How often the list pane is drawn again while a step runs or waits.
@@ -22,7 +23,7 @@ const PANE_TICK = 10_000
 type PaneRender = Parameters<MatchedHook<'ui.render', { readonly component: 'Pane'; readonly requestId: 'aside' }>>
 
 // What the pane lists for the view it shows, listed anew at each draw.
-async function paneListed($: Engine, ctx: Context): Promise<Listed> {
+async function paneListed($: Kit, ctx: Context): Promise<Listed> {
   const view = ctx.session.paneView ?? { kind: 'queue' }
   switch (view.kind) {
     case 'named':
@@ -41,12 +42,12 @@ async function paneListed($: Engine, ctx: Context): Promise<Listed> {
 }
 
 // The pane back on the queue, from a view a command asked for.
-function showQueueInPane($: Engine, ctx: Context) {
+function showQueueInPane($: Kit, ctx: Context) {
   ctx.session.paneView = { kind: 'queue' }
   $.ui.invalidate('ui.render')
 }
 
-export async function drawPane(ctx: Context, $: Engine, e: PaneRender[1], next: PaneRender[2]) {
+export async function drawPane(ctx: Context, $: Kit, e: PaneRender[1], next: PaneRender[2]) {
   if (!isDrawnOn(e.surface)) {
     return next(e)
   }

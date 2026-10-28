@@ -1,8 +1,6 @@
 // /aside import and /aside scan: a markdown file becoming entries or tags, leaving the file as
 // it is.
 
-import type { EngineInterface as Engine } from 'claude-code'
-
 import type { Entry, Kind } from '../../types'
 import { KINDS, parseEntries } from '../core/entries'
 import { describeCount, isExportText } from '../core/listing'
@@ -12,6 +10,7 @@ import { resolveFile, tryReadFile } from '../io/host'
 import { changeQueue } from '../io/queue'
 import { projectKeys, readTrackedFiles, refreshBand } from '../io/store'
 import { GLOBAL, addIdeas, isLocalQueue, loadIdeas, queueName } from '../io/queues'
+import type { Kit } from '../kit'
 
 // How many list items one /aside import takes, so a long file is not queued by mistake.
 const MOST_ITEMS = 100
@@ -50,7 +49,7 @@ const leftOut = (parts: readonly string[]) => (parts.some(Boolean) ? ` Left out:
 
 // /aside import FILE, or /aside g import FILE and /aside q NAME import FILE with `queue`: the items
 // of a markdown list in the file become entries at the end of that queue, the file as it was.
-export async function importFile($: Engine, name: string, queue?: string): Promise<string> {
+export async function importFile($: Kit, name: string, queue?: string): Promise<string> {
   const { root } = await projectKeys($)
   const file = await resolveFile($, name, root, await readTrackedFiles($))
   const shown = relativePath(file, root)
@@ -77,7 +76,7 @@ export async function importFile($: Engine, name: string, queue?: string): Promi
 
 // Into this project's queue, as one change on it, as typed entries are, so neither writes over
 // the other; read and written in one go, so a failure leaves the queue as it was.
-async function importHere($: Engine, shown: string, items: readonly Item[], ticked: string): Promise<string> {
+async function importHere($: Kit, shown: string, items: readonly Item[], ticked: string): Promise<string> {
   const { added, waiting, parts } = await changeQueue($, async stored => {
     const now = await $.clock.now()
     const added: Entry[] = freshItems(items, stored).map(({ kind, text }) => ({ text, raw: `${typedMark(kind)} ${text}`, at: now, kind }))
@@ -95,7 +94,7 @@ async function importHere($: Engine, shown: string, items: readonly Item[], tick
 }
 
 // Into a queue of no project, which holds ideas only: each a key of its own, all of them or none.
-async function importInto($: Engine, queue: string, shown: string, items: readonly Item[], ticked: string): Promise<string> {
+async function importInto($: Kit, queue: string, shown: string, items: readonly Item[], ticked: string): Promise<string> {
   const ideas = items.filter(item => item.kind === 'idea')
   const comments = items.length - ideas.length
   const there = (await loadIdeas($, queue)).map(idea => ({ kind: 'idea' as const, text: idea.entry.text }))

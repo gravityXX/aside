@@ -1,8 +1,6 @@
 // /aside find: one pass over the queue, the tags in files, the plan's steps and every other
 // queue, folded and blind to accents.
 
-import type { EngineInterface as Engine } from 'claude-code'
-
 import type { Entry } from '../../types'
 import type { Context } from '../context'
 import { formatPlace, foundSection, planSection } from '../core/listing'
@@ -12,6 +10,7 @@ import { foldText, splitWords } from '../core/text'
 import { readQueue } from '../io/queue'
 import { loadPlan, projectKeys } from '../io/store'
 import { GLOBAL, countQueues, isHiddenHere, isLocalQueue, loadIdeas, queueName } from '../io/queues'
+import type { Kit } from '../kit'
 import { showWhileWorking, tagsInFiles } from './queue'
 
 // What a search looks at in an entry: its text, the quote it is about and where it points, as
@@ -22,12 +21,12 @@ const searchedText = (entry: Entry, root: string) => foldText([entry.text, entry
 // words, in any case and with or without accents, each with the number its own list shows, so
 // /aside pop 2, /aside g here 1 or /aside q work pop 3 takes it from there. While Claude works,
 // the result goes into the list pane at once, as a command's text shows only after the turn.
-export async function findEntries($: Engine, ctx: Context, query: string): Promise<string> {
+export async function findEntries($: Kit, ctx: Context, query: string): Promise<string> {
   return showWhileWorking($, ctx, { kind: 'find', query }, await foundListed($, ctx, query), 'what was found')
 }
 
 // What /aside find lists for `query`, and the list pane too.
-export async function foundListed($: Engine, ctx: Context, query: string): Promise<Listed> {
+export async function foundListed($: Kit, ctx: Context, query: string): Promise<Listed> {
   const words = splitWords(query)
   if (words.length === 0) {
     return 'Give words to look for: /aside find dark mode'

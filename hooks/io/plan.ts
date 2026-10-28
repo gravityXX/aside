@@ -1,11 +1,10 @@
 // Every change to the project's plan, on a chain of its own, so the queue's chain and the
 // plan's never wait on each other (2.9).
 
-import type { EngineInterface as Engine } from 'claude-code'
-
 import type { Plan } from '../../types'
 import { serial } from '../core/serial'
 import { mustFollow, whereOf } from '../core/step'
+import type { Kit } from '../kit'
 import { loadPlan, projectKeys, savePlan } from './store'
 
 // The changes to this project's plan, one after another, so a step that ends and a planner
@@ -17,7 +16,7 @@ const inTurn = serial()
 // resolves once this one has, so what is read next holds it. `change` edits the plan it is
 // given and answers what the caller needs; the plan is saved only when the change moved it, so
 // a callback that only reads writes nothing.
-export function changePlan<T>($: Engine, change: (plan: Plan) => T | Promise<T>): Promise<T> {
+export function changePlan<T>($: Kit, change: (plan: Plan) => T | Promise<T>): Promise<T> {
   return inTurn(async () => {
     const keys = await projectKeys($)
     const plan = await loadPlan($, keys.plan)

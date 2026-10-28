@@ -3,7 +3,7 @@
 // they answer Claude, and how steps saved now meet the plan already there are one contract, and
 // it reads as one.
 
-import type { CatchHandler, EngineInterface as Engine, MatchedHook } from 'claude-code'
+import type { CatchHandler, MatchedHook } from 'claude-code'
 
 import type { Plan, Step } from '../../types'
 import type { Context } from '../context'
@@ -15,6 +15,7 @@ import { describeFailure, shortenText } from '../core/text'
 import { changePlan } from '../io/plan'
 import { giveBackItems } from '../io/queue'
 import { loadPlan, projectKeys, refreshBand } from '../io/store'
+import type { Kit } from '../kit'
 import { archivePlan } from './history'
 import { tagsInFiles } from './queue'
 
@@ -68,7 +69,7 @@ export const parseUnclear = (value: unknown, count: number): Unclear[] | null =>
 }
 
 // The tool the model saves a plan with; returns its full name as the engine registered it.
-export async function registerPlanTool($: Engine): Promise<string> {
+export async function registerPlanTool($: Kit): Promise<string> {
   const registered = await $.tool.register({
     name: 'plan',
     description:
@@ -107,7 +108,7 @@ export async function registerPlanTool($: Engine): Promise<string> {
 
 type PlanToolCall = Parameters<MatchedHook<'tool.call', { readonly tool: RegExp }>>
 
-export async function savePlanFromTool(ctx: Context, $: Engine, e: PlanToolCall[1], next: PlanToolCall[2]) {
+export async function savePlanFromTool(ctx: Context, $: Kit, e: PlanToolCall[1], next: PlanToolCall[2]) {
   if (e.tool !== ctx.session.planTool) {
     return next(e)
   }
@@ -160,7 +161,7 @@ type SaveMode = 'add' | 'tool' | 'replan'
 // prompt said. Either way, a plan run to its end makes way for the new one. With `given`, the
 // plan a planner was given, nothing is saved, and undefined comes back, unless the plan is still
 // that one: only further on while adding to it, else just as it was.
-export async function savePlanSteps($: Engine, ctx: Context, steps: readonly Step[], mode: SaveMode, given?: Plan): Promise<Plan | undefined> {
+export async function savePlanSteps($: Kit, ctx: Context, steps: readonly Step[], mode: SaveMode, given?: Plan): Promise<Plan | undefined> {
   return changePlan($, async plan => {
     if (given && !(mode === 'add' ? isSamePlan(given, plan) : JSON.stringify(plan) === JSON.stringify(given))) {
       return undefined
@@ -181,7 +182,7 @@ export async function savePlanSteps($: Engine, ctx: Context, steps: readonly Ste
 }
 
 // The tool a step waits for the person with when it needs their answer before the next one.
-export async function registerWaitTool($: Engine): Promise<string> {
+export async function registerWaitTool($: Kit): Promise<string> {
   const registered = await $.tool.register({
     name: 'wait',
     description:
@@ -200,7 +201,7 @@ export async function registerWaitTool($: Engine): Promise<string> {
 
 // The step stays open once this turn ends: the person's answer comes to it, and Claude's reply
 // to that answer ends it, or /aside continue does. A new question since an answer was taken up makes the step wait for that one.
-export async function pausePlanFromTool(ctx: Context, $: Engine, e: PlanToolCall[1], next: PlanToolCall[2]) {
+export async function pausePlanFromTool(ctx: Context, $: Kit, e: PlanToolCall[1], next: PlanToolCall[2]) {
   if (e.tool !== ctx.session.waitTool) {
     return next(e)
   }
@@ -228,10 +229,10 @@ export async function pausePlanFromTool(ctx: Context, $: Engine, e: PlanToolCall
 // words: the reason, and what still stands.
 type PlanToolFailed = Parameters<CatchHandler<MatchedHook<'tool.call', { readonly tool: RegExp }>>>
 
-export function planToolFailed($: Engine, e: PlanToolFailed[1], next: PlanToolFailed[2]) {
+export function planToolFailed($: Kit, e: PlanToolFailed[1], next: PlanToolFailed[2]) {
   return next.called ? next(e) : { deny: `aside could not save the plan (${describeFailure(next.error)}); the plan was not saved, so call the tool again` }
 }
 
-export function waitToolFailed($: Engine, e: PlanToolFailed[1], next: PlanToolFailed[2]) {
+export function waitToolFailed($: Kit, e: PlanToolFailed[1], next: PlanToolFailed[2]) {
   return next.called ? next(e) : { deny: `aside could not pause the plan (${describeFailure(next.error)}); call the tool again` }
 }
