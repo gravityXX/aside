@@ -21,7 +21,7 @@ export type Kit = {
     setFiles: (change: (list: string[]) => string[]) => Promise<string[]>
   }
   clock: Pick<EngineInterface['clock'], 'now' | 'after'>
-  command: Pick<EngineInterface['command'], 'register' | 'run'>
+  command: Pick<EngineInterface['command'], 'register'>
   // `read` is one signature of the engine's three: the plugin reads text and never bytes.
   fs: Pick<EngineInterface['fs'], 'exists' | 'list' | 'write'> & { read: (path: string) => Promise<string> }
   model: Pick<EngineInterface['model'], 'complete'>
