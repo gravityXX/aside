@@ -22,7 +22,6 @@
     "productivity"
   ],
   "icon": "./.claude-plugin/icon.png",
-  "types": "./types/index.d.ts",
   "userConfig": {
     "afterClaudeAnswers": {
       "type": "string",
