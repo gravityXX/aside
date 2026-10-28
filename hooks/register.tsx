@@ -102,7 +102,7 @@ export const register: Register = (on, options) => {
   on('turn.complete', ($, e, next) => onTurnEnd(ctx, kitOf($), e, next)).catch(($, e, next) => turnEndFailed(kitOf($), e, next))
   on('session.end', ($, e, next) => endSessionSteps(ctx, kitOf($), e, next))
 
-  on('command.run', { command: 'aside' }, ($, e) => runAside(ctx, kitOf($), e)).catch(($, e, next) => asideFailed(kitOf($), e, next))
+  on('command.run', { command: 'aside' }, ($, e) => runAside(ctx, kitOf($), e)).catch(($, e, next) => asideFailed(kitOf($), e, next.error))
 
   on('ui.render', { component: 'AbovePrompt' }, ($, e, next) => drawBand(ctx, kitOf($), e, next))
   // LIST_PANE in ui/pane.tsx, written out so the engine's scan of this file reads it.
