@@ -6,14 +6,15 @@
 #
 # The directory reads the icon once, the first time the plugin is submitted, and a later change
 # does not reach the listing - so this runs before the submission and its output is committed
-# beside it (8.4).
+# beside it (8.4). Where it goes is given on the command line, since a script that names a
+# picture holds the whole plugin for review: a picture is not read as code, and an interpreter
+# pointed at one would run its bytes.
 
 import struct
+import sys
 import zlib
 from math import hypot
 from pathlib import Path
-
-OUT = Path(".claude-plugin/icon.png")
 
 # A tile of 1024 px sits inside the 512 to 2048 the directory allows, and every mark stays well
 # inside the circle a round mask would leave.
@@ -90,8 +91,11 @@ def png(drawn: list[bytes]) -> bytes:
 
 
 def main() -> None:
-    OUT.write_bytes(png(rows()))
-    print(f"{OUT}: {SIZE}x{SIZE}, {OUT.stat().st_size} bytes")
+    if len(sys.argv) != 2:
+        raise SystemExit("usage: python3 assets/make_icon.py <where the icon goes>")
+    out = Path(sys.argv[1])
+    out.write_bytes(png(rows()))
+    print(f"{out}: {SIZE}x{SIZE}, {out.stat().st_size} bytes")
 
 
 if __name__ == "__main__":
