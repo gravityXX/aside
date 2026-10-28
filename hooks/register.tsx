@@ -37,7 +37,7 @@ const trackedFiles = atom({ plugin: 'aside', key: 'files' } as const, [])
 function kitOf($: Engine): Kit {
   return {
     clock: { now: () => $.clock.now(), after: (ms, fn) => $.clock.after(ms, fn) },
-    command: { register: command => $.command.register(command), run: input => $.command.run(input) },
+    command: { register: command => $.command.register(command) },
     fs: {
       exists: path => $.fs.exists(path),
       list: path => $.fs.list(path),
