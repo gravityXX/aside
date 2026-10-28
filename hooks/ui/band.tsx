@@ -13,8 +13,8 @@ import { isDrawnOn } from './rows'
 
 type Action = 'stop' | 'continue' | 'run plan'
 
-// The press does the work itself: $.command.run from here skips this plugin's own command
-// hook, and a stop is applied at once rather than when the turn ends. Continue and run plan
+// The press does the work itself: running the command from here would skip this plugin's own
+// hook on it, and a stop is applied at once rather than when the turn ends. Continue and run plan
 // are both /aside run all: it ends a step that waits and goes on, goes on with a paused run, or
 // starts one.
 async function pressAction($: Kit, ctx: Context, action: Action) {
