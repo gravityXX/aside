@@ -11,9 +11,8 @@
 // The code knows a queue by an id: "global", a name for a named queue every project sees, and
 // "." before the name for one of this project's, as a typed name never holds a dot.
 
-import type { EngineInterface as Engine } from 'claude-code'
-
 import type { Entry } from '../../types'
+import type { Kit } from '../kit'
 
 const GLOBAL_IDEA = 'global:idea:'
 
@@ -28,7 +27,7 @@ export const queueName = (id: string) => (isLocalQueue(id) ? id.slice(1) : id)
 
 // This project's scope in the keys of its own queues: a hash of its root, so a key holds no path,
 // whose colons would break it up.
-async function localScope($: Engine): Promise<string> {
+async function localScope($: Kit): Promise<string> {
   let hash = 5381
   for (const char of await $.session.root()) hash = ((hash * 33) ^ char.charCodeAt(0)) >>> 0
 
@@ -51,7 +50,7 @@ const queueOfKey = (key: string, scope: string): string | undefined => {
 export type GlobalIdea = { key: string; entry: Entry & { order?: number } }
 
 // The queue an idea is in, by its key; none here for another project's own, as after /cd.
-export async function queueOf($: Engine, idea: GlobalIdea): Promise<string | undefined> {
+export async function queueOf($: Kit, idea: GlobalIdea): Promise<string | undefined> {
   return queueOfKey(idea.key, await localScope($))
 }
 
@@ -60,7 +59,7 @@ export async function queueOf($: Engine, idea: GlobalIdea): Promise<string | und
 // editing in any session; else the one every project sees, when that is there; else, for a queue
 // made now, the one `isLocal` asks for. Another session's clear of a queue left empty is not seen
 // here, so its "+@name" may go to the queue every project sees until that session's undo.
-export async function resolveQueue($: Engine, name: string, isLocal: boolean): Promise<string> {
+export async function resolveQueue($: Kit, name: string, isLocal: boolean): Promise<string> {
   if (name === GLOBAL) {
     return GLOBAL
   }
@@ -86,14 +85,14 @@ export async function resolveQueue($: Engine, name: string, isLocal: boolean): P
 // Whether this project's own queue of a name hides the queue every project sees under it here,
 // by the rule resolveQueue keeps, so the band, /aside q, find and Tab never name a queue that
 // /aside q NAME passes over.
-export async function isHiddenHere($: Engine, id: string): Promise<boolean> {
+export async function isHiddenHere($: Kit, id: string): Promise<boolean> {
   return id !== GLOBAL && !isLocalQueue(id) && (await resolveQueue($, id, false)) === `.${id}`
 }
 
 // This session's records of queue `from`, what its last clear took and an idea out for editing,
 // moved to queue `to`, each idea's key under `to`'s, so undo and Enter bring them back there and
 // no record keeps `from` there to hide the queue moved. Written there before they go from here.
-export async function moveSessionRecords($: Engine, from: string, to: string) {
+export async function moveSessionRecords($: Kit, from: string, to: string) {
   const scope = await localScope($)
   const rekey = (idea: GlobalIdea): GlobalIdea => ({ key: prefixOf(to, scope) + idea.key.slice(prefixOf(from, scope).length), entry: idea.entry })
   const cleared = await loadCleared($, from)
@@ -112,7 +111,7 @@ export const rankOf = (idea: GlobalIdea) => idea.entry.order ?? idea.entry.at
 
 // Every queue that holds an idea, with how many and when it was last added to, by its keys
 // alone: the global list first, then the one added to last.
-export async function countQueues($: Engine): Promise<{ name: string; count: number; last: number }[]> {
+export async function countQueues($: Kit): Promise<{ name: string; count: number; last: number }[]> {
   const scope = await localScope($)
   const queues = new Map<string, { count: number; last: number }>()
   for (const key of await $.store.keys()) {
@@ -129,7 +128,7 @@ export async function countQueues($: Engine): Promise<{ name: string; count: num
 }
 
 // A queue's ideas, first to last.
-export async function loadIdeas($: Engine, name: string): Promise<GlobalIdea[]> {
+export async function loadIdeas($: Kit, name: string): Promise<GlobalIdea[]> {
   const prefix = prefixOf(name, await localScope($))
   const ideas: GlobalIdea[] = []
   for (const key of (await $.store.keys()).filter(one => one.startsWith(prefix))) {
@@ -142,7 +141,7 @@ export async function loadIdeas($: Engine, name: string): Promise<GlobalIdea[]> 
 
 // Each idea under a key of its own in queue `name`, stamped with the time it is added. All of
 // them or none: should a write fail, those already written are taken back before the error goes on.
-export async function addIdeas($: Engine, name: string, entries: readonly GlobalIdea['entry'][]): Promise<GlobalIdea[]> {
+export async function addIdeas($: Kit, name: string, entries: readonly GlobalIdea['entry'][]): Promise<GlobalIdea[]> {
   const prefix = prefixOf(name, await localScope($))
   const session = await $.session.id()
   const stamp = await $.clock.now()
@@ -165,14 +164,14 @@ export async function addIdeas($: Engine, name: string, entries: readonly Global
   return added
 }
 
-export async function saveGlobalIdea($: Engine, idea: GlobalIdea) {
+export async function saveGlobalIdea($: Kit, idea: GlobalIdea) {
   await $.store.set(idea.key, idea.entry)
 }
 
 // An idea that left its key, back in its queue: under that key while it is free or still holds
 // `was`, the idea as it left, else under a new one, since this session may have added another
 // idea there since. Only this session writes keys that name it.
-export async function restoreIdea($: Engine, idea: GlobalIdea, was: Entry = idea.entry): Promise<GlobalIdea> {
+export async function restoreIdea($: Kit, idea: GlobalIdea, was: Entry = idea.entry): Promise<GlobalIdea> {
   const there = await $.store.get(idea.key)
   if (there === undefined || (isEntry(there) && there.at === was.at && there.text === was.text)) {
     await saveGlobalIdea($, idea)
@@ -183,7 +182,7 @@ export async function restoreIdea($: Engine, idea: GlobalIdea, was: Entry = idea
   return added!
 }
 
-export async function forgetGlobalIdeas($: Engine, keys: readonly string[]) {
+export async function forgetGlobalIdeas($: Kit, keys: readonly string[]) {
   for (const key of keys) await $.store.delete(key)
 }
 
@@ -191,22 +190,22 @@ export async function forgetGlobalIdeas($: Engine, keys: readonly string[]) {
 // reworked one is stored in its place, across a reload too. Its key names its queue.
 const EDITING_PREFIX = 'global:editing:'
 
-async function globalEditingKey($: Engine): Promise<string> {
+async function globalEditingKey($: Kit): Promise<string> {
   return `${EDITING_PREFIX}${await $.session.id()}`
 }
 
-export async function loadGlobalEditing($: Engine): Promise<GlobalIdea | undefined> {
+export async function loadGlobalEditing($: Kit): Promise<GlobalIdea | undefined> {
   const value = await $.store.get(await globalEditingKey($))
   const one = value as { key?: unknown; entry?: unknown } | undefined
 
   return typeof one?.key === 'string' && isEntry(one.entry) ? { key: one.key, entry: one.entry } : undefined
 }
 
-export async function saveGlobalEditing($: Engine, idea: GlobalIdea) {
+export async function saveGlobalEditing($: Kit, idea: GlobalIdea) {
   await $.store.set(await globalEditingKey($), idea)
 }
 
-export async function forgetGlobalEditing($: Engine) {
+export async function forgetGlobalEditing($: Kit) {
   await $.store.delete(await globalEditingKey($))
 }
 
@@ -217,7 +216,7 @@ export async function forgetGlobalEditing($: Engine) {
 // A queue of this project's has its scope in them, as its ideas' keys do.
 const clearedPrefix = (name: string, scope: string) => (isLocalQueue(name) ? `cleared:local:${scope}:${queueName(name)}:` : `cleared:${name}:`)
 
-async function clearedKeys($: Engine, name: string): Promise<string[]> {
+async function clearedKeys($: Kit, name: string): Promise<string[]> {
   const session = await $.session.id()
   const prefix = clearedPrefix(name, await localScope($))
 
@@ -226,7 +225,7 @@ async function clearedKeys($: Engine, name: string): Promise<string[]> {
     .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
 }
 
-export async function loadCleared($: Engine, name: string): Promise<{ record: string; idea: GlobalIdea }[]> {
+export async function loadCleared($: Kit, name: string): Promise<{ record: string; idea: GlobalIdea }[]> {
   const cleared: { record: string; idea: GlobalIdea }[] = []
   for (const record of await clearedKeys($, name)) {
     const one = (await $.store.get(record)) as { key?: unknown; entry?: unknown } | undefined
@@ -238,7 +237,7 @@ export async function loadCleared($: Engine, name: string): Promise<{ record: st
 
 // The ideas a clear takes, in place of what an earlier clear of that queue kept. All of them or
 // none: should a write fail, those already written are taken back before the error goes on.
-export async function saveCleared($: Engine, name: string, ideas: readonly GlobalIdea[]) {
+export async function saveCleared($: Kit, name: string, ideas: readonly GlobalIdea[]) {
   for (const record of await clearedKeys($, name)) await $.store.delete(record)
   const session = await $.session.id()
   const written: string[] = []
@@ -254,13 +253,13 @@ export async function saveCleared($: Engine, name: string, ideas: readonly Globa
   }
 }
 
-export async function forgetCleared($: Engine, record: string) {
+export async function forgetCleared($: Kit, record: string) {
   await $.store.delete(record)
 }
 
 // Whether an idea's key is out of its queue for this session: taken out with /aside q edit, or
 // kept by a clear for undo. A write that brings such a key back would make a second copy.
-export async function isOut($: Engine, key: string): Promise<boolean> {
+export async function isOut($: Kit, key: string): Promise<boolean> {
   if ((await loadGlobalEditing($))?.key === key) {
     return true
   }

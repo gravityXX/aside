@@ -2,7 +2,7 @@
 // Tab hints. The table holds data only, since `$` may not be passed to a method call (3.2), and
 // the help and the hints are built from it, so neither can drift from what runs.
 
-import type { CatchHandler, EngineInterface as Engine, Hook, MatchedHook } from 'claude-code'
+import type { CatchHandler, Hook, MatchedHook } from 'claude-code'
 
 import { currentOutput, currentTask } from '../context'
 import type { Context } from '../context'
@@ -12,6 +12,7 @@ import { describeFailure, formatCount, shortenText } from '../core/text'
 import { readQueue } from '../io/queue'
 import { loadPlan, projectKeys, refreshBand } from '../io/store'
 import { GLOBAL, countQueues, isHiddenHere, isLocalQueue, loadIdeas, queueName, resolveQueue } from '../io/queues'
+import type { Kit } from '../kit'
 import { addEntries } from './capture'
 import { findEntries } from './find'
 import { showLog } from './history'
@@ -226,7 +227,7 @@ const ARGUMENT_HINT = `[${[...COMMANDS.flatMap(command => command.usage ?? []), 
 
 const commandNamed = (word: string) => COMMANDS.find(command => command.name === word || command.aliases?.includes(word))
 
-async function runQueue($: Engine, ctx: Context, args: readonly string[]) {
+async function runQueue($: Kit, ctx: Context, args: readonly string[]) {
   if (args[0] === 'all') {
     return (await runPlan($, ctx)) ?? runEntries($, ctx)
   }
@@ -237,7 +238,7 @@ async function runQueue($: Engine, ctx: Context, args: readonly string[]) {
   return runNext($, ctx)
 }
 
-async function runCommand($: Engine, ctx: Context, name: Name, args: readonly string[]): Promise<string> {
+async function runCommand($: Kit, ctx: Context, name: Name, args: readonly string[]): Promise<string> {
   const [first, second] = args
   switch (name) {
     case 'list':
@@ -283,13 +284,13 @@ async function runCommand($: Engine, ctx: Context, name: Name, args: readonly st
 }
 
 // Anything that is not a command is an entry to queue: "/aside add tests" as "+ add tests" would.
-async function queueText($: Engine, ctx: Context, text: string) {
+async function queueText($: Kit, ctx: Context, text: string) {
   return (await addEntries($, ctx, text.startsWith('+') ? text : `+ ${text}`, currentTask(ctx), currentOutput(ctx), { report: 'none' })) ?? HELP
 }
 
 type AsideEvent = Parameters<MatchedHook<'command.run', { readonly command: 'aside' }>>[1]
 
-export async function runAside(ctx: Context, $: Engine, e: AsideEvent) {
+export async function runAside(ctx: Context, $: Kit, e: AsideEvent) {
   const [word = '', ...args] = e.args.trim().split(/\s+/)
   if (word === '') {
     // A step an earlier release titled with its text cut short gets a name, shown next time.
@@ -305,7 +306,7 @@ export async function runAside(ctx: Context, $: Engine, e: AsideEvent) {
 // had done stays, and /aside shows it.
 type AsideFailed = Parameters<CatchHandler<MatchedHook<'command.run', { readonly command: 'aside' }>>>
 
-export function asideFailed($: Engine, e: AsideFailed[1], next: AsideFailed[2]) {
+export function asideFailed($: Kit, e: AsideFailed[1], next: AsideFailed[2]) {
   const typed = e.args.trim() === '' ? '/aside' : `/aside ${shortenText(e.args.trim(), 40)}`
 
   return { text: `${typed} did not finish (${describeFailure(next.error)}). /aside shows where the queue and the plan stand.` }
@@ -313,7 +314,7 @@ export function asideFailed($: Engine, e: AsideFailed[1], next: AsideFailed[2]) 
 
 // The numbers Tab offers after a command: the entries as /aside shows them, or for /aside run
 // while the plan has steps to do, the steps still to do.
-async function numberRows($: Engine, ctx: Context, of: 'entries' | 'ideas' | 'run' | { queue: string }, digits: string) {
+async function numberRows($: Kit, ctx: Context, of: 'entries' | 'ideas' | 'run' | { queue: string }, digits: string) {
   const keys = await projectKeys($)
   const plan = await loadPlan($, keys.plan)
   const isSteps = of === 'run' && plan.steps.some(step => !step.isDone)
@@ -365,7 +366,7 @@ const NAMED_VERBS = [
   { text: 'global', description: 'share it with every project' },
 ]
 
-export async function completeAside(ctx: Context, $: Engine, e: Autocomplete[1], next: Autocomplete[2]) {
+export async function completeAside(ctx: Context, $: Kit, e: Autocomplete[1], next: Autocomplete[2]) {
   const typed = e.text.slice(0, e.cursor)
   // The queues by name after "q", each with how many ideas it holds.
   const nameTyped = /^\/aside\s+q\s+@?([A-Za-z0-9_-]*)$/i.exec(typed)
@@ -425,7 +426,7 @@ export async function completeAside(ctx: Context, $: Engine, e: Autocomplete[1],
 
 type SessionStart = Parameters<Hook<'session.start'>>
 
-export async function startSession(ctx: Context, $: Engine, e: SessionStart[1], next: SessionStart[2]) {
+export async function startSession(ctx: Context, $: Kit, e: SessionStart[1], next: SessionStart[2]) {
   await $.command.register({
     name: 'aside',
     description: 'Show the ideas and comments queued with "+"; plan and run them',

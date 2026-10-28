@@ -15,13 +15,14 @@ How the code in this repository is designed, written, tested and released. Read 
 
 `hooks/` is built in layers. A file imports from its own layer or the ones below it, never from above:
 
-- **`hooks/register.tsx`** - every hook the plugin has, each handing its event to the function that does the work.
+- **`hooks/register.tsx`** - every hook the plugin has, each handing its event to the function that does the work, and the one file that spells `$`: `kitOf` binds every call the plugin makes, and the two atoms are made here.
 - **`hooks/ui/`** - what the person sees: the band above the prompt (`band`), the list pane (`pane`), the framed `/aside` output (`output`) and the rows they share (`rows`).
 - **`hooks/features/`** - what the plugin does: `capture` (a typed `+` to a stored entry), `queue` (the listing and the commands on entries), `plan` (handing the queue over, the commands that run it, the hooks on a turn), `steps` (the life of the step running), `plantool` (the two tools Claude reaches the plan through), `planner` (organizing the queue on a model of its own), `background` (the work a step's turn leaves going), `global` (the global list and the named queues: ideas for no project), `history` (the log of plans run to their end), `find` (`/aside find`), `importing` (`/aside import`) and `commands` (`/aside`, its help and Tab). Within the layer `commands` imports the others, `plan` imports `steps`, `plantool`, `planner`, `queue` and `history`, `planner` imports `plantool`, `steps` and `queue`, `plantool` imports `queue` and `history`, `steps` imports `queue` alone, `background` imports nothing of it, `find` and `history` import `queue`, and `global` imports `capture`, `importing` and `queue`. The list pane (`ui/pane.tsx`) lists what `queue`, `global`, `find` and `history` give it.
 - **`hooks/context.ts`** - the settings and the session's state, made once per load and passed to the hooks.
-- **`hooks/io/`** - the only files that reach the engine's store and the machine: `store` (the project's own records and the atoms a drawing reads), `queues` (the queues of no project: a key per idea, and the records a session keeps of them), `queue` (the project queue's changes, one after another, and the take undo brings back), `plan` (the plan's changes, on a chain of their own) and `host`. Within the layer only `store` imports `queues`, to count them for the band.
+- **`hooks/io/`** - the only files that reach the engine's store and the machine: `store` (the project's own records and the line above the prompt), `queues` (the queues of no project: a key per idea, and the records a session keeps of them), `queue` (the project queue's changes, one after another, and the take undo brings back), `plan` (the plan's changes, on a chain of their own) and `host`. Within the layer only `store` imports `queues`, to count them for the band.
 - **`hooks/core/`** - plain functions with no `$`: `text`, `markdown`, `entries`, `listing`, `pin` (where a comment points), `prompts`, `reduce` (what can happen to the step running, and what each of those does to the plan), `serial` (one chain of work that must not overlap) and `step`, which reads the step running from the flags the store keeps and writes it back, and is the only file that knows both shapes.
-- **`types/index.d.ts`** - the shapes of the stored data and the `PluginState` contract. Any layer imports types from it.
+- **`hooks/kit.ts`** - the shape of what `kitOf` returns: the slice of the engine every file below `register.tsx` is handed. Any layer imports it.
+- **`types/index.d.ts`** - the shapes of the stored data and the `PluginState` contract. Any layer imports types from it. It holds no import of its own, since the engine takes it as the plugin's types contract only while it stands alone.
 
 1. No files import each other in a circle, within a layer or across layers.
 2. `core/` never imports from another layer and never receives `$`.
@@ -60,7 +61,7 @@ Each value lives where its lifetime fits:
 
 ## 3. The engine
 
-The plugin runs on the Claude Code plugin API: hooks `($, e, next)` added with `on()`, and `$` as the only way out of the module (no DOM, no Node).
+The plugin runs on the Claude Code plugin API: hooks `($, e, next)` added with `on()`, and `$` as the only way out of the module (no DOM, no Node). `$` itself stays in `register.tsx`; what the rest of the plugin is handed is the `Kit` that `kitOf` binds from it, whose parameter keeps the name `$`.
 
 ### Rules the engine enforces when it loads the module
 
@@ -72,12 +73,12 @@ passed to "f", a name bound to a function expression`.
 `claude plugin validate .` does **not** catch any of these: it passes a module the engine will
 refuse. `claude plugin test .` is where it shows, as every test failing to load the module.
 
-1. Outside `register.tsx`, a function that takes `$` is a `function` declaration called by name. An arrow function or a function expression is refused, even when the caller is in the same file.
-2. `$` is never passed to a method or property call (`rows[0].run($)`, `obj.read($)`). A table holds data only, and a `switch` calls the functions.
+1. `$` never leaves `register.tsx`. Each hook passes it to `kitOf`, a `function` declaration in that file, and hands on what it returns; a `.catch` handler is wrapped the same way. Both the engine and the plugin directory read that file as written and follow no import, so a `$` given to an imported function is one neither can account for: the engine refuses to load the module, and the directory refuses the plugin for it (`MOD_CAPABILITY_USE_NOT_PLAIN`).
+2. In `kitOf`, every member is a plain `$.noun.method(...)` call with nothing wrapped around it: no parentheses, cast, `!`, `?.` or brackets, and `$` is never passed to a method or property call (`rows[0].run($)`, `obj.read($)`) nor read as a value (`state: $.state`). A table holds data only, and a `switch` calls the functions.
 3. A closure that captures `$` is fine: `$.clock.after(50, () => f($))`, `onPress={() => void g($)}`.
 4. The hook given to `on()` is a function literal or the name of a function declaration, never a call that returns one. The pattern is `on('x', ($, e, next) => handler(ctx, $, e, next))`. A second hook on the same event needs a matcher, as the second `prompt.submit` has.
 5. A matcher value is a literal written in `register.tsx`. An imported constant shows as `?` in the validator's scan.
-6. An atom is read and updated only in the file that makes it. Other files call the functions that file exports, such as `readBand($)`.
+6. An atom is made, read and updated in `register.tsx`: the engine ties an atom to the file that makes it, and reads the plugin and key of a `$.state` call there as literals. The rest of the plugin reaches the two through the kit's `atoms`, and `io/store.ts` is the only file that does.
 
 ### Engine behaviour to design around
 

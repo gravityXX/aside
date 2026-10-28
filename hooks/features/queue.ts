@@ -1,8 +1,6 @@
 // The project's own queue: its listing, and the commands on its entries. The queues no project
 // owns are in `global`. Nothing here holds the queue's key: only io/queue.ts writes it (2.9).
 
-import type { EngineInterface as Engine } from 'claude-code'
-
 import type { Entry } from '../../types'
 import type { Context, PaneView } from '../context'
 import { findTags, inOrder } from '../core/entries'
@@ -15,10 +13,11 @@ import { resolveFile, tryReadFile, writeExport } from '../io/host'
 import { bringBackTake, changeQueue, readQueue, takeCleared } from '../io/queue'
 import type { QueueChange } from '../io/queue'
 import { loadPlan, loadTagIds, projectKeys, readTrackedFiles, refreshBand, saveEditing, tagId, trackFile } from '../io/store'
+import type { Kit } from '../kit'
 
 // The <!-- ? --> tags in the session's markdown files, as entries of their own; `onlyNew`
 // leaves out those an earlier /aside already handed over.
-export async function tagsInFiles($: Engine, onlyNew = false): Promise<Entry[]> {
+export async function tagsInFiles($: Kit, onlyNew = false): Promise<Entry[]> {
   const { handed } = await projectKeys($)
   const old = new Set(onlyNew ? await loadTagIds($, handed) : [])
   const found: Entry[] = []
@@ -36,7 +35,7 @@ export async function tagsInFiles($: Engine, onlyNew = false): Promise<Entry[]> 
 // What /aside shows: the queue, the tags in files and the plan, with what each section holds.
 // While a run goes on, a step running, waiting or paused after, the plan comes first, so what
 // happens now is at the top however long the queue is.
-async function loadListing($: Engine, ctx: Context) {
+async function loadListing($: Kit, ctx: Context) {
   const { root, plan: planKey, handed } = await projectKeys($)
   const list = await readQueue($, ctx.settings.order)
   const tags = await tagsInFiles($)
@@ -55,7 +54,7 @@ async function loadListing($: Engine, ctx: Context) {
   return { root, list, tags, plan, sections }
 }
 
-export async function currentListing($: Engine, ctx: Context): Promise<ListingSection[]> {
+export async function currentListing($: Kit, ctx: Context): Promise<ListingSection[]> {
   return (await loadListing($, ctx)).sections
 }
 
@@ -80,7 +79,7 @@ const exportNameProblem = (name: string, root: string): string | undefined => {
 
 // Writes what /aside shows to a Markdown file in the project, aside.md unless named: over an
 // earlier export, never over another file. The queue stays as it is.
-export async function exportListing($: Engine, ctx: Context, name: string): Promise<string> {
+export async function exportListing($: Kit, ctx: Context, name: string): Promise<string> {
   const { root, list, tags, plan, sections } = await loadListing($, ctx)
   if (list.length === 0 && tags.length === 0 && plan.steps.length === 0) {
     return 'Nothing to export: the queue is empty.'
@@ -108,7 +107,7 @@ export const LIST_PANE = 'aside'
 
 // The list pane as the person sees it: not open, open but out of sight (a tab behind another
 // pane, or waiting undrawn), or in sight.
-async function listPaneState($: Engine): Promise<'closed' | 'hidden' | 'shown'> {
+async function listPaneState($: Kit): Promise<'closed' | 'hidden' | 'shown'> {
   const pane = (await $.ui.panes()).find(one => one.id === LIST_PANE)
 
   return pane === undefined ? 'closed' : pane.isShown && pane.isPlaced ? 'shown' : 'hidden'
@@ -118,7 +117,7 @@ async function listPaneState($: Engine): Promise<'closed' | 'hidden' | 'shown'> 
 // sight, and draws it again when it is in sight already. Each opener names what it shows, so a
 // view another command left never stands in for it. The reason is the surface's when it cannot
 // place the pane.
-export async function openListPane($: Engine, ctx: Context, view: PaneView): Promise<{ isPlaced: true } | { isPlaced: false; reason: string }> {
+export async function openListPane($: Kit, ctx: Context, view: PaneView): Promise<{ isPlaced: true } | { isPlaced: false; reason: string }> {
   setPaneView($, ctx, view)
   if ((await listPaneState($)) === 'shown') {
     return { isPlaced: true }
@@ -129,7 +128,7 @@ export async function openListPane($: Engine, ctx: Context, view: PaneView): Pro
 
 // The band's list button: closes the list pane when it is in sight, shows it otherwise. A pane
 // open out of sight is shown, not closed, or the press would seem to do nothing.
-export async function toggleListPane($: Engine, ctx: Context) {
+export async function toggleListPane($: Kit, ctx: Context) {
   const state = await listPaneState($)
   if (state === 'shown') {
     await $.ui.close({ id: LIST_PANE })
@@ -143,12 +142,12 @@ export async function toggleListPane($: Engine, ctx: Context) {
 // /aside alone. While Claude works, what a command prints shows only once the turn ends, so
 // the list opens in the pane, which shows at once and keeps up to date; where the terminal has
 // no room for it, the list goes into the transcript as a line, which shows at once too.
-export async function showListing($: Engine, ctx: Context): Promise<string> {
+export async function showListing($: Kit, ctx: Context): Promise<string> {
   return showWhileWorking($, ctx, { kind: 'queue' }, { sections: await currentListing($, ctx) }, 'the list')
 }
 
 // What the list pane shows from now on, drawn again at once if it is open.
-function setPaneView($: Engine, ctx: Context, view: PaneView) {
+function setPaneView($: Kit, ctx: Context, view: PaneView) {
   ctx.session.paneView = view
   $.ui.invalidate('ui.render')
 }
@@ -157,7 +156,7 @@ function setPaneView($: Engine, ctx: Context, view: PaneView) {
 // `view` and kept up to date there, or where the pane has no room, in the transcript. A pane
 // left open after the turn shows it too. A sentence with nothing to list is the command's text
 // either way, and leaves the pane as it is.
-export async function showWhileWorking($: Engine, ctx: Context, view: PaneView, listed: Listed, what: string): Promise<string> {
+export async function showWhileWorking($: Kit, ctx: Context, view: PaneView, listed: Listed, what: string): Promise<string> {
   const text = listedText(listed)
   if (typeof listed === 'string') {
     return text
@@ -178,7 +177,7 @@ export async function showWhileWorking($: Engine, ctx: Context, view: PaneView, 
 // the list as it is stored by then, numbered as /aside numbers it, so a tidy reply or an entry
 // typed meanwhile is neither stored over nor taken for the one shown. What it makes of the list
 // goes back in the order the store keeps, oldest first.
-function changeShownQueue<T>($: Engine, ctx: Context, change: (list: Entry[]) => QueueChange<T> | Promise<QueueChange<T>>): Promise<T> {
+function changeShownQueue<T>($: Kit, ctx: Context, change: (list: Entry[]) => QueueChange<T> | Promise<QueueChange<T>>): Promise<T> {
   return changeQueue($, async stored => {
     const made = await change(inOrder(stored, ctx.settings.order))
 
@@ -191,7 +190,7 @@ function changeShownQueue<T>($: Engine, ctx: Context, change: (list: Entry[]) =>
 // reads of it, and what goes with the queue once it is stored, such as the record of where an
 // entry out for /aside edit stood, which is there before a message sent right after.
 async function takeIntoBox(
-  $: Engine,
+  $: Kit,
   ctx: Context,
   n: number,
   shown: string,
@@ -220,7 +219,7 @@ async function takeIntoBox(
 
 // The entry back in the box as it was typed, to change and send again: it goes back to the
 // place it had, still pointing where it did.
-export async function editEntry($: Engine, ctx: Context, n: number): Promise<string> {
+export async function editEntry($: Kit, ctx: Context, n: number): Promise<string> {
   const keys = await projectKeys($)
 
   return takeIntoBox($, ctx, n, '/aside list', entry => ({
@@ -230,7 +229,7 @@ export async function editEntry($: Engine, ctx: Context, n: number): Promise<str
   }))
 }
 
-export async function moveEntry($: Engine, ctx: Context, from: number, to: number): Promise<string> {
+export async function moveEntry($: Kit, ctx: Context, from: number, to: number): Promise<string> {
   const { root } = await projectKeys($)
 
   return changeShownQueue($, ctx, list => {
@@ -249,7 +248,7 @@ export async function moveEntry($: Engine, ctx: Context, from: number, to: numbe
 
 // The first entry, or entry `n`, taken out of the queue into the box, ready to send: no
 // "+" in front, a comment with what it is about.
-export async function popEntry($: Engine, ctx: Context, n?: number): Promise<string> {
+export async function popEntry($: Kit, ctx: Context, n?: number): Promise<string> {
   const { root } = await projectKeys($)
 
   return takeIntoBox($, ctx, n ?? 1, '/aside', entry => ({
@@ -259,7 +258,7 @@ export async function popEntry($: Engine, ctx: Context, n?: number): Promise<str
 }
 
 // Removes the entries at places `numbers`, all of them or none when one is out of range.
-export async function removeEntries($: Engine, ctx: Context, numbers: readonly number[]): Promise<string> {
+export async function removeEntries($: Kit, ctx: Context, numbers: readonly number[]): Promise<string> {
   const gone = await changeShownQueue<string | Entry[]>($, ctx, list => {
     if (list.length === 0) {
       return { value: 'The queue is empty.' }
@@ -279,7 +278,7 @@ export async function removeEntries($: Engine, ctx: Context, numbers: readonly n
   return gone.length === 1 ? `Removed: ${gone[0]!.text}` : `Removed ${formatCount(gone.length, 'entry')}: ${gone.map(entry => shortenText(entry.text, 40)).join('; ')}`
 }
 
-export async function clearQueue($: Engine): Promise<string> {
+export async function clearQueue($: Kit): Promise<string> {
   const stored = await takeCleared($)
   if (stored.length === 0) {
     return 'The queue is already empty.'
@@ -291,7 +290,7 @@ export async function clearQueue($: Engine): Promise<string> {
 
 // Brings back what plan, run or clear took, unless a step of the plan is running in this
 // session, or waits for the person in any, so nothing is done twice.
-export async function restoreTaken($: Engine): Promise<string> {
+export async function restoreTaken($: Kit): Promise<string> {
   const keys = await projectKeys($)
   const running = (await loadPlan($, keys.plan)).active
   if (running && (isWaiting(running) || running.sessionId === (await $.session.id()))) {
@@ -309,7 +308,7 @@ export async function restoreTaken($: Engine): Promise<string> {
 }
 
 // Adds a file Claude did not write in this session to the files whose tags /aside reads.
-export async function scanFile($: Engine, name: string): Promise<string> {
+export async function scanFile($: Kit, name: string): Promise<string> {
   if (name === '') {
     return 'Name a file: /aside scan docs/report.md'
   }

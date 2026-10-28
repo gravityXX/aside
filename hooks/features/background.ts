@@ -1,7 +1,7 @@
 // The work a step's turn leaves running, and the notification that ends it. register.tsx calls
 // these and nothing in the plan does, so this file is a leaf of its area.
 
-import type { EngineInterface as Engine, Hook, MatchedHook } from 'claude-code'
+import type { Hook, MatchedHook } from 'claude-code'
 
 import type { Context } from '../context'
 import { backgroundContext, isSummingUp, stepMode } from '../core/prompts'
@@ -9,6 +9,7 @@ import { decide, writeInto } from '../core/reduce'
 import { awayWork } from '../core/step'
 import { changePlan } from '../io/plan'
 import { refreshBand } from '../io/store'
+import type { Kit } from '../kit'
 
 type Submit = Parameters<Hook<'prompt.submit'>>
 
@@ -33,7 +34,7 @@ type WorkCall = Parameters<MatchedHook<'tool.call', { readonly tool: RegExp }>>
 
 // A call of the step's own turn that leaves work going in the background makes that work the
 // step's: the step does not end before it does.
-export async function noteBackgroundWork(ctx: Context, $: Engine, e: WorkCall[1], next: WorkCall[2]) {
+export async function noteBackgroundWork(ctx: Context, $: Kit, e: WorkCall[1], next: WorkCall[2]) {
   const done = await next(e)
   if (e.tool === 'TaskStop') {
     await dropStoppedWork(ctx, $, (done.result as { task_id?: unknown } | undefined)?.task_id)
@@ -57,7 +58,7 @@ export async function noteBackgroundWork(ctx: Context, $: Engine, e: WorkCall[1]
 
 // Work Claude stopped sends no notification: it leaves the step at once. A step in the
 // background left with none takes the turn that stopped it, whose end ends the step.
-async function dropStoppedWork(ctx: Context, $: Engine, taskId: unknown) {
+async function dropStoppedWork(ctx: Context, $: Kit, taskId: unknown) {
   if (typeof taskId !== 'string') {
     return
   }
@@ -70,7 +71,7 @@ async function dropStoppedWork(ctx: Context, $: Engine, taskId: unknown) {
 
 // A background task's notification: the work it names is done, whatever its status, and
 // leaves the step it was part of.
-export async function noteBackgroundEnd(ctx: Context, $: Engine, e: Submit[1], next: Submit[2]) {
+export async function noteBackgroundEnd(ctx: Context, $: Kit, e: Submit[1], next: Submit[2]) {
   const taskId = /<task-id>([^<]+)<\/task-id>/.exec(e.text)?.[1]?.trim()
   const callId = /<tool-use-id>([^<]+)<\/tool-use-id>/.exec(e.text)?.[1]?.trim()
   if (taskId === undefined && callId === undefined) {

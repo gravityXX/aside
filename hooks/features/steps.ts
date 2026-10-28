@@ -6,7 +6,7 @@
 // step's prompt going out, the turns bound to it and its end are one chain of events, and a cut
 // anywhere along it would put two halves of the same walk in two places.
 
-import type { Args, CatchHandler, EngineInterface as Engine, Hook } from 'claude-code'
+import type { Args, CatchHandler, Hook } from 'claude-code'
 
 import type { Plan, Step } from '../../types'
 import type { Context } from '../context'
@@ -18,12 +18,13 @@ import { describeError, formatCount, formatDuration } from '../core/text'
 import { changePlan } from '../io/plan'
 import { readQueue } from '../io/queue'
 import { loadPlan, projectKeys, refreshBand } from '../io/store'
+import type { Kit } from '../kit'
 import { tagsInFiles } from './queue'
 
 // From a timer, since neither a command's hook nor a turn's end may submit a prompt while
 // it holds the turn; `onFail` hears why, once, when a hook beneath drops it, the engine
 // refuses it or composing it fails. Nothing here is left to throw unheard in the timer.
-export function submitLater($: Engine, compose: () => Promise<string | undefined>, onFail: (why: string) => Promise<void>) {
+export function submitLater($: Kit, compose: () => Promise<string | undefined>, onFail: (why: string) => Promise<void>) {
   $.clock.after(50, async () => {
     let why: string | undefined
     try {
@@ -43,14 +44,14 @@ export function submitLater($: Engine, compose: () => Promise<string | undefined
 }
 
 // Whether there is anything to hand over: an entry, or a tag not handed over yet.
-export async function hasItems($: Engine): Promise<boolean> {
+export async function hasItems($: Kit): Promise<boolean> {
   return (await readQueue($, 'oldest')).length > 0 || (await tagsInFiles($, true)).length > 0
 }
 
 // Lets go of the step `index` that never started (its prompt was dropped or refused),
 // unless something else took its place meanwhile. A step that continue ended, whose prompt
 // was only to sum the run up, is done as it stands.
-async function releaseStep($: Engine, ctx: Context, index: number, why: string) {
+async function releaseStep($: Kit, ctx: Context, index: number, why: string) {
   const now = await $.clock.now()
   const made = await changePlan($, plan => {
     const was = plan.active
@@ -72,7 +73,7 @@ async function releaseStep($: Engine, ctx: Context, index: number, why: string) 
 // organize the queue once it ended: that /aside plan does it now, if there is anything to.
 const ORGANIZE_HINT = '; /aside plan organizes the queue'
 
-export async function organizeHint($: Engine, active: Plan['active'] | undefined): Promise<string> {
+export async function organizeHint($: Kit, active: Plan['active'] | undefined): Promise<string> {
   return active?.isPlanningAfter && (await hasItems($)) ? ORGANIZE_HINT : ''
 }
 
@@ -80,7 +81,7 @@ export async function organizeHint($: Engine, active: Plan['active'] | undefined
 // that order. A stop that lands before its prompt goes out keeps
 // it from going out at all. With `paused`, the step runs alone out of a paused run, which
 // stays paused after it for /aside continue.
-export async function startStep($: Engine, ctx: Context, index: number, isChain: boolean, then?: readonly number[], paused?: Plan['paused']) {
+export async function startStep($: Kit, ctx: Context, index: number, isChain: boolean, then?: readonly number[], paused?: Plan['paused']) {
   const sessionId = await $.session.id()
   const made = await changePlan($, plan => {
     const out = decide(plan, { is: 'start', sessionId, index, isChain, ...(then ? { then } : {}), ...(paused ? { paused } : {}) })
@@ -93,7 +94,7 @@ export async function startStep($: Engine, ctx: Context, index: number, isChain:
 
 // What a move asked for, done in the order it asked for it. The sentences a move leads to stay
 // here rather than in `core/`, built from its outcome: one of them has to read the queue.
-export async function runEffects($: Engine, ctx: Context, plan: Plan, does: readonly Effect[]) {
+export async function runEffects($: Kit, ctx: Context, plan: Plan, does: readonly Effect[]) {
   for (const one of does) {
     switch (one.does) {
       case 'refreshBand':
@@ -113,7 +114,7 @@ export async function runEffects($: Engine, ctx: Context, plan: Plan, does: read
 // Sends the prompt of step `index`, which the plan holds as running, unless a stop or another
 // run took its place before it goes out; with isClosing, the turn that ends the last step of a
 // run that waited, and sums the run up.
-function sendStep($: Engine, ctx: Context, steps: readonly Step[], index: number, isChain: boolean, then: readonly number[] | undefined, isClosing = false) {
+function sendStep($: Kit, ctx: Context, steps: readonly Step[], index: number, isChain: boolean, then: readonly number[] | undefined, isClosing = false) {
   submitLater(
     $,
     async () => {
@@ -139,7 +140,7 @@ export const takeOverNote = (plan: Plan) =>
 // Why nothing new starts while a step of the plan runs in this session, or waits for the
 // person in any session, if one does: a step that waits runs nowhere, so any session ends it,
 // as /clear moves on to a new session.
-export async function runningHere($: Engine, plan: Plan): Promise<string | undefined> {
+export async function runningHere($: Kit, plan: Plan): Promise<string | undefined> {
   const active = plan.active
   if (!active) {
     return undefined
@@ -167,7 +168,7 @@ export async function runningHere($: Engine, plan: Plan): Promise<string | undef
 // is done, and its run goes on here. The last step of a run of several takes one more turn
 // first, which sums the run up and then ends it, as it stands if that turn is cut short, with
 // nothing after it: steps added meanwhile wait for /aside run. Undefined when no step waits.
-export async function goOnFromWaiting($: Engine, ctx: Context): Promise<string | undefined> {
+export async function goOnFromWaiting($: Kit, ctx: Context): Promise<string | undefined> {
   const me = await $.session.id()
   const now = await $.clock.now()
   const end = await changePlan($, plan => {
@@ -219,7 +220,7 @@ export function pausedNext(plan: Plan): { index: number; then: number[] | undefi
 // The turn of a plan step: remember which, so its end runs the next one. The step's time
 // starts with its first turn, not when it was asked for, as its prompt may wait behind a turn
 // of something else.
-export async function bindStepTurn($: Engine, ctx: Context, turnId: string) {
+export async function bindStepTurn($: Kit, ctx: Context, turnId: string) {
   const sessionId = await $.session.id()
   const now = await $.clock.now()
   await changePlan($, plan => {
@@ -230,7 +231,7 @@ export async function bindStepTurn($: Engine, ctx: Context, turnId: string) {
 // A turn of this session while its step waits for the person belongs to the step: their
 // answer, or whatever else Claude does meanwhile, such as a background task's notice, so the
 // step shows as running and keeps the time. The plugin's own prompts never come here.
-export async function bindAnswerTurn($: Engine, ctx: Context, turnId: string, text: string) {
+export async function bindAnswerTurn($: Kit, ctx: Context, turnId: string, text: string) {
   const me = await $.session.id()
   // Kept through a turn it does not start, such as a background task's notice before it.
   const answer = ctx.session.answer?.text === text ? ctx.session.answer : undefined
@@ -257,7 +258,7 @@ type Submit = Parameters<Hook<'prompt.submit'>>
 // never shown to them; the turn it starts is then the step's, and takes up their answer. Typed
 // over a running turn, it may go into that turn, so it gets no context, but a turn of its own
 // later still takes up the answer.
-export async function noteStepAnswer(ctx: Context, $: Engine, e: Submit[1], next: Submit[2]) {
+export async function noteStepAnswer(ctx: Context, $: Kit, e: Submit[1], next: Submit[2]) {
   if (e.command !== undefined || e.isMeta !== undefined) {
     return next(e)
   }
@@ -285,7 +286,7 @@ export type TurnEndReason = Args<'turn.complete'>['reason']
 // background that calls here started, and a step whose turn never started. Where that leaves the
 // step is `turnDied` in core/reduce.ts; only a step left waiting has anything to say about it,
 // and a session that is gone says nothing at all.
-export async function dropDeadTurn($: Engine, ctx: Context, sessionId: string, turnId: string | undefined, isGone: boolean) {
+export async function dropDeadTurn($: Kit, ctx: Context, sessionId: string, turnId: string | undefined, isGone: boolean) {
   const { openTurns, ownWork } = ctx.session
   const now = await $.clock.now()
   const dropped = await changePlan($, async plan => {
@@ -309,7 +310,7 @@ export async function dropDeadTurn($: Engine, ctx: Context, sessionId: string, t
 }
 
 // The session ends: a turn of a step it runs never ends now.
-export async function endSessionSteps(ctx: Context, $: Engine, e: SessionEnd[1], next: SessionEnd[2]) {
+export async function endSessionSteps(ctx: Context, $: Kit, e: SessionEnd[1], next: SessionEnd[2]) {
   await dropDeadTurn($, ctx, e.sessionId, undefined, true)
 
   return next(e)
@@ -324,7 +325,7 @@ type Organize = Extract<Effect, { does: 'organize' }>
 // plan is read again as it is changed, since a planner may have added steps since the turn's end
 // read it, and the step that follows is marked running in that same change, so nothing in
 // between finds the run with no step.
-export async function finishStep($: Engine, ctx: Context, e: TurnComplete[1]): Promise<Organize | undefined> {
+export async function finishStep($: Kit, ctx: Context, e: TurnComplete[1]): Promise<Organize | undefined> {
   const me = await $.session.id()
   const now = await $.clock.now()
   const isAnswer = e.reason === 'answer'
@@ -381,6 +382,6 @@ export type TurnComplete = Parameters<Hook<'turn.complete'>>
 type SubmitFailed = Parameters<CatchHandler<Hook<'prompt.submit'>>>
 
 // A message to a step that waits goes to Claude all the same when the plan cannot be read.
-export function stepAnswerFailed($: Engine, e: SubmitFailed[1], next: SubmitFailed[2]) {
+export function stepAnswerFailed($: Kit, e: SubmitFailed[1], next: SubmitFailed[2]) {
   return next(e)
 }

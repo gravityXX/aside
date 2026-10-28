@@ -1,14 +1,13 @@
 // The log of plans run to their end. A plan goes there as another takes its place, so the log
 // is written by the plan itself and never by a command.
 
-import type { EngineInterface as Engine } from 'claude-code'
-
 import type { PastRun, Plan } from '../../types'
 import type { Context } from '../context'
 import { runSection } from '../core/listing'
 import type { Listed } from '../core/listing'
 import { askPlaces, isPlace } from '../core/text'
 import { loadPlan, loadRuns, projectKeys, saveRun } from '../io/store'
+import type { Kit } from '../kit'
 import { showWhileWorking } from './queue'
 
 // How many plans /aside log shows unless asked for one.
@@ -32,7 +31,7 @@ const pastRun = (plan: Plan, now: number): PastRun | undefined => {
 // Keeps a plan run to its end in the log as another takes its place: called in the change that
 // replaces it, before the plan is saved, so a failure keeps both and the save made again keeps
 // one (saveRun).
-export async function archivePlan($: Engine, plan: Plan) {
+export async function archivePlan($: Kit, plan: Plan) {
   const run = pastRun(plan, await $.clock.now())
   // A plan from before steps kept their time has none of its own to key it by: keyed by 0, it
   // is the same key each time it is saved, and there is one such plan per project at most.
@@ -45,12 +44,12 @@ const EMPTY_LOG = 'The log is empty: a plan run to its end comes here once anoth
 // /aside log [N]: the plans run to their end, the one that ended last first, or plan N alone.
 // While Claude works, a command's text shows only after the turn: the log goes into the list
 // pane at once instead.
-export async function showLog($: Engine, ctx: Context, n?: number): Promise<string> {
+export async function showLog($: Kit, ctx: Context, n?: number): Promise<string> {
   return showWhileWorking($, ctx, { kind: 'log', ...(n === undefined ? {} : { n }) }, await logListed($, n), 'the log')
 }
 
 // What /aside log [N] lists, and the list pane too.
-export async function logListed($: Engine, n?: number): Promise<Listed> {
+export async function logListed($: Kit, n?: number): Promise<Listed> {
   const keys = await projectKeys($)
   const runs = await loadRuns($, keys.history)
   if (runs.length === 0) {
