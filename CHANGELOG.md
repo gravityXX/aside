@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Nothing changes in use: inside, everything the plugin asks of Claude Code - every call it makes, both atoms and every hook's handler - is bound in one file now, which is where Claude Code and the plugin directory both read what a plugin does.
+
 ## 0.37.4 - 2026-10-26
 
 - Nothing changes in use: inside, every move of the step of a running plan - its prompt going out, the turns bound to it, the work it leaves in the background, `/aside continue` and `/aside stop` - is now decided in one place, which says where the step goes and what the plugin should do about it, rather than each of those working it out for itself.
