@@ -21,7 +21,6 @@
     "workflow",
     "productivity"
   ],
-  "icon": "./.claude-plugin/icon.png",
   "userConfig": {
     "afterClaudeAnswers": {
       "type": "string",
