@@ -306,10 +306,12 @@ export async function runAside(ctx: Context, $: Kit, e: AsideEvent) {
 // had done stays, and /aside shows it.
 type AsideFailed = Parameters<CatchHandler<MatchedHook<'command.run', { readonly command: 'aside' }>>>
 
-export function asideFailed($: Kit, e: AsideFailed[1], next: AsideFailed[2]) {
+// It takes the failure alone, not `next`: it never passes the run on, and a hook on a command
+// that holds `next` is one the plugin directory reads as able to change the command.
+export function asideFailed($: Kit, e: AsideFailed[1], error: AsideFailed[2]['error']) {
   const typed = e.args.trim() === '' ? '/aside' : `/aside ${shortenText(e.args.trim(), 40)}`
 
-  return { text: `${typed} did not finish (${describeFailure(next.error)}). /aside shows where the queue and the plan stand.` }
+  return { text: `${typed} did not finish (${describeFailure(error)}). /aside shows where the queue and the plan stand.` }
 }
 
 // The numbers Tab offers after a command: the entries as /aside shows them, or for /aside run
