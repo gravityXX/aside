@@ -280,6 +280,31 @@ describe('/aside help', () => {
 
     expect((await aside('help')).split('\n')).toContain('/aside undo - bring back what the last clear, or an unanswered plan or run, took')
   })
+
+  test('while Claude works, /aside help opens in the pane, which goes back to the queue from there', async ($, on) => {
+    const { panes, type, aside, startTurn, endTurn, pane } = world($, on)
+    await startTurn('build it', 't1')
+    await type('+ a', 't1')
+
+    expect(await aside('help')).toBe('Opened the help in the pane while Claude was working.')
+    expect(panes).toEqual(['aside'])
+    const ui = await pane()
+    expect((await ui.find({ type: 'Text', text: /\/aside stop - stop after the current step/ }))?.text).toContain('Queue an idea: start a message with "+".')
+    await ui.press({ key: 'queue' })
+    expect((await ui.find({ type: 'Text', text: /^a$/ }))?.text).toBe('a')
+    await ui.unmount()
+
+    await endTurn('t1')
+    expect((await aside('help')).split('\n')).toContain('/aside stop - stop after the current step')
+  })
+
+  test('while Claude works and the terminal has no room for the pane, the help goes into the transcript at once', async ($, on) => {
+    const { logged, aside, startTurn } = world($, on, { isNarrow: true })
+    await startTurn('build it', 't1')
+
+    expect(await aside('help')).toBe('Wrote the help above while Claude was working.')
+    expect(logged.at(-1)?.split('\n')).toContain('/aside stop - stop after the current step')
+  })
 })
 
 describe('tab completion', () => {

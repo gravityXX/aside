@@ -21,7 +21,7 @@ import { handOverQueue, runChosen, runEntries, runNext, runPlan, stopPlan } from
 import { nameOldSteps } from './planner'
 import { registerPlanTool, registerWaitTool } from './plantool'
 import { runGlobal, runNamed } from './global'
-import { clearQueue, editEntry, exportListing, moveEntry, popEntry, removeEntries, restoreTaken, scanFile, showListing } from './queue'
+import { clearQueue, editEntry, exportListing, moveEntry, popEntry, removeEntries, restoreTaken, scanFile, showHelp, showListing } from './queue'
 
 type Name = 'list' | 'plan' | 'run' | 'continue' | 'stop' | 'log' | 'pop' | 'edit' | 'move' | 'remove' | 'clear' | 'undo' | 'find' | 'import' | 'scan' | 'export' | 'g' | 'q' | 'help'
 
@@ -279,7 +279,7 @@ async function runCommand($: Kit, ctx: Context, name: Name, args: readonly strin
     case 'q':
       return runNamed($, ctx, args)
     case 'help':
-      return HELP
+      return showHelp($, ctx, HELP)
   }
 }
 
