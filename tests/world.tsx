@@ -398,7 +398,11 @@ export const world = ($: Engine, on: On, given: Partial<Machine> = {}) => {
 export const MARKER = '(Composed by the aside plugin from my queued notes, not typed by me as a message.)'
 
 // The lines under each step of a plan of several, as Claude reads them.
-export const RESULT = 'End your reply with one line that starts "Result: " and says in one sentence what you did and what is still open.'
+// What every prompt asking for the "Result: " line says about it.
+export const RESULT_SAYS =
+  'says in at most 15 plain words what is now different for me, and what is still open if anything is; ' +
+  'I read that line under the step in the plan rather than your reply, so leave file names, code, identifiers and backticks out of it'
+export const RESULT = `End your reply with one line that starts "Result: " and ${RESULT_SAYS}.`
 export const WAIT = 'If you need my answer first, or something blocks this step, call the mcp__aside__wait tool and stop.'
 export const NEXT = [
   'Do this step only, not the work of the steps after it; the next one is sent when you answer. If it is done already, say so.',
@@ -422,7 +426,7 @@ export const last = (...said: string[]) =>
 export const answering = (n: number, title: string, said?: string[]) =>
   `(Added by the aside plugin: step ${n} of 3 of the queue plan, "${title}", waits for my answer, and this message most likely gives it. ` +
   'The step ends with your reply to it, unless you call the mcp__aside__wait tool: call it if you need my answer again, or if this message asks for something else, which you then do, so the step keeps waiting for my answer. ' +
-  'Otherwise go on with that step only. Either way, end your reply with one line that starts "Result: " and says in one sentence what the step has done and what is still open.' +
+  `Otherwise go on with that step only. Either way, end your reply with one line that starts "Result: " and ${RESULT_SAYS}.` +
   (said
     ? ' It is the last step of this run: if your reply ends it, write the "Result: " line, then end your reply with "## Summary of the run": one line per step of the plan on what was done, then what is still open, then what to do next.' +
       `${['', ...(said.length > 0 ? ['What the steps done said:', ...said] : [])].join('\n')}\nIf you call the mcp__aside__wait tool, write no summary yet.`
