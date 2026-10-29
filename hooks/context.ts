@@ -25,7 +25,16 @@ export type Settings = {
   // Whom a named queue made by its first idea ("+@name", /aside q NAME TEXT, add or import) is
   // for: every project, or this one alone.
   readonly newQueues: 'global' | 'local'
+  // How long a step may go on in the background before the plugin ends it and the run goes on,
+  // in milliseconds; undefined with the setting at never, which leaves it to /aside continue.
+  readonly backgroundWait: number | undefined
 }
+
+// How long each word of the setting stands for, never being none of them.
+const BACKGROUND_WAITS: Record<string, number | undefined> = { '5 min': 5 * 60_000, '15 min': 15 * 60_000, '30 min': 30 * 60_000, never: undefined }
+
+const backgroundWaitOf = (given: unknown): number | undefined =>
+  typeof given === 'string' && given in BACKGROUND_WAITS ? BACKGROUND_WAITS[given] : BACKGROUND_WAITS['15 min']
 
 // Who asked for a hand-over: a command answers with the whole text, while the pane's button
 // and the end of Claude's answer say one line in a toast.
@@ -90,6 +99,7 @@ export const createContext = (options: Parameters<Register>[1]): Context => ({
     afterAnswer: options.afterClaudeAnswers === 'plan' ? 'plan' : options.afterClaudeAnswers === 'run all' ? 'run all' : 'wait',
     planModel: PLAN_MODELS.find(model => model === options.planModel) ?? 'session',
     newQueues: options.newQueues === 'local' ? 'local' : 'global',
+    backgroundWait: backgroundWaitOf(options.backgroundWait),
   },
   session: {
     planTool: 'mcp__aside__plan',
