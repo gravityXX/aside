@@ -469,7 +469,7 @@ describe("the end of the step's own turn", () => {
     const away = planOf(stepState({ ...run, background, isPlanningAfter: true, is: 'running', turnId: 't1' }))
     const asking = planOf(stepState({ ...run, isPlanningAfter: true, is: 'asking', turnId: 't1', pausedFor: 'which' }))
 
-    expect(decide(away, ended({ canOrganize: true })).does).toEqual([{ does: 'refreshBand' }])
+    expect(decide(away, ended({ canOrganize: true })).does).toEqual([{ does: 'refreshBand' }, { does: 'watchWork', step: 0 }])
     // The request goes with the turn it was asked in, so the step that waits no longer holds it.
     expect(decide(asking, ended({ canOrganize: true })).plan.active?.isPlanningAfter).toBe(undefined)
     expect(decide(asking, ended({ canOrganize: true })).does).toEqual([{ does: 'refreshBand' }, { does: 'organize', isAdding: true }])

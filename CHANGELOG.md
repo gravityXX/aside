@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- A step whose work in the background never ends by itself - a server it started, say - no longer holds the plan: after 15 minutes aside ends the step and goes on with the next one, saying so in a toast. The new `backgroundWait` setting makes that 5, 15 or 30 minutes, or `never` for the old behaviour, where the step waits for `/aside continue`.
+- The line under each step in `/aside` and `/aside log` reads plainly now: Claude is asked for at most fifteen everyday words on what is now different for you, with file names, code and backticks left out, instead of a sentence about the work it did.
+
 ## 0.37.5 - 2026-10-28
 
 - Nothing changes in use: inside, everything the plugin asks of Claude Code - every call it makes, both atoms and every hook's handler - is bound in one file now, which is where Claude Code and the plugin directory both read what a plugin does.

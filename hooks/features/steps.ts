@@ -103,12 +103,56 @@ export async function runEffects($: Kit, ctx: Context, plan: Plan, does: readonl
       case 'sendStep':
         sendStep($, ctx, plan.steps, one.index, one.isChain, one.then, one.isClosing)
         break
+      case 'watchWork':
+        watchWork($, ctx, one.step, one.startedAt)
+        break
       // Handed on to whoever ended the turn instead: the hand-over is out of this file's
       // reach, which is what keeps its imports going one way (2.1).
       case 'organize':
         break
     }
   }
+}
+
+// A step that goes on in the background ends once its work does, and work that never ends by
+// itself - a server a step started sends no notification at all - would hold the run for ever,
+// so the wait is given an end: once it is up, the step ends as /aside continue ends it. With
+// the setting at never there is none, and a reload loses the timer (3.7), which leaves the step
+// where it was anyway: waiting for /aside continue.
+function watchWork($: Kit, ctx: Context, step: number, startedAt: number | undefined) {
+  const ms = ctx.settings.backgroundWait
+  if (ms === undefined) {
+    return
+  }
+  $.clock.after(ms, () => void giveUpOnWork($, ctx, step, startedAt, ms))
+}
+
+// The wait is up, so the step ends here and its run goes on, unless the step has moved on
+// meanwhile, which is what the decision answers with 'nothing' for.
+async function giveUpOnWork($: Kit, ctx: Context, step: number, startedAt: number | undefined, ms: number) {
+  const me = await $.session.id()
+  const now = await $.clock.now()
+  const given = await changePlan($, plan => {
+    const was = plan.active
+    const out = decide(plan, { is: 'workTimedOut', sessionId: me, now, step, ...(startedAt === undefined ? {} : { startedAt }) })
+    if (out.outcome === 'nothing') return undefined
+    writeInto(plan, out.plan)
+
+    return { work: awayWork(was!), plan: structuredClone(out.plan), does: out.does, outcome: out.outcome }
+  }).catch(() => undefined)
+  if (given === undefined) {
+    return
+  }
+  const { work, plan, does, outcome } = given
+  await runEffects($, ctx, plan, does)
+  const head = `Step ${step + 1} waited ${formatDuration(ms)} for ${work || 'its work'} in the background, so it ends here`
+  $.ui.toast(
+    outcome === 'closing'
+      ? `${head}; Claude sums the run up.`
+      : outcome === 'onward'
+        ? `${head}; going on with the plan from step ${plan.active!.step + 1}.`
+        : `${head}${plan.steps.every(one => one.isDone) ? `. ${doneText(plan.steps)}` : '.'}`,
+  )
 }
 
 // Sends the prompt of step `index`, which the plan holds as running, unless a stop or another

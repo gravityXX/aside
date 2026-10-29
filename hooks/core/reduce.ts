@@ -23,6 +23,11 @@ export type StepEvent =
   // The work's own notification, whatever its status. `turnId` is the turn it was delivered
   // into, if it landed in one already running.
   | { is: 'workEnded'; sessionId: string; turnId?: string; taskId?: string; callId?: string }
+  // The step has gone on in the background longer than the person's setting allows. Work that
+  // never ends by itself, such as a server a step starts, sends no notification at all, and the
+  // step would wait on it for ever. `step` and `startedAt` are the step the wait was set for, so
+  // a wait set for a step another one took the place of ends nothing of that one's (3.16).
+  | { is: 'workTimedOut'; sessionId: string; now: number; step: number; startedAt?: number }
   // The turn of the step's own prompt started. `now` is when, by the clock, so the step's first
   // turn stamps the time it has been running since.
   | { is: 'bindTurn'; sessionId: string; turnId: string; now: number }
@@ -65,6 +70,10 @@ export type Effect =
   // The prompt of step `index` goes out, from a timer: a hook that holds the turn may not
   // submit one (3.8). With isClosing it is the turn that sums a run up rather than a step's own.
   | { does: 'sendStep'; index: number; isChain: boolean; then?: readonly number[]; isClosing: boolean }
+  // The step goes on in the background, so its wait there is given an end: how long it may wait
+  // is the shell's to know, since `core/` sees no settings, and the timer it sets comes back as
+  // `workTimedOut`.
+  | { does: 'watchWork'; step: number; startedAt?: number }
   // The queue a step asked /aside plan to organize goes to Claude now that the step has ended.
   // Whoever ended its turn runs this one: features/steps.ts may not reach the hand-over (2.1),
   // so it hands the effect on. isAdding: the plan has steps left, so the queue is organized as
@@ -98,6 +107,13 @@ export type Outcome =
 export type Decided = { plan: Plan; does: readonly Effect[]; outcome: Outcome }
 
 const nothing = (plan: Plan): Decided => ({ plan, does: [], outcome: 'nothing' })
+
+// What watches a step that has gone on in the background, so its wait has an end.
+const watchWork = (active: StepState): Effect => ({
+  does: 'watchWork',
+  step: active.step,
+  ...(active.startedAt === undefined ? {} : { startedAt: active.startedAt }),
+})
 
 // The step `active` runs, done at `now`, with the time it took and what its last turn said.
 // With isGoingOn the next step of the run starts in the same answer, so nothing in between
@@ -332,6 +348,19 @@ function goOn(plan: Plan, event: Extract<StepEvent, { is: 'continue' }>): Decide
   return { plan: made.plan, does, outcome: 'onward' }
 }
 
+// The step has waited on its work in the background longer than it may: whatever it still waits
+// on is let go and the step ends exactly as /aside continue ends it, the run going on with the
+// next step. A wait outlives the step it was set for, so it ends nothing unless that same step,
+// started when it was, still goes on in the background here (3.16).
+function gaveUpOnWork(plan: Plan, event: Extract<StepEvent, { is: 'workTimedOut' }>): Decided {
+  const active = plan.active
+  if (!active || !isAway(active) || active.sessionId !== event.sessionId || active.step !== event.step || active.startedAt !== event.startedAt) {
+    return nothing(plan)
+  }
+
+  return goOn(plan, { is: 'continue', sessionId: event.sessionId, now: event.now, openTurns: [] })
+}
+
 // /aside stop.
 function stop(plan: Plan, event: Extract<StepEvent, { is: 'stop' }>): Decided {
   const active = plan.active
@@ -414,7 +443,9 @@ function turnEnded(plan: Plan, event: Extract<StepEvent, { is: 'turnEnded' }>): 
   }
   // A turn of a step in the background cut short leaves it there, as one that waits.
   if (!isAnswer && said.is === 'noticing') {
-    return { plan: { ...plan, active: stepState({ ...runOf(said), is: 'away' }) }, does: band, outcome: 'away' }
+    const away = stepState({ ...runOf(said), is: 'away' })
+
+    return { plan: { ...plan, active: away }, does: [...band, watchWork(away)], outcome: 'away' }
   }
   if (!isAnswer) {
     const { active: _stopped, ...rest } = plan
@@ -424,7 +455,9 @@ function turnEnded(plan: Plan, event: Extract<StepEvent, { is: 'turnEnded' }>): 
   // Work in the background a turn of it started is still running: the step goes on there, and
   // the turn that work's end brings is the one that ends it.
   if ((said.background?.length ?? 0) > 0) {
-    return { plan: { ...plan, active: stepState({ ...runOf(said), is: 'away' }) }, does: band, outcome: 'away' }
+    const away = stepState({ ...runOf(said), is: 'away' })
+
+    return { plan: { ...plan, active: away }, does: [...band, watchWork(away)], outcome: 'away' }
   }
   // With the queue to organize first, the run waits after this step and /aside continue takes
   // it on; the next step would otherwise start inside this same change (`completed`).
@@ -479,7 +512,9 @@ function turnDied(plan: Plan, event: Extract<StepEvent, { is: 'turnDied' }>): De
   // With the session itself gone, so is the work it had running, and the step's wait on it.
   const run = isGone || background === undefined ? rest : { ...rest, background }
   if (!isGone && active.is === 'noticing') {
-    return { plan: { ...plan, active: stepState({ ...run, is: 'away' }) }, does: band, outcome: 'away' }
+    const away = stepState({ ...run, is: 'away' })
+
+    return { plan: { ...plan, active: away }, does: [...band, watchWork(away)], outcome: 'away' }
   }
   // What Claude asked the step to wait for if it asked, else that its turn ended with no answer.
   const pausedFor = askedOf(active) ?? CUT_OFF
@@ -508,6 +543,8 @@ function move(plan: Plan, event: StepEvent): Decided {
       return workStopped(plan, event)
     case 'workEnded':
       return workEnded(plan, event)
+    case 'workTimedOut':
+      return gaveUpOnWork(plan, event)
     case 'bindTurn':
       return bindTurn(plan, event)
     case 'bindAnswer':

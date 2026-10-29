@@ -307,6 +307,47 @@ describe('a step with work in the background', () => {
     await idle()
     expect((await shown()).slice(1, 3)).toEqual(['1 done One', '↳ review started.'])
   })
+
+  test('work in the background that never ends does not hold the run: once the wait is up the step is done and the next step goes out', async ($, on) => {
+    const { sent, toasts, aside, shown, savePlan, startTurn, endTurn, idle, clock } = world($, on)
+    launched(on)
+    await savePlan(STEPS)
+    await aside('run all')
+    await idle()
+    await startTurn(sent[0]!, 's1')
+    await $.tool.call({ tool: 'Bash', command: 'npm run dev', description: 'Start the page server', run_in_background: true, tool_use_id: 'toolu_1' } as never)
+    await endTurn('s1', 'answer', 'Result: the page server is up.', 60_000)
+    await idle()
+    expect((await shown())[2]).toBe('\u21b3 1 min \u00b7 in the background: Start the page server')
+
+    await clock.advance(15 * 60_000)
+    await clock.settle()
+
+    expect(toasts.at(-1)).toBe('Step 1 waited 15 min for Start the page server in the background, so it ends here; going on with the plan from step 2.')
+    expect(sent.at(-1)).toContain('(Step 2 of 3 of the queue plan, "Two", sent by the aside plugin.')
+    expect((await shown()).slice(1, 4)).toEqual(['1 done One', '\u21b3 15 min \u00b7 the page server is up.', '2 running Two'])
+  })
+
+  test('with the wait at never, the step goes on in the background however long it takes', { options: { backgroundWait: 'never' } }, async ($, on) => {
+    const { sent, aside, shown, savePlan, startTurn, endTurn, idle, clock } = world($, on)
+    launched(on)
+    await savePlan(STEPS)
+    await aside('run all')
+    await idle()
+    await startTurn(sent[0]!, 's1')
+    await $.tool.call({ tool: 'Bash', command: 'npm run dev', description: 'Start the page server', run_in_background: true, tool_use_id: 'toolu_1' } as never)
+    await endTurn('s1', 'answer', 'Result: the page server is up.', 60_000)
+    await idle()
+
+    await clock.advance(60 * 60_000)
+    await clock.settle()
+
+    expect(sent).toHaveLength(1)
+    expect((await shown())[1]).toBe('1 running One')
+    expect(await aside('run 2')).toBe(
+      'Step 1 goes on in the background (Start the page server); /aside continue ends it and goes on, /aside stop ends it there.',
+    )
+  })
 })
 
 describe('a step whose turn never ends', () => {
@@ -533,4 +574,5 @@ describe('a step whose turn never ends', () => {
       'Step 1 goes on in the background (find the docs); /aside continue ends it and goes on, /aside stop ends it there.',
     )
   })
+
 })

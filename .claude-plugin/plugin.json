@@ -33,6 +33,18 @@
         "run all"
       ]
     },
+    "backgroundWait": {
+      "type": "string",
+      "title": "How long a step waits in the background",
+      "description": "A step whose work runs in the background ends once that work is done, but work such as a server a step starts never ends by itself. After this long aside ends the step and the plan goes on. never: the step waits for /aside continue.",
+      "default": "15 min",
+      "options": [
+        "5 min",
+        "15 min",
+        "30 min",
+        "never"
+      ]
+    },
     "planModel": {
       "type": "string",
       "title": "Model for /aside plan",
