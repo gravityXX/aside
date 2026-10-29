@@ -42,8 +42,16 @@ export type Asker = 'command' | 'pane' | 'answer'
 
 export type ToolOutput = { text: string; turnId: string | undefined; isError: boolean }
 
-// A view of the list pane, by what it lists, so it is listed anew each time it is drawn.
-export type PaneView = { kind: 'queue' } | { kind: 'named'; typed: string } | { kind: 'queues' } | { kind: 'find'; query: string } | { kind: 'log'; n?: number }
+// A view of the list pane, by what it lists, so it is listed anew each time it is drawn. The
+// help is the one view that carries its own text instead: it is the same text at every draw,
+// and carrying it keeps the pane from reaching into the commands it is built from (2.1).
+export type PaneView =
+  | { kind: 'queue' }
+  | { kind: 'named'; typed: string }
+  | { kind: 'queues' }
+  | { kind: 'find'; query: string }
+  | { kind: 'log'; n?: number }
+  | { kind: 'help'; text: string }
 
 export type Session = {
   // Full names as the engine registered them: the prefix comes from where the plugin was

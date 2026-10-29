@@ -38,6 +38,9 @@ async function paneListed($: Kit, ctx: Context): Promise<Listed> {
       return logListed($, view.n)
     case 'queue':
       return { sections: await currentListing($, ctx) }
+    // Its own text, which the pane draws as the one line a listing with nothing to list is.
+    case 'help':
+      return view.text
   }
 }
 

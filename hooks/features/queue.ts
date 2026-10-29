@@ -173,6 +173,22 @@ export async function showWhileWorking($: Kit, ctx: Context, view: PaneView, lis
   return `Wrote ${what} above while Claude was working.`
 }
 
+// /aside help. A command's text shows only once the running turn ends (3.9), so while Claude
+// works the help opens in the pane, which shows at once, or goes into the transcript where the
+// terminal has no room for the pane. It is text rather than a listing, so it comes here and not
+// through showWhileWorking, which answers a listing of one sentence with that sentence.
+export async function showHelp($: Kit, ctx: Context, help: string): Promise<string> {
+  if (!ctx.session.isRunning) {
+    return help
+  }
+  if ((await openListPane($, ctx, { kind: 'help', text: help })).isPlaced) {
+    return 'Opened the help in the pane while Claude was working.'
+  }
+  $.ui.log(help)
+
+  return 'Wrote the help above while Claude was working.'
+}
+
 // Changes the queue as /aside shows it, in its turn on the queue's chain (2.9): `change` gets
 // the list as it is stored by then, numbered as /aside numbers it, so a tidy reply or an entry
 // typed meanwhile is neither stored over nor taken for the one shown. What it makes of the list
