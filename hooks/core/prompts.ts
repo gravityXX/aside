@@ -200,7 +200,14 @@ export const popPrompt = (entry: Entry, root: string): string =>
 // How a step stands in its run: run on its own, with more steps to come, or the last one.
 export type StepMode = 'alone' | 'more' | 'last'
 
-const RESULT_LINE = 'End your reply with one line that starts "Result: " and says in one sentence what you did and what is still open.'
+// What the "Result:" line says. The person reads it under the step in the plan instead of
+// the reply, so it is one plain sentence about what is now different for them, not a report
+// of the work (5.6); every prompt that asks for the line asks for it in these words.
+const RESULT_SAYS =
+  'says in at most 15 plain words what is now different for me, and what is still open if anything is; ' +
+  'I read that line under the step in the plan rather than your reply, so leave file names, code, identifiers and backticks out of it'
+
+const RESULT_LINE = `End your reply with one line that starts "Result: " and ${RESULT_SAYS}.`
 
 const SUMMARY_LINE =
   'Write the "Result: " line for this step, then end your reply with "## Summary of the run": one line per step of the plan on what was done, then what is still open (questions, anything paused, skipped or blocked), then what to do next.'
@@ -269,7 +276,7 @@ export const answerContext = (steps: readonly Step[], index: number, isLast: boo
   return (
     `(Added by the aside plugin: step ${index + 1} of ${steps.length} of the queue plan, "${step.title}", waits for my answer, and this message most likely gives it. ` +
     `The step ends with your reply to it, unless you call the ${waitTool} tool: call it if you need my answer again, or if this message asks for something else, which you then do, so the step keeps waiting for my answer. ` +
-    `Otherwise go on with that step only. Either way, end your reply with one line that starts "Result: " and says in one sentence what the step has done and what is still open.${summary})`
+    `Otherwise go on with that step only. Either way, end your reply with one line that starts "Result: " and ${RESULT_SAYS}.${summary})`
   )
 }
 
@@ -283,7 +290,7 @@ export const backgroundContext = (steps: readonly Step[], index: number, left: s
 
   return (
     `(Added by the aside plugin: this notification ends work in the background of step ${index + 1} of ${steps.length} of the queue plan, "${step.title}". ${end} ` +
-    'End your reply with one line that starts "Result: " and says in one sentence what the step has done and what is still open.)'
+    `End your reply with one line that starts "Result: " and ${RESULT_SAYS}.)`
   )
 }
 

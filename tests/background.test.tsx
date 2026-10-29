@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { launched, notice, notify, STEPS, world } from './world'
+import { launched, notice, notify, RESULT_SAYS, STEPS, world } from './world'
 
 // A step whose turn leaves work going in the background, and a step whose turn never ends:
 // both are steps with no turn of their own that something other than an answer moves on.
@@ -27,7 +27,7 @@ describe('a step with work in the background', () => {
 
     await notify($, notice('w1', 'toolu_1'))
     expect(contexts.at(-1)).toEqual([
-      '(Added by the aside plugin: this notification ends work in the background of step 1 of 3 of the queue plan, "One". This was the last of it, so the step ends with your reply. End your reply with one line that starts "Result: " and says in one sentence what the step has done and what is still open.)',
+      `(Added by the aside plugin: this notification ends work in the background of step 1 of 3 of the queue plan, "One". This was the last of it, so the step ends with your reply. End your reply with one line that starts "Result: " and ${RESULT_SAYS}.)`,
     ])
     await startTurn(notice('w1', 'toolu_1'), 'n1')
     await endTurn('n1', 'answer', 'Result: reviewed; two fixes.', 60_000)
@@ -187,7 +187,7 @@ describe('a step with work in the background', () => {
 
     await $.prompt.submit({ text: notice('w1', 'toolu_1'), origin: { kind: 'task-notification' } as never, wait: false, turnId: 'h1' })
     expect(contexts.at(-1)).toEqual([
-      '(Added by the aside plugin: this notification ends work in the background of step 2 of 2 of the queue plan, "Two". This was the last of it, so the step ends with your reply. It is the last step of this run: after the "Result: " line, end your reply with "## Summary of the run": one line per step of the plan on what was done, then what is still open, then what to do next. End your reply with one line that starts "Result: " and says in one sentence what the step has done and what is still open.)',
+      `(Added by the aside plugin: this notification ends work in the background of step 2 of 2 of the queue plan, "Two". This was the last of it, so the step ends with your reply. It is the last step of this run: after the "Result: " line, end your reply with "## Summary of the run": one line per step of the plan on what was done, then what is still open, then what to do next. End your reply with one line that starts "Result: " and ${RESULT_SAYS}.)`,
     ])
     await endTurn('h1', 'answer', 'Result: reviewed.\n\n## Summary of the run\n\nBoth done.')
     await idle()
