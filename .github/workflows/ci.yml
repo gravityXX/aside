@@ -3,7 +3,10 @@ name: CI
 on:
   push:
     branches: [main]
+  # edited as well, since the checks read the pull request's title: renamed to pass them,
+  # it would otherwise keep the failure of the name it had.
   pull_request:
+    types: [opened, synchronize, reopened, edited]
 
 jobs:
   check:
