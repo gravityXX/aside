@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.38.0 - 2026-10-29
 
 - `/aside help` opens in the pane while Claude works, as `/aside` and the other lists already did, instead of showing nothing until the turn ends; on a terminal too narrow for the pane it goes into the transcript. The pane's `queue` button takes you back to the list.
 - A step whose work in the background never ends by itself - a server it started, say - no longer holds the plan: after 15 minutes aside ends the step and goes on with the next one, saying so in a toast. The new `backgroundWait` setting makes that 5, 15 or 30 minutes, or `never` for the old behaviour, where the step waits for `/aside continue`.
