@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.40.0 - 2026-10-30
 
 - Tab now offers the short word of a command beside its long one, so `ls`, `mv` and `rm` can be found without reading the code; on a queue too, as in `/aside g rm`. `/aside help` lists those short words, and itself.
 
