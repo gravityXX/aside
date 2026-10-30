@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.39.0 - 2026-10-30
 
 - A run no longer loses a step's result off the top of the screen: when one step ends and the next starts by itself, a toast says the step is done, which step runs now, and the result line that step gave.
 
