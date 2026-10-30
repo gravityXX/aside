@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- A run no longer loses a step's result off the top of the screen: when one step ends and the next starts by itself, a toast says the step is done, which step runs now, and the result line that step gave.
+
 ## 0.38.0 - 2026-10-29
 
 - `/aside help` opens in the pane while Claude works, as `/aside` and the other lists already did, instead of showing nothing until the turn ends; on a terminal too narrow for the pane it goes into the transcript. The pane's `queue` button takes you back to the list.

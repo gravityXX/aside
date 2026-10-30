@@ -14,7 +14,7 @@ import { answerContext, closingPrompt, isSummingUp, stepMode, stepPrompt } from 
 import { PLANNING_PAUSE, decide, writeInto } from '../core/reduce'
 import type { Effect } from '../core/reduce'
 import { askedOf, awayWork, isAway, isWaiting, turnOf } from '../core/step'
-import { describeError, formatCount, formatDuration } from '../core/text'
+import { describeError, formatCount, formatDuration, shortenText } from '../core/text'
 import { changePlan } from '../io/plan'
 import { readQueue } from '../io/queue'
 import { loadPlan, projectKeys, refreshBand } from '../io/store'
@@ -243,6 +243,12 @@ export async function goOnFromWaiting($: Kit, ctx: Context): Promise<string | un
   return `${plan.steps.every(one => one.isDone) ? doneText(plan.steps) : `Step ${n} done.`}${note}`
 }
 
+// The result of the step that just ended, said again in the toast that starts the next one.
+// Without it a run going straight on leaves the person nothing to read: Claude's reply, and the
+// result line in it, is scrolled away by the next step's turn (5.2). The word is the one the
+// plan writes under the step, so the two read alike.
+const resultSaid = (step: Step | undefined) => (step?.result ? ` Result: ${shortenText(step.result, 120)}` : '')
+
 // What the person reads once every step of the plan is done.
 const doneText = (steps: readonly Step[]) => {
   const ms = steps.reduce((sum, one) => sum + (one.ms ?? 0), 0)
@@ -414,6 +420,8 @@ export async function finishStep($: Kit, ctx: Context, e: TurnComplete[1]): Prom
     $.ui.toast(`Plan stopped: step ${n} ${e.reason === 'aborted' ? 'was interrupted' : 'did not finish'}${hint}`)
   } else if (outcome === 'pausing') {
     $.ui.toast(`Plan paused after step ${n}: ${PLANNING_PAUSE}. /aside continue goes on.`)
+  } else if (outcome === 'onward') {
+    $.ui.toast(`Step ${n} done; step ${plan.active!.step + 1} runs now.${resultSaid(plan.steps[was.step])}`)
   } else if (outcome === 'done') {
     $.ui.toast(`${plan.steps.every(one => one.isDone) ? doneText(plan.steps) : `Step ${n} done`}${hint}`)
   }
