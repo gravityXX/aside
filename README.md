@@ -146,7 +146,12 @@ Change these in `/config`:
 
 ## What <kbd>aside</kbd> reads, writes, runs and sends
 
-<kbd>aside</kbd> opens no network connection of its own, installs nothing, and reads no credential, token or environment variable of yours.
+Beyond what the box above says, nothing leaves the plugin: no HTTP call of its own, no socket, no telemetry. It installs nothing and reads no credential, token or environment variable of yours. Your queue and plan live in Claude Code's store for the plugin, and the only file it writes is the one you name in `/aside export`.
+
+<details>
+<summary>The long version: every file it touches, program it runs and prompt it sends</summary>
+
+<br>
 
 - **Keeps** the queue, the plan and what `/aside undo` brings back, one set per project, and the global list and the named queues, shared by all projects, in Claude Code's store for the plugin (`~/.claude/plugins/store/`).
 - **Writes** one file, and only when you run `/aside export`: the path you name. It reads what is already there first and refuses unless that file is an earlier export of its own, so it cannot land on your notes, a settings file, a lockfile or anything else that was not written by `/aside export`. It writes no build, start-up, settings or instructions file - not `CLAUDE.md`, not `settings.json`, not a lockfile, nothing of Claude Code's own - and changes no file in your project.
@@ -159,7 +164,7 @@ Change these in `/config`:
 - **Submits** one prompt per step of a plan you ran, and nothing else. `/aside run` and `/aside run all` send the step's prompt - the text `/aside plan` made from your own entries - to Claude in this session, as if you had typed it.
 - **Sends** nothing off your machine by itself. Three things leave the plugin, all through Claude Code: the step's prompt, to Claude in your session; with `tidy` on, the text you typed, to Haiku, to have its spelling and wording fixed, never what you copied; with `planModel` set to a model, the queue, to that model, to be organized into steps. There is no other way out: no HTTP call, no socket, no telemetry.
 
-### What its hooks do
+**Where it listens.** The two tools whose names end in `__plan` and `__wait` are this plugin's own, registered at `session.start`; <kbd>aside</kbd> calls into no other plugin.
 
 | It listens on | and |
 | - | - |
@@ -173,7 +178,7 @@ Change these in `/config`:
 | `command.run` | runs `/aside` |
 | `ui.render` | draws the line above the prompt, the pane, the frame around a listing and the plan tool's own output |
 
-The two tools whose names end in `__plan` and `__wait` are this plugin's own, registered at `session.start`; <kbd>aside</kbd> calls into no other plugin.
+</details>
 
 ## Contributing
 
