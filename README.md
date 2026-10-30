@@ -108,7 +108,7 @@ read it later +@work   the whole draft, into the queue work
 
 The global list and the named queues wait in every project: the line above the prompt counts them all together, as in `3 in other queues`, `/aside` leaves them out, and plan and run take only this queue, so `/aside g here` or `/aside q work here` brings an idea in first. The global list is the queue named `global`, so `+@global` is `+g`. Several sessions can add to them at once. `/aside undo` does not bring back what left them; a queue's own `undo` brings back what its last `clear` took. A named queue can also be this project's alone: `/aside q work local` keeps it here, where `+@work` then goes to it and other projects no longer see it, and with the `newQueues` setting on `local` a queue is this project's from its first idea.
 
-`N` is a number as `/aside` shows it, and `[N]` may be left out. `FILE` is one word ending in `.md`. While Claude works, `/aside`, `/aside g`, `q`, `find`, `log` and `help` open in a pane, with <kbd>queue</kbd> to go back. Tab completes every command.
+`ls`, `mv` and `rm` are short for `list`, `move` and `remove`, on a queue too, as in `/aside g rm 2`. `N` is a number as `/aside` shows it, and `[N]` may be left out. `FILE` is one word ending in `.md`. While Claude works, `/aside`, `/aside g`, `q`, `find`, `log` and `help` open in a pane, with <kbd>queue</kbd> to go back. Tab completes every command.
 
 <details>
 <summary>Other ways to comment</summary>

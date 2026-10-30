@@ -39,11 +39,12 @@ A fresh copy comes first. In fullscreen mode, with the clipboard unchanged since
 
 - **`/aside pop [N]`** puts the first entry, or entry N, in the prompt box, ready to send, and takes it off the queue.
 - **`/aside edit N`** takes entry N off the queue into the prompt box, as typed. If the next entry you queue has the same mark, it goes back to place N, still pointing where it did; anything else goes at the end.
-- **`/aside move N M`**, **`/aside remove N ...`** and **`/aside clear`** reorder and empty the queue.
+- **`/aside move N M`**, **`/aside remove N ...`** and **`/aside clear`** reorder and empty the queue. `mv` and `rm` are short for the first two, as `ls` is for `/aside list`.
 - **`/aside undo`** brings back what the last clear took, or what the last plan or run took until Claude has answered it.
 - **`/aside find TEXT`** finds every entry, tag, step and idea of a queue that holds all the words, in any case and with or without accents, each with the number its own command takes.
 - **`/aside import FILE`** queues the items of a markdown list in FILE, each an entry, leaving out ticked items and those already queued; `/aside g import FILE` and `/aside q work import FILE` put them on those queues.
 - **`/aside export [FILE]`** saves what `/aside` shows as Markdown, to `aside.md` or `FILE`.
+- **`/aside help`** lists every command, with what each one takes. While Claude works it opens in the pane, so you can read it without waiting for the turn to end.
 
 ## Turn the queue into a plan
 
