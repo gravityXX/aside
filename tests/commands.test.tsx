@@ -213,13 +213,15 @@ describe('changing entries', () => {
     ])
   })
 
-  test('/aside move N M moves an entry, and a place out of range is refused', async ($, on) => {
+  test('/aside move N M moves an entry, /aside mv does the same, and a place out of range is refused', async ($, on) => {
     const { type, aside, shown } = world($, on)
     await type('+ a\n+ b\n+? c')
 
     expect(await shown('move 3 1')).toEqual(['2 ideas and 1 comment waiting', '1 question c', '2 idea a', '3 idea b'])
     expect(await shown()).toEqual(['2 ideas and 1 comment waiting', '1 question c', '2 idea a', '3 idea b'])
+    expect(await shown('mv 1 3')).toEqual(['2 ideas and 1 comment waiting', '1 idea a', '2 idea b', '3 question c'])
     expect(await aside('move 9 1')).toBe('Give two places from 1 to 3: /aside move 3 1')
+    expect(await aside('mv 9 1')).toBe('Give two places from 1 to 3: /aside move 3 1')
   })
 })
 
@@ -279,6 +281,16 @@ describe('/aside help', () => {
     const { aside } = world($, on)
 
     expect((await aside('help')).split('\n')).toContain('/aside undo - bring back what the last clear, or an unanswered plan or run, took')
+  })
+
+  test('/aside help lists itself and the short word of every command that has one', async ($, on) => {
+    const { aside } = world($, on)
+
+    const lines = (await aside('help')).split('\n')
+    expect(lines).toContain('/aside help - this list; while Claude works it opens in the pane')
+    expect(lines).toContain('/aside - show the queue and the plan; /aside list and /aside ls do the same')
+    expect(lines).toContain('/aside move N M - move entry N to place M; /aside mv N M does the same')
+    expect(lines).toContain('/aside remove N [M ...] - remove entry N, or several at once; /aside rm N does the same')
   })
 
   test('while Claude works, /aside help opens in the pane, which goes back to the queue from there', async ($, on) => {
@@ -342,7 +354,13 @@ describe('tab completion', () => {
     await type('+ dark mode\n+? why so slow')
 
     expect(await complete($, '/aside cl')).toEqual(['clear: empty the queue'])
-    expect(await complete($, '/aside l')).toEqual(['list: show the queue and the plan', 'log: the plans run to their end'])
+    expect(await complete($, '/aside l')).toEqual(['list: show the queue and the plan', 'ls: show the queue and the plan', 'log: the plans run to their end'])
+    expect(await complete($, '/aside m')).toEqual(['move: move an entry to another place', 'mv: move an entry to another place'])
+    expect(await complete($, '/aside r')).toEqual([
+      'run: run the next step or entry, or all of them one by one',
+      'remove: remove entries',
+      'rm: remove entries',
+    ])
     expect(await complete($, '/aside f')).toEqual(['find: look for words in every queue and the plan'])
     expect(await complete($, '/aside i')).toEqual(['import: queue the items of a markdown list'])
     expect(await complete($, '/aside u')).toEqual(['undo: bring back what the last clear, or an unanswered plan or run, took'])
@@ -362,7 +380,7 @@ describe('tab completion', () => {
     expect(await complete($, '/aside g h')).toEqual(['here: move global ideas into this queue'])
     expect(await complete($, '/aside g i')).toEqual(['import: put the items of a markdown list on it'])
     expect(await complete($, '/aside g here 1 ')).toEqual(['1: read the RFC', '2: learn Rust'])
-    expect(await complete($, '/aside g r')).toEqual(['remove: remove ideas from the global list'])
+    expect(await complete($, '/aside g r')).toEqual(['remove: remove ideas from the global list', 'rm: remove ideas from the global list'])
     expect(await complete($, '/aside g remove 1 ')).toEqual(['1: read the RFC', '2: learn Rust'])
     expect(await complete($, '/aside g edit 1 ')).toEqual([])
     await type('+ dark mode\n+? why so slow')
@@ -377,13 +395,13 @@ describe('tab completion', () => {
     expect(await complete($, '/aside q ')).toEqual(['global: 1 idea', 'home: 1 idea', 'work: 2 ideas'])
     expect(await complete($, '/aside q w')).toEqual(['work: 2 ideas'])
     expect(await complete($, '/aside q @wo')).toEqual(['work: 2 ideas'])
-    expect(await complete($, '/aside q work r')).toEqual(['remove: remove ideas from it', 'rename: move all of it to a queue of another name'])
+    expect(await complete($, '/aside q work r')).toEqual(['remove: remove ideas from it', 'rm: remove ideas from it', 'rename: move all of it to a queue of another name'])
     expect(await complete($, '/aside q work remove 1 ')).toEqual(['1: write the report', '2: call the bank'])
     expect(await complete($, '/aside q work c')).toEqual(['clear: empty it'])
-    expect(await complete($, '/aside q global r')).toEqual(['remove: remove ideas from the global list'])
+    expect(await complete($, '/aside q global r')).toEqual(['remove: remove ideas from the global list', 'rm: remove ideas from the global list'])
     expect(await complete($, '/aside q home here ')).toEqual(['1: water the plants'])
     expect(await complete($, '/aside q WO')).toEqual(['work: 2 ideas'])
-    expect(await complete($, '/aside q WORK r')).toEqual(['remove: remove ideas from it', 'rename: move all of it to a queue of another name'])
+    expect(await complete($, '/aside q WORK r')).toEqual(['remove: remove ideas from it', 'rm: remove ideas from it', 'rename: move all of it to a queue of another name'])
     expect(await complete($, '/aside g c')).toEqual(['clear: empty the global list'])
     expect(await complete($, '/aside g u')).toEqual(['undo: bring back what its last clear took'])
   })

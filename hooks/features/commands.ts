@@ -50,7 +50,7 @@ const COMMANDS: readonly Command[] = [
     name: 'list',
     aliases: ['ls'],
     takes: none,
-    help: ['/aside - show the queue and the plan'],
+    help: ['/aside - show the queue and the plan; /aside list and /aside ls do the same'],
     about: 'show the queue and the plan',
   },
   {
@@ -113,7 +113,7 @@ const COMMANDS: readonly Command[] = [
     aliases: ['mv'],
     takes: args => args.length === 2 && isNumber(args[0]) && isNumber(args[1]),
     usage: 'move N M',
-    help: ['/aside move N M - move entry N to place M'],
+    help: ['/aside move N M - move entry N to place M; /aside mv N M does the same'],
     about: 'move an entry to another place',
     completes: 'entries',
   },
@@ -122,7 +122,7 @@ const COMMANDS: readonly Command[] = [
     aliases: ['rm'],
     takes: args => args.length > 0 && args.every(isNumber),
     usage: 'remove N [M ...]',
-    help: ['/aside remove N [M ...] - remove entry N, or several at once'],
+    help: ['/aside remove N [M ...] - remove entry N, or several at once; /aside rm N does the same'],
     about: 'remove entries',
     completes: 'entries',
   },
@@ -202,7 +202,7 @@ const COMMANDS: readonly Command[] = [
     name: 'help',
     takes: none,
     usage: 'help',
-    help: [],
+    help: ['/aside help - this list; while Claude works it opens in the pane'],
     about: 'show every command',
   },
 ]
@@ -343,9 +343,11 @@ const GLOBAL_VERBS = [
   { text: 'here', description: 'move global ideas into this queue' },
   { text: 'add', description: 'move ideas of this queue to the global list' },
   { text: 'remove', description: 'remove ideas from the global list' },
+  { text: 'rm', description: 'remove ideas from the global list' },
   { text: 'edit', description: 'rework a global idea' },
   { text: 'pop', description: 'put a global idea in the box, ready to send' },
   { text: 'move', description: 'move a global idea to another place' },
+  { text: 'mv', description: 'move a global idea to another place' },
   { text: 'clear', description: 'empty the global list' },
   { text: 'undo', description: 'bring back what its last clear took' },
   { text: 'import', description: 'put the items of a markdown list on it' },
@@ -357,9 +359,11 @@ const NAMED_VERBS = [
   { text: 'here', description: 'move its ideas into this queue' },
   { text: 'add', description: 'move ideas of this queue to it' },
   { text: 'remove', description: 'remove ideas from it' },
+  { text: 'rm', description: 'remove ideas from it' },
   { text: 'edit', description: 'rework one of its ideas' },
   { text: 'pop', description: 'put one of its ideas in the box, ready to send' },
   { text: 'move', description: 'move one of its ideas to another place' },
+  { text: 'mv', description: 'move one of its ideas to another place' },
   { text: 'clear', description: 'empty it' },
   { text: 'undo', description: 'bring back what its last clear took' },
   { text: 'import', description: 'put the items of a markdown list in it' },
@@ -418,7 +422,11 @@ export async function completeAside(ctx: Context, $: Kit, e: Autocomplete[1], ne
   const own = (await next(e)).suggestions
   if (first) {
     const word = first[1]!.toLowerCase()
-    const rows = COMMANDS.filter(({ name }) => name.startsWith(word) && name !== word).map(({ name, about }) => ({ text: name, description: about }))
+    // Every word a command answers to, its short one included: a shortcut Tab never offers is
+    // one nobody finds (5.1).
+    const rows = COMMANDS.flatMap(({ name, aliases, about }) =>
+      [name, ...(aliases ?? [])].filter(one => one.startsWith(word) && one !== word).map(text => ({ text, description: about })),
+    )
 
     return { suggestions: [...own, ...rows] }
   }

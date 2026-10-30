@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Tab now offers the short word of a command beside its long one, so `ls`, `mv` and `rm` can be found without reading the code; on a queue too, as in `/aside g rm`. `/aside help` lists those short words, and itself.
+
 ## 0.39.0 - 2026-10-30
 
 - A run no longer loses a step's result off the top of the screen: when one step ends and the next starts by itself, a toast says the step is done, which step runs now, and the result line that step gave.
