@@ -488,7 +488,11 @@ describe('running the plan', () => {
       `Do two.\n\n(Step 2 of 3 of the queue plan, "Two", sent by the aside plugin.\nPlan: 1 One (done) · 2 Two (this one) · 3 Three (to do).\n${NEXT})`,
       `Do three.\n\n(Step 3 of 3 of the queue plan, "Three", sent by the aside plugin.\nPlan: 1 One (done) · 2 Two (done) · 3 Three (this one).\n${last('1 One: one is in place.', '2 Two: two works, one question is open.')})`,
     ])
-    expect(toasts).toEqual(['Plan done: 3 steps in 24 min'])
+    expect(toasts).toEqual([
+      'Step 1 done; step 2 runs now. Result: one is in place.',
+      'Step 2 done; step 3 runs now. Result: two works, one question is open.',
+      'Plan done: 3 steps in 24 min',
+    ])
     expect(await shown()).toEqual([
       'The queue is empty.',
       'Plan done: 3 steps in 24 min',
@@ -539,7 +543,7 @@ describe('running the plan', () => {
       `Do three.\n\n(Step 3 of 3 of the queue plan, "Three", sent by the aside plugin.\nPlan: 1 One (to do) · 2 Two (to do) · 3 Three (this one).\n${NEXT})`,
       `Do one.\n\n(Step 1 of 3 of the queue plan, "One", sent by the aside plugin.\nPlan: 1 One (this one) · 2 Two (to do) · 3 Three (done).\n${last('3 Three: no result kept')})`,
     ])
-    expect(toasts).toEqual(['Step 1 done'])
+    expect(toasts).toEqual(['Step 3 done; step 1 runs now.', 'Step 1 done'])
     expect(await shown()).toEqual(['The queue is empty.', 'Plan: 1 of 3 steps to do (/aside run)', '1 done One', '2 to do Two', '3 done Three'])
   })
 
@@ -1254,7 +1258,7 @@ describe('running the plan', () => {
     await endTurn('s2')
     await idle()
     expect(sent).toHaveLength(2)
-    expect(toasts).toEqual(['Step 2 done'])
+    expect(toasts).toEqual(['Step 1 done; step 2 runs now.', 'Step 2 done'])
     expect(await shown()).toEqual(['The queue is empty.', 'Plan: 1 of 3 steps to do (/aside run)', '1 done One', '2 done Two', '3 to do Three'])
   })
 
@@ -1853,7 +1857,7 @@ describe('adding to a running plan', () => {
 
     await endTurn('s1')
     await idle()
-    expect(toasts).toEqual([])
+    expect(toasts).toEqual(['Step 1 done; step 2 runs now.'])
     expect(sent).toHaveLength(2)
     expect(sent[1]).toContain('Do two.')
   })
